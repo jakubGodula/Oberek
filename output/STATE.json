@@ -1,0 +1,18 @@
+{
+  "task": "om-solana",
+  "title": "open-mercato-solana-hackathon",
+  "stamp": "20261007-115212",
+  "sharing_mode": "folder",
+  "run_folder": "/Users/macbook/work/sandbox/solana-2026/output",
+  "step": 2,
+  "steps": {
+    "0_task": { "status": "done", "file": "00-task/TASK.md" },
+    "1_intake": { "status": "done", "qa_files": 13, "questions": 108, "blocking": 15, "round": 1 },
+    "human_loop_a": { "status": "waiting", "inbox": "01-intake/inbox/", "deadline": "day 2 of the hackathon" },
+    "2_plan": { "status": "draft-on-defaults", "packages": 12, "signoff": "02-plan/SIGNOFF.md", "ready": false },
+    "3_execute": { "status": "not-started" },
+    "4_verify": { "status": "not-started" }
+  },
+  "next_actor": "team (answer Q&A) and TL (regenerate plan, sign off, start WP-01)",
+  "updated_at": "2026-10-07"
+}
