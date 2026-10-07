@@ -142,11 +142,12 @@
 
 ## Faza 5: Solana Actions & Dialect Blinks w SvelteKit
 
-### Zadanie 5.1: Endpoint reguł routingu i CORS (`src/routes/api/actions.json/+server.ts`)
-- [ ] Zaimplementować metody `GET` oraz `OPTIONS` zwracające:
+### Zadanie 5.1: Endpoint reguł routingu i CORS (`src/routes/actions.json/+server.ts` oraz `src/routes/api/actions.json/+server.ts`)
+- [ ] Zaimplementować metody `GET` oraz `OPTIONS` dla ścieżek `/actions.json` oraz `/api/actions.json` zwracające:
   ```json
   {
     "rules": [
+      { "pathPattern": "/*", "apiPath": "/api/actions/*" },
       { "pathPattern": "/api/actions/**", "apiPath": "/api/actions/**" }
     ]
   }
@@ -238,7 +239,7 @@
 
 ---
 
-## 10. Matryca Zależności, Ryzyk i Kryteria Odbioru
+## 9. Matryca Zależności, Ryzyk i Kryteria Odbioru
 
 ### Zależności między fazami
 ```
@@ -259,6 +260,6 @@ Faza 1 (Bun + Solana)
 ### Kryteria Odbioru (Definition of Done)
 1. **Bun**: Wszystkie komendy deweloperskie i testy wykonywane są za pośrednictwem `bun`.
 2. **SvelteKit & Tailwind CSS**: Pełna aplikacja full-stack działa w SvelteKit z komponentami Svelte 5 (Runes) i estetyką Tailwind CSS.
-3. **Blinks**: Endpointy `/api/actions.json` oraz `/api/actions/agent-action` poprawnie odpowiadają na zapytania CORS i renderują się w Dialect Inspectorze (`dial.to`).
+3. **Blinks**: Endpointy `/actions.json` oraz `/api/actions/agent-action` poprawnie odpowiadają na zapytania CORS i renderują się w Dialect Inspectorze (`dial.to`).
 4. **Smart Contract**: Program `aegis-registry` wdrożony na Solana Devnet, rejestruje agentów i kotwiczy korzenie stanu PQC.
 5. **Kryptografia**: Generowanie kluczy i sygnatur ML-DSA oraz kapsułkowanie ML-KEM działa bezbłędnie.

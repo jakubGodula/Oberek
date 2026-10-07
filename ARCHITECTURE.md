@@ -1,7 +1,7 @@
 # Aegis Mercato: Architektura Systemu (Hackathon)
 
 > **PQC-Secured Private Agent Observability & Action Engine on Solana**  
-> Zbudowane w oparciu o framework **Open Mercato** (Modular Monolith, Awilix IoC, Next.js, MikroORM, Overlay System).
+> Zbudowane w oparciu o wzorzec **Modular Monolith** w standardzie Open Mercato (Awilix IoC, Bun, SvelteKit 2 z Svelte 5 Runes, Tailwind CSS, MikroORM).
 
 ---
 
@@ -10,8 +10,8 @@
 ### Wizja
 Stworzenie platformy nowej generacji łączącej:
 - **Autonomicznych agentów AI na Solanie** z pełną obserwowalnością i audytowalnością.
-- **Interakcję z użytkownikiem w mediach społecznościowych** za pomocą protokołu **Solana Actions & Dialect Blinks** (Human-in-the-Loop bezpośrednio z Twittera/X, Discorda).
-- **Bezpieczeństwo post-kwantowe (PQC)** i **prywatność stanów (Zero-Knowledge)**: Ochrona wrażliwych danych agentów (strategie, klucze API, salda) przed złamaniem przez komputery kwantowe poprzez wykorzystanie algorytmów NIST PQC (ML-DSA / Dilithium, ML-KEM / Kyber) oraz dowodów ZK z kwantowo-odpornymi commitmentami.
+- **Interakcję z użytkownikiem w mediach społecznościowych** za pomocą protokołu **Solana Actions & Dialect Blinks** (Human-in-the-Loop bezpośrednio z Twittera/X, Discorda oraz Dialect Inspectora `dial.to`).
+- **Bezpieczeństwo post-kwantowe (PQC)** i **prywatność stanów (Zero-Knowledge Commitments)**: Ochrona wrażliwych danych agentów (strategie, klucze API, salda) przed złamaniem przez komputery kwantowe poprzez wykorzystanie algorytmów NIST PQC (ML-DSA-65 / Dilithium, ML-KEM-768 / Kyber) oraz kotwiczenie kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie w koncie PDA programu Anchor.
 
 ---
 
@@ -21,114 +21,130 @@ Stworzenie platformy nowej generacji łączącej:
 flowchart TB
     subgraph Client_Layer ["Warstwa Użytkownika / Social Media"]
         X["Twitter / X / Discord (Dialect Blink UI)"]
-        Dash["Open Mercato Admin Dashboard (Next.js)"]
+        DialTo["Dialect Inspector (dial.to)"]
+        Dash["Operator Dashboard (SvelteKit 5 + Tailwind)"]
     end
 
-    subgraph OpenMercato_Core ["Open Mercato Backend (Modular Monolith)"]
-        Gateway["Next.js API Gateway / Actions Dispatcher"]
+    subgraph Backend_Core ["Aegis Core Backend (Bun Runtime)"]
+        ServerAPI["SvelteKit Endpoints (+server.ts)"]
         
         subgraph Modules ["Moduły Domenowe (DI: Awilix)"]
             M_Blink["module: solana-blink\n(Actions & Blinks Spec)"]
             M_Tracker["module: agent-tracker\n(Observability & Logs)"]
-            M_ZKPQC["module: zk-pqc\n(Post-Quantum & ZK Engine)"]
+            M_ZKPQC["module: zk-pqc\n(ML-KEM & ML-DSA Engine)"]
             M_Vault["module: private-vault\n(Encrypted Off-chain Storage)"]
         end
 
-        EventBus["Open Mercato Event Bus"]
+        EventBus["Internal Event Bus"]
         DB[("PostgreSQL / MikroORM")]
     end
 
-    subgraph Crypto_Pipeline ["PQC & ZK Proof Pipeline"]
-        PQC_Engine["ML-KEM (Kyber-768) + ML-DSA (Dilithium)\nPost-Quantum Cryptography"]
-        ZK_Prover["zkVM Prover (SP1 / RISC Zero / Hash-STARK)\n• Hash-based Commitments (Poseidon2 / SHA-3)"]
+    subgraph Crypto_Pipeline ["PQC & Commitment Pipeline"]
+        PQC_Engine["ML-KEM-768 (KEM) + ML-DSA-65 (Signatures)\n@noble/post-quantum"]
+        Commitment_Engine["Hash Commitments (SHA3-256 / Merkle Root)\nOptional zkVM (SP1 / RISC Zero Prover)"]
     end
 
-    subgraph Solana_L1 ["Solana L1 Blockchain"]
-        AnchorProg["Aegis Registry Program (Anchor)\n• Agent PDA Registry\n• PQC State Root Commitments"]
+    subgraph Solana_L1 ["Solana L1 Blockchain (Devnet)"]
+        AnchorProg["Aegis Registry Program (Anchor)\n• PDA: AgentAccount\n• PQC State Root Commitments\n• Emergency Kill-Switch"]
         Helius["Solana RPC / Helius Webhooks"]
     end
 
-    X -->|1. GET/POST Blink Action| Gateway
-    Gateway --> M_Blink
+    X -->|1. GET/POST Blink Action| ServerAPI
+    DialTo -->|CORS Test & Actions Spec| ServerAPI
+    ServerAPI --> M_Blink
     M_Blink -->|2. Emit Event| EventBus
     EventBus --> M_Tracker
     M_Tracker -->|3. Persist Telemetry| DB
     Helius -->|Index Agent Tx| M_Tracker
     
     M_Vault -->|Encrypt Sensitive Data| PQC_Engine
-    M_ZKPQC -->|Generate Proof| ZK_Prover
-    ZK_Prover -->|Submit Root + Proof| AnchorProg
+    M_ZKPQC -->|Compute Root & Sign| Commitment_Engine
+    Commitment_Engine -->|Submit Root Tx| AnchorProg
     AnchorProg -.->|Commitment Validated| Solana_L1
-    Dash -->|View Metrics| M_Tracker
+    Dash -->|View Metrics & Runes State| DB
 ```
 
 ---
 
-## 3. Struktura Katalogów Projektu (Open Mercato Standard)
+## 3. Struktura Katalogów Projektu (SvelteKit + Bun Standard)
 
 ```text
 solana-aegis-mercato/
-├── AGENTS.md                          # Instrukcje architektury dla modeli AI (standard Open Mercato)
-├── package.json
+├── AGENTS.md                          # Instrukcje architektury dla agentów AI
+├── package.json                       # Konfiguracja projektu zarządzana przez Bun
 ├── tsconfig.json
+├── svelte.config.js                   # Konfiguracja SvelteKit 2
+├── vite.config.ts                     # Vite bundler
+├── tailwind.config.ts                 # Konfiguracja Tailwind CSS
 ├── docker-compose.yml                 # PostgreSQL, Redis, local Solana test-validator
 ├── programs/                          # Smart Kontrakty Solana (Anchor)
 │   └── aegis-registry/
 │       ├── Cargo.toml
+│       ├── Anchor.toml
 │       └── src/
 │           ├── lib.rs                 # Główna logika programu Anchor
-│           ├── state.rs               # Definicje kont PDA (AgentAccount, StateCommitment)
-│           ├── errors.rs              # Kody błędów
+│           ├── state.rs               # Definicje kont PDA (AgentAccount)
+│           ├── errors.rs              # Kody błędów (np. AgentInactive)
 │           └── instructions/
 │               ├── register_agent.rs
-│               └── commit_private_state.rs
-├── zk-circuits/                       # Obwody ZK (SP1 zkVM / Rust lub Circom)
+│               ├── commit_private_state.rs
+│               └── set_agent_status.rs
+├── zk-circuits/                       # Obwody dowodzące zkVM (Opcjonalny SP1 Prover / STARK)
 │   ├── Cargo.toml
 │   └── src/
 │       └── main.rs                    # Obwód weryfikujący stan i sygnaturę ML-DSA
 └── src/
-    ├── app/                           # Next.js App Router (Open Mercato UI + API)
-    │   ├── api/
-    │   │   ├── actions/               # Solana Actions & Blinks
-    │   │   │   ├── agent-action/route.ts
-    │   │   │   └── actions.json/route.ts
-    │   │   └── webhooks/
-    │   │       └── helius/route.ts    # Webhook do indeksowania transakcji agentów
-    │   └── (dashboard)/               # Interfejs analityczny i telemetryczny
-    ├── modules/                       # Moduły Domenowe (Open Mercato Pattern)
-    │   ├── solana-blink/
-    │   │   ├── services/
-    │   │   │   └── blink-generator.service.ts
-    │   │   ├── controllers/
-    │   │   │   └── blink.controller.ts
-    │   │   ├── types/
-    │   │   └── index.ts               # Rejestracja w kontenerze Awilix DI
-    │   ├── agent-tracker/
-    │   │   ├── entities/
-    │   │   │   ├── Agent.entity.ts    # MikroORM Entity
-    │   │   │   └── AgentActionLog.entity.ts
-    │   │   ├── services/
-    │   │   │   ├── telemetry.service.ts
-    │   │   │   └── onchain-watcher.service.ts
-    │   │   ├── subscribers/           # Subskrybenci Event Busa
-    │   │   │   └── agent-events.subscriber.ts
-    │   │   └── index.ts
-    │   ├── zk-pqc/
-    │   │   ├── services/
-    │   │   │   ├── pqc-crypto.service.ts    # ML-KEM & ML-DSA (Dilithium)
-    │   │   │   ├── zk-prover.service.ts     # Integracja z Proverem ZK
-    │   │   │   └── state-merkle.service.ts  # Kwantowo-odporne drzewo Merkle
-    │   │   └── index.ts
-    │   └── private-vault/
-    │       ├── services/
-    │       │   └── vault.service.ts   # Hybrydowe szyfrowanie off-chain
-    │       ├── entities/
-    │       │   └── EncryptedDataBlob.entity.ts
-    │       └── index.ts
-    └── shared/                        # Współdzielona infrastruktura Open Mercato
-        ├── di/                        # Awilix IoC Container
-        ├── events/                    # Event Bus
-        └── database/                  # Konfiguracja MikroORM
+    ├── routes/                        # SvelteKit App Router
+    │   ├── actions.json/
+    │   │   └── +server.ts             # Główny routing Actions (standard Dialect Blinks)
+    │   ├── (dashboard)/
+    │   │   ├── +page.svelte           # Dashboard operatora w Svelte 5 (Runes)
+    │   │   └── +page.server.ts        # Ładowanie danych agentów i telemetrii
+    │   └── api/
+    │       ├── actions/
+    │       │   ├── actions.json/
+    │       │   │   └── +server.ts     # Alternatywny fallback dla actions.json
+    │       │   └── agent-action/
+    │       │       └── +server.ts     # GET (metadane Blinka) & POST (budowanie transakcji)
+    │       └── webhooks/
+    │           └── helius/
+    │               └── +server.ts     # Ingestion transakcji on-chain z Helius
+    ├── lib/
+    │   ├── server/
+    │   │   ├── modules/               # Moduły Domenowe (Modular Monolith)
+    │   │   │   ├── solana-blink/
+    │   │   │   │   ├── services/
+    │   │   │   │   │   └── blink-generator.service.ts
+    │   │   │   │   └── controllers/
+    │   │   │   │       └── blink.controller.ts
+    │   │   │   ├── agent-tracker/
+    │   │   │   │   ├── entities/
+    │   │   │   │   │   ├── Agent.entity.ts
+    │   │   │   │   │   └── AgentActionLog.entity.ts
+    │   │   │   │   ├── services/
+    │   │   │   │   │   ├── telemetry.service.ts
+    │   │   │   │   │   └── onchain-watcher.service.ts
+    │   │   │   │   └── subscribers/
+    │   │   │   │       └── agent-events.subscriber.ts
+    │   │   │   ├── zk-pqc/
+    │   │   │   │   ├── services/
+    │   │   │   │   │   ├── pqc-crypto.service.ts    # ML-KEM & ML-DSA (@noble/post-quantum)
+    │   │   │   │   │   ├── zk-prover.service.ts     # Wrapper Provera dowodów
+    │   │   │   │   │   └── state-merkle.service.ts  # Kwantowo-odporne drzewo Merkle
+    │   │   │   ├── private-vault/
+    │   │   │   │   ├── services/
+    │   │   │   │   │   └── vault.service.ts         # Hybrydowe szyfrowanie off-chain
+    │   │   │   │   └── entities/
+    │   │   │   │       └── EncryptedDataBlob.entity.ts
+    │   │   ├── di/
+    │   │   │   └── container.ts       # Awilix IoC Container
+    │   │   ├── events/
+    │   │   │   └── event-bus.ts       # Wewnętrzny Event Bus
+    │   │   └── db/
+    │   │       └── mikro-orm.config.ts# Konfiguracja MikroORM PostgreSQL
+    │   └── solana/
+    │       └── idl.json               # Wygenerowany IDL programu Anchor
+    └── hooks.server.ts                # Inicjalizacja MikroORM & DI na żądanie
 ```
 
 ---
@@ -137,31 +153,41 @@ solana-aegis-mercato/
 
 ### 4.1. Moduł: `solana-blink` (Solana Actions)
 Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
-- `GET /api/actions.json` – deklaracja reguł routingu actions (CORS & Actions Spec).
-- `GET /api/actions/agent-action?agentId=...` – zwraca metadane akcji do wyrenderowania w feedzie na Twitterze/X (ikona, opis stanu, przyciski autoryzacji akcji agenta, kill-switch).
+- `GET /actions.json` i `GET /api/actions.json` – deklaracja reguł routingu actions (CORS & Actions Spec).
+- `GET /api/actions/agent-action?agentId=...` – zwraca metadane akcji do wyrenderowania w feedzie na Twitterze/X oraz dial.to (ikona, opis stanu, przyciski autoryzacji akcji agenta, kill-switch).
 - `POST /api/actions/agent-action` – odbiera konto portfela użytkownika (`account`), przygotowuje i podpisuje transakcję Solana kierowaną do programu `aegis-registry`, zwracając zserializowaną transakcję w formacie base64.
 
 ### 4.2. Moduł: `agent-tracker` (Obserwowalność i Telemetria)
 - Pobiera zdarzenia on-chain (za pośrednictwem webhooków Helius lub dedykowanego serwisu indeksującego RPC).
 - Mapuje akcje agentów (zakupy, swapy, rebalansowanie, wywołania AI) do encji w bazie PostgreSQL (MikroORM).
-- Publikuje zdarzenia w **Open Mercato Event Bus** (`AgentActionTriggered`, `AgentActionValidated`, `AgentKilled`).
+- Publikuje zdarzenia w **Event Bus** (`AgentActionTriggered`, `AgentActionValidated`, `AgentKilled`).
 
-### 4.3. Moduł: `zk-pqc` oraz `private-vault` (Post-Quantum ZK)
-- **Problem**: Klasyczne algorytmy (RSA, ECC, Ed25519, standardowe ZK-SNARKi oparte o krzywe BN254) są podatne na złamanie przez algorytm Shora na komputerach kwantowych.
-- **Rozwiązanie**:
-  1. **NIST PQC Standards**:
-     - **ML-KEM (Kyber-768)** – post-kwantowy mechanizm kapsułkowania klucza do symetrycznego szyfrowania (AES-256-GCM) niepublicznych danych agenta w `private-vault`.
-     - **ML-DSA (Dilithium-65)** – post-kwantowe podpisy cyfrowe generowane przez agentów pod stanami decyzyjnymi.
-  2. **Kwantowo-odporne Dowody ZK**:
-     - Wykorzystanie weryfikacji opartej o funkcje skrótu (**Hash-based Commitments**: SHA3-256 / Poseidon2).
-     - Dowód poprawności stanu generowany w zkVM (**SP1** lub **RISC Zero**), który weryfikuje poprawność sygnatury ML-DSA oraz pre-image hasha.
-     - Kotwiczenie wyłącznie korzenia stanu (**Quantum-Safe Merkle State Root**) na L1 Solany w koncie PDA agenta.
+### 4.3. Moduł: `zk-pqc` oraz `private-vault` (Post-Quantum ZK Commitments & DMS)
+- **Problem kryptograficzny**: Klasyczne algorytmy asymetryczne (RSA, ECC, Ed25519) są podatne na złamanie przez algorytm Shora na komputerach kwantowych. W łańcuchach typu ECDSA (Ethereum, Bitcoin) ujawnienie klucza publicznego trwale kompromituje konto, ponieważ klucze są bezstrukturalnymi skalarami.
+- **Przewaga strukturalna Solany (RFC 8032 & SLIP-0010)**:
+  - Zgodnie z badaniami *Baldimtsi et al. (FC 2026, Mysten Labs & Soundness Labs)*: łańcuchy oparte na **EdDSA (Solana)** posiadają kluczową cechę – klucz prywatny jest deterministycznie wyprowadzany z **256-bitowego seeda** poprzez funkcję skrótu:
+    $$\text{sk} = \text{HashToScalar}(\text{SHA-512}(\text{seed})[:32]), \quad \text{pk} = \text{sk} \cdot G$$
+  - Nawet jeśli komputer kwantowy odzyska $\text{sk}$ ze znanego $\text{pk}$, **nie potrafi odwrócić SHA-512** (atak Grovera daje jedynie przyspieszenie $\mathcal{O}(\sqrt{N})$, zachowując ~256 bitów bezpieczeństwa).
+  - Prawdziwy właściciel konta zna $\text{seed}$, co pozwala na autoryzację przejścia w tryb post-kwantowy bez utraty konta i bez zmiany adresu on-chain!
+
+- **Model Dual-Mode Signature (DMS) & One-Time Attestation w Aegis**:
+  1. **Dual Mode Signature (DMS)**:
+     - **Mode 1 (Legacy)**: Standardowy podpis Ed25519 używany w normalnym cyklu życia Solany.
+     - **Mode 2 (Quantum-Safe)**: Podpisy **ML-DSA-65 (Dilithium)** wspierane przez kapsułkowanie **ML-KEM-768 (Kyber)**.
+  2. **One-Time Key Certification (Atestacja powiązania)**:
+     - Zamiast generować ogromny dowód ZK (~5.4 MB w zkVM) do każdej transakcji, agent dokonuje **jednorazowej certyfikacji** powiązania: rejestruje hash swojego klucza post-kwantowego `pqc_pubkey_hash` w koncie PDA programu `aegis-registry`.
+     - Kolejne decyzje, logi i akcje agenta autoryzowane są przez podpis ML-DSA weryfikowany względem zarejestrowanego stanu.
+  3. **Kwantowo-odporne Commitments**:
+     - Wykorzystanie solonych hashy (**Hash-based Commitments**: SHA3-256):
+       $$\text{CommitmentRoot} = \text{SHA3-256}(\text{Salt} \parallel \text{JSON}(\text{DecisionPayload}))$$
+     - Kotwiczenie wyłącznie 32-bajtowego korzenia stanu (**Quantum-Safe Merkle State Root**) na L1 Solany w PDA agenta.
+     - Pełna agilność kryptograficzna (*Crypto Agility*) – możliwość rotacji parametrów PQC bez naruszania struktury bazowej konta Solana.
 
 ---
 
 ## 5. Implementacje Kluczowych Komponentów
 
-### 5.1. Serwis PQC & ZK Commitments (`src/modules/zk-pqc/services/pqc-crypto.service.ts`)
+### 5.1. Serwis PQC & Commitments (`src/lib/server/modules/zk-pqc/services/pqc-crypto.service.ts`)
 ```typescript
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa';
 import { ml_kem768 } from '@noble/post-quantum/ml-kem';
@@ -226,7 +252,7 @@ export class PqcCryptoService {
 }
 ```
 
-### 5.2. Kontroler Solana Actions & Blinks (`src/modules/solana-blink/controllers/blink.controller.ts`)
+### 5.2. Kontroler Solana Actions & Blinks (`src/lib/server/modules/solana-blink/controllers/blink.controller.ts`)
 ```typescript
 import { ActionGetResponse, ActionPostRequest, ActionPostResponse, createPostResponse } from '@solana/actions';
 import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
@@ -408,7 +434,7 @@ pub enum AegisError {
 | :--- | :--- | :--- |
 | **0h – 6h** | **Infrastruktura & Środowisko** | Inicjalizacja Open Mercato monorepo, setup Postgres/MikroORM, konfiguracja Solana Devnet i Anchor CLI. |
 | **6h – 16h** | **Solana Blink & Kontrakt Anchor** | Kompilacja i wdrożenie `aegis-registry` na Solana Devnet. Oprogramowanie endpointów Solana Actions (`actions.json` + `agent-action`), test w Dialect Inspectorze (`dial.to`). |
-| **16h – 26h** | **Agent Tracking & Observability** | Integracja Event Busa Open Mercato, nasłuch transakcji z Helius Webhook, zapis historii akcji w MikroORM, widok w dashboardzie Next.js. |
+| **16h – 26h** | **Agent Tracking & Observability** | Integracja Event Busa Open Mercato, nasłuch transakcji z Helius Webhook, zapis historii akcji w MikroORM, widok w dashboardzie SvelteKit 5. |
 | **26h – 38h** | **PQC & ZK State Pipeline** | Integracja `@noble/post-quantum` (ML-DSA / ML-KEM). Generowanie solonych commitmentów SHA3/Poseidon dla danych prywatnych, generowanie dowodu i zapisywanie rootów on-chain. |
 | **38h – 48h** | **Testy E2E, Polishing & Demo** | Przejście pełnego scenariusza live: akcja agenta -> Blink na Twitterze -> podpis transakcji -> zapis PQC Roota na Solanie -> aktualizacja stanu w dashboardzie. |
 
@@ -417,5 +443,8 @@ pub enum AegisError {
 ## 7. Wskazówki i "Pitch Deck" dla Jury
 
 1. **Dlaczego Open Mercato?** Pokazuje dojrzałość inżynierską – zamiast prototypu w jednym pliku, stworzono modularną, skalowalną platformę z Dependency Injection (Awilix) i Event-Driven Architecture.
-2. **Dlaczego PQC + ZK?** Komputery kwantowe to realne zagrożenie dla kryptografii asymetrycznej. Rozwiązanie wprowadza standardy NIST (ML-DSA, ML-KEM) wraz z kwantowo-odpornymi dowodami ZK dla danych agentów.
-3. **Efekt "WOW" na żywo**: Bezpośrednia interakcja z agentem AI na Twitterze/X za pośrednictwem Blinka, bez konieczności opuszczania platformy społecznościowej.
+2. **Dlaczego PQC + Dual-Mode Signature (DMS)?**
+   - Komputery kwantowe (algorytm Shora) nieodwracalnie łamią ECDSA (Ethereum/Bitcoin), niszcząc tożsamość kont.
+   - Wskazujemy na **przełomową przewagę Solany (RFC 8032 / SLIP-0010)** udowodnioną w pracy *Baldimtsi et al. (FC 2026)*: klucz Solany to w istocie seed za hashem SHA-512, którego komputer kwantowy nie potrafi odwrócić.
+   - Aegis Mercato jako pierwsze rozwiązanie na Solanie wdraża formalny model **Dual-Mode Signatures (DMS)** i jednorazową atestację klucza **ML-DSA-65 (NIST PQC)**, pozwalając agentom na bezpieczną migrację post-kwantową bez konieczności porzucania adresów portfeli.
+3. **Efekt "WOW" na żywo**: Bezpośrednia interakcja z agentem AI na Twitterze/X za pośrednictwem Blinka (Human-in-the-Loop i awaryjny Kill-Switch), bez konieczności opuszczania platformy społecznościowej.

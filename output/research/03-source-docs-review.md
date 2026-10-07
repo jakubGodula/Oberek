@@ -10,8 +10,8 @@ Action Engine on Solana".
 | Solana Actions / Blinks for human-in-the-loop approval and a kill-switch, testable in dial.to | all four | **Yes** — it is the most demo-able piece and the brief lists Blinks. |
 | Anchor program `aegis-registry`: `AgentAccount` PDA (`seeds=[b"agent", agent_id]`), `register_agent`, `commit_private_state(root, zk_proof)`, `set_agent_status`, event `PrivateStateCommitted` | ARCHITECTURE §5.3, PLAN_* Faza 2 | **Yes, trimmed** — a 3-instruction program is realistic; rename to what the product does (attestations/agent registry). |
 | Helius webhook → DB → event bus → dashboard ("agent-tracker") | all | **Yes** — maps 1:1 onto "on-chain events" in the brief. |
-| PQC: ML-KEM-768 for encrypting agent data, ML-DSA-65 for signing state, SHA3-256 salted commitments, only the 32-byte root on-chain | all | **Partly** — the signing + commitment part is a few hundred lines with `@noble/post-quantum`; keep as an honest, small feature. |
-| ZK proof in a zkVM (SP1 / RISC Zero) that verifies an ML-DSA signature | ARCHITECTURE §4.3 | **No for MVP** — the Anchor code never verifies `_zk_proof`; proving a Dilithium verification inside a zkVM is a multi-week research task and would be a fake claim in a demo. |
+| PQC: ML-KEM-768 for encrypting agent data, ML-DSA-65 for signing state, SHA3-256 salted commitments, only the 32-byte root on-chain | all | **Yes** — grounded in the **Dual-Mode Signature (DMS)** framework (*Baldimtsi et al., FC 2026*), taking advantage of Solana's RFC 8032 SHA-512 seed structure. One-time attestation registers `pqc_pubkey_hash` on-chain. |
+| ZK proof in a zkVM (SP1 / RISC Zero) that verifies an ML-DSA signature | ARCHITECTURE §4.3 | **Roadmap / Level 2** — the Anchor code never verifies `_zk_proof` on-chain (ignored param); a full zkVM prover is a multi-week research task. Keep the clean hash-based commitment + DMS attestation model as core deliverable. |
 
 ## 2. Where they contradict each other
 | Topic | ARCHITECTURE.md / README.md | PLAN_DZIALANIA.md / PLAN_WDROZENIA.md | Resolution proposed |

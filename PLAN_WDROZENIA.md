@@ -170,7 +170,7 @@ flowchart TD
 ---
 
 ### Faza 4: Integracja Solana Actions & Dialect Blinks w SvelteKit (Dzień 2: 24h – 32h)
-- [ ] **Endpoint reguł routingu i CORS (`src/routes/api/actions.json/+server.ts`)**:
+- [ ] **Endpoint reguł routingu i CORS (`src/routes/actions.json/+server.ts` oraz `src/routes/api/actions.json/+server.ts`)**:
   - Implementacja handlera `GET` i `OPTIONS` zwracającego reguły routingu oraz nagłówki:
     - `Access-Control-Allow-Origin: *`
     - `Access-Control-Allow-Methods: GET,POST,PUT,OPTIONS`

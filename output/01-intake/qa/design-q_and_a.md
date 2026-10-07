@@ -42,10 +42,14 @@ status: open
 - Notes:
 
 ## Q-DESIGN-03 — Keep PQC / ZK?
-- Why it matters: it is the headline of the source docs and a time sink. See `research/03-source-docs-review.md` §1.
-- Options: A) Keep only ML-DSA-65 signing + SHA3-256 salted commitments inside `solana_attestations` ("quantum-safe attestations"); no ZK, no zkVM. B) A + ML-KEM-768/AES-GCM encrypted report vault (`EncryptedDataBlob`). C) Full source-doc scope (zkVM proof of ML-DSA verification). D) Drop PQC completely.
+- Why it matters: it is the headline of the source docs and a key cryptographic differentiator on Solana. See `research/03-source-docs-review.md` §1 and *Baldimtsi et al. (FC 2026)* on EdDSA Dual-Mode Signatures.
+- Options:
+  A) **Dual-Mode Signature (DMS) & One-Time Attestation**: Keep ML-DSA-65 signing + SHA3-256 salted commitments inside `solana_attestations` ("quantum-safe attestations"); on-chain `pqc_pubkey_hash` attestation in Anchor PDA without zkVM overhead; no live ZK proof generation.
+  B) A + ML-KEM-768/AES-GCM encrypted report vault (`EncryptedDataBlob`) (package `WP-11`).
+  C) Full source-doc scope (zkVM proof of ML-DSA verification in SP1/RISC Zero).
+  D) Drop PQC completely.
 - Default (used if unanswered): A
-- AI recommendation: A, confidence high; B is a stretch package (`WP-11`). C is rejected for two weeks.
+- AI recommendation: A, confidence high; B is a stretch package (`WP-11`). Option A has strong academic backing (*Baldimtsi et al., FC 2026*) proving Solana's Ed25519 seed derivation provides ~256 bits of quantum preimage resistance, enabling clean DMS without needing heavy zkVM proofs on-chain. C is moved to post-hackathon roadmap.
 - Impact if wrong: medium
 - Blocking: no
 - Answer:
