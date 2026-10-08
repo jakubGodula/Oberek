@@ -1,0 +1,8 @@
+# Agave toolchain for hosts whose glibc is too old for the prebuilt Solana CLI (< 2.34, e.g. Ubuntu 20.04).
+FROM rust:1-bookworm
+ARG AGAVE_VERSION=v4.3.0
+# One layer: chmod in a later layer would duplicate the toolchain. a+rwX lets the container run as the host user.
+RUN sh -c "$(curl -sSfL https://release.anza.xyz/${AGAVE_VERSION}/install)" \
+ && /root/.local/share/solana/install/active_release/bin/cargo-build-sbf --install-only \
+ && chmod -R a+rwX /root
+ENV PATH=/root/.local/share/solana/install/active_release/bin:$PATH

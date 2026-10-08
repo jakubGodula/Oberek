@@ -1,0 +1,11 @@
+{
+  "name": "falcon-noble-compat-vectors",
+  "private": true,
+  "scripts": {
+    "gen": "node gen-vectors.cjs ../vectors.json"
+  },
+  "dependencies": {
+    "@noble/post-quantum": "0.7.1",
+    "@solana/web3.js": "1.99.0"
+  }
+}
