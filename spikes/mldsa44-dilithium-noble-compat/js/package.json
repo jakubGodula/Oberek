@@ -1,0 +1,12 @@
+{
+  "name": "mldsa44-dilithium-noble-compat-vectors",
+  "private": true,
+  "scripts": {
+    "gen": "node gen-vectors.cjs ../vectors.json"
+  },
+  "dependencies": {
+    "@noble/post-quantum": "0.7.1",
+    "@solana-program/system": "0.15.0",
+    "@solana/kit": "8.4.0"
+  }
+}
