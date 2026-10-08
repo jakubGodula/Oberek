@@ -10,7 +10,7 @@
 **Aegis Mercato** to system integrujący trzy przełomowe technologie w ekosystemie Solana:
 1. **Solana Actions & Dialect Blinks** – interakcja z autonomicznymi agentami AI wprost z mediów społecznościowych (X/Twitter, Discord) w modelu *Human-in-the-Loop* (HITL) oraz natychmiastowy *Kill-Switch*.
 2. **Obserwowalność i Telemetria (Open Mercato Standard)** – modułowy monolit z Dependency Injection (Awilix), MikroORM (PostgreSQL) i Event Busem śledzącym każdą decyzję i transakcję on-chain agenta.
-3. **Kryptografia Post-Kwantowa (PQC) & Zero-Knowledge (ZK)** – ochrona danych i stanów decyzyjnych agenta przed komputerami kwantowymi dzięki standardom NIST: **ML-KEM (Kyber-768)**, **ML-DSA (Dilithium-65)** oraz kotwiczeniu kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie.
+3. **Kryptografia Post-Kwantowa (PQC) & Zero-Knowledge (ZK)** – ochrona danych i stanów decyzyjnych agenta przed komputerami kwantowymi dzięki standardom NIST: **ML-KEM (Kyber-768)**, **ML-DSA (Dilithium-44)** oraz kotwiczeniu kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie.
 
 ### Główne cele wdrożenia:
 - Powstanie w pełni działającego monorepo napędzanego przez **Bun** oraz **SvelteKit 2 + Svelte 5** (Runes) z **Tailwind CSS**.
@@ -73,7 +73,7 @@ flowchart TD
 | **Warstwa Danych** | MikroORM + PostgreSQL | 6.x | Bezpieczne mapowanie encji, migracje bazy zintegrowane w `hooks.server.ts` |
 | **Solana Actions** | `@solana/actions` + `@solana/web3.js` | 2.x / 1.95+ | Budowanie Blinków i serializacja transakcji |
 | **Smart Kontrakty** | Rust + Anchor Framework | 0.30.x (Solana 1.18+) | Rejestr agentów i kotwiczenie korzeni PQC PDA |
-| **Kryptografia PQC** | `@noble/post-quantum` | 0.2.x | Implementacja NIST: ML-KEM-768 oraz ML-DSA-65 |
+| **Kryptografia PQC** | `@noble/post-quantum` | 0.2.x | Implementacja NIST: ML-KEM-768 oraz ML-DSA-44 |
 | **Indeksowanie / RPC** | Helius API / Solana Devnet RPC | - | Nasłuch transakcji, webhooks, sygnatury bloków |
 | **Infrastruktura Lokalna** | Docker & Docker Compose | - | Konteneryzacja PostgreSQL i test-validatora |
 
@@ -158,7 +158,7 @@ flowchart TD
 
 ### Faza 3: Silnik Kryptografii Post-Kwantowej & Private Vault (Dzień 2: 16h – 24h)
 - [ ] **Implementacja `PqcCryptoService` (`@noble/post-quantum`)**:
-  - Generowanie kluczy **ML-DSA-65 (Dilithium)** i **ML-KEM-768 (Kyber)** w środowisku Bun.
+  - Generowanie kluczy **ML-DSA-44 (Dilithium)** i **ML-KEM-768 (Kyber)** w środowisku Bun.
   - Solone committmenty stanów agenta (`computeStateCommitment`) z użyciem algorytmu **SHA3-256**:
     $$\text{Commitment} = \text{SHA3-256}(\text{Salt} \parallel \text{JSON}(\text{State}))$$
   - Podpisywanie hasha stanu przez ML-DSA i weryfikacja poprawności sygnatury.

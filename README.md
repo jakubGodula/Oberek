@@ -15,7 +15,7 @@ Kompletna specyfikacja architektoniczna, schemat modułów oraz kod bazowy znajd
 3. **Prywatność i Post-Quantum Cryptography (PQC + Dual-Mode DMS)**:
    - Wykorzystanie unikalnej cechy Solany (**Ed25519 / RFC 8032 & SLIP-0010**): tożsamość konta opiera się na 256-bitowym seedzie chronionym przez SHA-512, co umożliwia bezstratną migrację post-kwantową (**Dual-Mode Signatures - DMS**, wg *Baldimtsi et al., FC 2026*).
    - Szyfrowanie wrażliwych danych agenta off-chain za pomocą **ML-KEM (Kyber-768)**.
-   - Post-kwantowe podpisy cyfrowe **ML-DSA (Dilithium-65)** oraz jednorazowa atestacja (*One-Time Proof Certification*) klucza post-kwantowego pod adresem konta Solana bez zmiany adresu portfela.
+   - Post-kwantowe podpisy cyfrowe **ML-DSA (Dilithium-44)** oraz jednorazowa atestacja (*One-Time Proof Certification*) klucza post-kwantowego pod adresem konta Solana bez zmiany adresu portfela.
    - Kotwiczenie kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) w koncie PDA programu Anchor na Solanie.
 
 

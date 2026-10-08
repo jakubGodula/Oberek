@@ -3,7 +3,7 @@ All under `apps/mercato/src/modules/solana_attestations/__tests__/`. Run: `yarn 
 
 | # | file | proves | command |
 |---|------|--------|---------|
-| 1 | `pqc-crypto.service.test.ts` | keygen/sign/verify round trip (ML-DSA-65); flipped content byte → `verify` false; `commit()` deterministic for same salt+content, different salts → different hashes; `publicKeyHash` = sha3-256(pubkey). | `yarn test .../__tests__/pqc-crypto` |
+| 1 | `pqc-crypto.service.test.ts` | keygen/sign/verify round trip (ML-DSA-44); flipped content byte → `verify` false; `commit()` deterministic for same salt+content, different salts → different hashes; `publicKeyHash` = sha3-256(pubkey). | `yarn test .../__tests__/pqc-crypto` |
 | 2 | `registry-program.client.test.ts` | PDA derivation matches `["agent", id]` / `["attestation", agentPda, id]`; `registerAgent`/`commitAttestation`/`setAgentStatus` encode the IDL discriminators + args and pass through `core.sendAndConfirm` (fake). | `... registry-program.client` |
 | 3 | `policy-guard.table.test.ts` | allowed tool ok; disallowed tool → `POLICY_DENIED`; lamports over cap; daily USDC sum over cap (two executed requests today); program/recipient not allow-listed; audit entry written on deny. | `... policy-guard` |
 | 4 | `approval.service.test.ts` | `propose` → `proposed` + memo; `decide` approve/reject; second decide → `ALREADY_DECIDED`; `markExecuted` idempotent; events emitted once each; audit entries. | `... approval.service` |

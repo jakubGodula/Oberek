@@ -24,7 +24,7 @@ a few business functions under human control.
 ## 3. Source documents (read-only inputs)
 - `../README.md`, `../ARCHITECTURE.md` — "Aegis Mercato" architecture: Open Mercato modules `solana-blink`,
   `agent-tracker`, `zk-pqc`, `private-vault`; Anchor program `aegis-registry` (agent PDA, state-root commits,
-  kill-switch); PQC (ML-KEM-768 / ML-DSA-65) and ZK ideas; 48-hour schedule.
+  kill-switch); PQC (ML-KEM-768 / ML-DSA-44) and ZK ideas; 48-hour schedule.
 - `../PLAN_DZIALANIA.md`, `../PLAN_WDROZENIA.md` — a step-by-step plan for the same idea but on a different stack
   (Bun + SvelteKit + Tailwind, no Open Mercato). These two documents contradict `ARCHITECTURE.md` on the stack and are
   written for a 48-hour solo build, not a 6-person, 2-week build. The intake must reconcile this.

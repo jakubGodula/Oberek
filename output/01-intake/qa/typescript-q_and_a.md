@@ -87,8 +87,8 @@ status: open
 - Notes:
 
 ## Q-TS-08 — PQC library
-- Why it matters: `@noble/post-quantum` provides ML-DSA-65 and ML-KEM-768 in pure JS; it is audited but slow for big inputs (we only sign 32-byte hashes).
-- Options: A) `@noble/post-quantum` (pin exact version), keys stored like the hot wallet (env for hackathon). B) Node's built-in crypto if the installed Node 24 exposes ML-DSA/ML-KEM (check `crypto.getCiphers()`/`generateKeyPair('ml-dsa-65')` support at the pinned version). C) No PQC.
+- Why it matters: `@noble/post-quantum` provides ML-DSA-44 and ML-KEM-768 in pure JS; it is audited but slow for big inputs (we only sign 32-byte hashes).
+- Options: A) `@noble/post-quantum` (pin exact version), keys stored like the hot wallet (env for hackathon). B) Node's built-in crypto if the installed Node 24 exposes ML-DSA/ML-KEM (check `crypto.getCiphers()`/`generateKeyPair('ml-dsa-44')` support at the pinned version). C) No PQC.
 - Default (used if unanswered): A
 - AI recommendation: A, confidence medium; B is worth a 30-minute spike because a built-in beats a dependency in a security pitch.
 - Impact if wrong: low

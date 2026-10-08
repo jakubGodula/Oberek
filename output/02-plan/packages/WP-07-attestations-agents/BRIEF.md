@@ -13,7 +13,7 @@
 | Dual review | yes (keys, agent execution, policy limits; Q-AI-06) |
 
 ## 1. Objective (2–4 sentences)
-Build `solana_attestations`: ML-DSA-65 signing and SHA3-256 salted commitments (`PqcCryptoService`), the agent registry
+Build `solana_attestations`: ML-DSA-44 signing and SHA3-256 salted commitments (`PqcCryptoService`), the agent registry
 mirror of the on-chain `AgentAccount`, attestation records committed on-chain through the Anchor program client, the
 `ApprovalRequest` entity that every agent mutation goes through, a single `PolicyGuard`, the executor worker that runs
 approved requests, and two Open Mercato AI agents (Intake & Quote, Report Attestation) exposed as `ai-tools`/`ai-agents`
@@ -38,7 +38,7 @@ the approval API they call.
 6. `apps/mercato/src/modules/solana_core/services/solana-core.service.ts` (WP-03), `docs/CONTRACTS.md` (WP-01)
 7. `programs/aegis_registry/src/lib.rs` and the IDL (WP-02) — instruction names, args, PDA seeds `["agent", agent_id]`, `["attestation", agent_pda, attestation_id]`
 8. `docs/research/solana-stack-2026.md` §4 (`@anchor-lang/core@1.2.1`), §8 (signing in production note)
-9. `@noble/post-quantum` README (`ml_dsa65.keygen/sign/verify`)
+9. `@noble/post-quantum` README (`ml_dsa44.keygen/sign/verify`)
 
 ## 4. Files owned (create/modify only these)
 ```
@@ -83,7 +83,7 @@ Provided:
 interface PqcCryptoService {
   publicKeyHash(): Uint8Array                                  // sha3-256(ML-DSA pubkey)
   commit(content: Uint8Array): { salt: Uint8Array; contentHash: Uint8Array }   // sha3-256(salt || content)
-  sign(hash: Uint8Array): Uint8Array                           // ml_dsa65.sign(secretKey, hash)
+  sign(hash: Uint8Array): Uint8Array                           // ml_dsa44.sign(secretKey, hash)
   verify(hash: Uint8Array, sig: Uint8Array, pubkey?: Uint8Array): boolean
 }
 // services/registry-program.client.ts  (@anchor-lang/core 1.2.1, web3.js 1.99)
@@ -122,7 +122,7 @@ Entities:
 ## 7. Step-by-step implementation guide (numbered, each step = one commit)
 1. **Wiring.** `index.ts`, `acl.ts` (`view`, `manage`, `approve`), `setup.ts` (`admin: ['solana_attestations.*']`, `employee: ['solana_attestations.view']`), `events.ts`, `i18n/en.json`. `yarn generate && yarn typecheck`.
 2. **Entities + migration.** Three entities as in §6; unique `(tenant_id, agent_slug)`; `yarn db:generate`, review, `yarn db:migrate`.
-3. **PqcCryptoService.** `@noble/post-quantum` `ml_dsa65`; secret key from `PQC_DSA_SECRET` (base64), public from `PQC_DSA_PUBLIC`; if missing in non-production, generate once and log the **public** key only; `commit()` = 32-byte random salt, `sha3-256(salt || content)` via Node `crypto.createHash('sha3-256')`. Unit tests with known vectors (sign → verify true; flipped byte → false).
+3. **PqcCryptoService.** `@noble/post-quantum` `ml_dsa44`; secret key from `PQC_DSA_SECRET` (base64), public from `PQC_DSA_PUBLIC`; if missing in non-production, generate once and log the **public** key only; `commit()` = 32-byte random salt, `sha3-256(salt || content)` via Node `crypto.createHash('sha3-256')`. Unit tests with known vectors (sign → verify true; flipped byte → false).
 4. **Program client.** `registry-program.client.ts`: `new Program(idl, provider)` from `@anchor-lang/core` with an `AnchorProvider` wrapping `core.connection()` and a wallet adapter over `core.hotWallet()`; PDA helpers; the three methods build the instruction and send through `core.sendAndConfirm` (not Anchor's `rpc()` so the retry/priority-fee policy applies); `build*Ix` helpers for WP-08. Test with `FakeSolanaCoreService` asserting instruction data discriminators and account metas.
 5. **Agent registry service.** `register(agentSlug, operators, policy)`: derive pqc pubkey hash, call `registerAgent`, store the row; `pause/unpause` via `setAgentStatus` (unpause owner-only is enforced on-chain; mirror in service). Subscriber `pause-on-status-changed.ts` on `solana_events.program_log.observed` with `name === 'AgentStatusChanged'` → update `is_active` and emit `solana_attestations.agent.paused` when false.
 6. **PolicyGuard.** Loads the registration's `policy`; checks tool allow-list, per-action lamports, daily USDC sum (sum of executed `payment_request`/`quote` payloads today), program and recipient allow-lists; returns `POLICY_DENIED` with a reason; writes an audit entry on deny. Table-driven tests.

@@ -44,7 +44,7 @@ status: open
 ## Q-DESIGN-03 — Keep PQC / ZK?
 - Why it matters: it is the headline of the source docs and a key cryptographic differentiator on Solana. See `research/03-source-docs-review.md` §1 and *Baldimtsi et al. (FC 2026)* on EdDSA Dual-Mode Signatures.
 - Options:
-  A) **Dual-Mode Signature (DMS) & One-Time Attestation**: Keep ML-DSA-65 signing + SHA3-256 salted commitments inside `solana_attestations` ("quantum-safe attestations"); on-chain `pqc_pubkey_hash` attestation in Anchor PDA without zkVM overhead; no live ZK proof generation.
+  A) **Dual-Mode Signature (DMS) & One-Time Attestation**: Keep ML-DSA-44 signing + SHA3-256 salted commitments inside `solana_attestations` ("quantum-safe attestations"); on-chain `pqc_pubkey_hash` attestation in Anchor PDA without zkVM overhead; no live ZK proof generation.
   B) A + ML-KEM-768/AES-GCM encrypted report vault (`EncryptedDataBlob`) (package `WP-11`).
   C) Full source-doc scope (zkVM proof of ML-DSA verification in SP1/RISC Zero).
   D) Drop PQC completely.

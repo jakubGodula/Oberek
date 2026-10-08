@@ -24,7 +24,7 @@
 - **Runtime & Zarządzanie Pakietami (Bun)**: Użycie `bun` zamiast standardowego `npm`/`node` do zarządzania zależnościami, uruchamiania dev-serwera oraz testów jednostkowych (`bun test`).
 - **Warstwa Full-Stack (SvelteKit + Svelte 5)**: Svelte 5 z Runami (`$state`, `$derived`, `$effect`) zapewnia natychmiastową reaktywność i brak narzutu wirtualnego DOM-u. Serwerowe endpointy `+server.ts` dają 100% precyzyjną kontrolę nad nagłówkami HTTP (kluczowe dla CORS w Solana Actions).
 - **Styling (Tailwind CSS)**: Szybkie stylowanie komponentów UI w estetyce Cyber-Security (ciemny motyw, efekty Glassmorphism, akcenty neonowe).
-- **Bezpieczeństwo post-kwantowe (NIST PQC)**: Wrażliwe dane agenta chronione są przez **ML-KEM-768** i podpisywane przez **ML-DSA-65**, a na Solanie kotwiczony jest wyłącznie 32-bajtowy korzeń stanu (**Quantum-Safe Merkle Root**).
+- **Bezpieczeństwo post-kwantowe (NIST PQC)**: Wrażliwe dane agenta chronione są przez **ML-KEM-768** i podpisywane przez **ML-DSA-44**, a na Solanie kotwiczony jest wyłącznie 32-bajtowy korzeń stanu (**Quantum-Safe Merkle Root**).
 
 ---
 
@@ -120,7 +120,7 @@
 
 ### Zadanie 4.1: Integracja biblioteki `@noble/post-quantum`
 - [ ] Sprawdzić poprawność działania algorytmów NIST w środowisku Bun:
-  - Podpisy cyfrowe: **ML-DSA-65** (Dilithium).
+  - Podpisy cyfrowe: **ML-DSA-44** (Dilithium).
   - Wymiana klucza: **ML-KEM-768** (Kyber).
 
 ### Zadanie 4.2: Implementacja serwisu `PqcCryptoService`

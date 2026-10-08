@@ -10,7 +10,7 @@
 | D-06 | Events = one raw Helius devnet webhook through `@open-mercato/webhooks` adapter + polling fallback; webhook is a hint, RPC is truth. | Free-tier limits; Core/program events need raw payloads; existing dedup/replay machinery. | Q-SOL-08, Q-SEC-04 |
 | D-07 | Blinks demoed on a self-hosted Blink page + public inspector; registry application sent day 1; no reliance on X unfurling. | X never rendered Blinks natively; registry looks frozen. | Q-SOL-06 |
 | D-08 | On-chain anchor = small custom Anchor program (3 instructions, 2 PDAs, 3 events), Anchor 1.2.1. | Judged technical depth; kill-switch enforced on-chain. | Q-SOL-05, Q-RUST-01 |
-| D-09 | PQC = ML-DSA-65 signatures + SHA3-256 salted commitments only; no ZK; ML-KEM vault is stretch. | Honest, small, demonstrable; ZK claim would be false. | Q-DESIGN-03, Q-SEC-07 |
+| D-09 | PQC = ML-DSA-44 signatures + SHA3-256 salted commitments only; no ZK; ML-KEM vault is stretch. | Honest, small, demonstrable; ZK claim would be false. | Q-DESIGN-03, Q-SEC-07 |
 | D-10 | Agents = Open Mercato `ai-tools`/`ai-agents` + MCP; two skills; every mutation via `ApprovalRequest`; single `PolicyGuard`. | Reuses the shipped assistant and approval mechanics. | Q-AGENT-01/03/05 |
 | D-11 | Human approval primary in dashboard, Blink as the showcase path. | Reliability on stage. | Q-AGENT-04 |
 | D-12 | Hosting = one VPS with Docker Compose + Caddy; Helius free tier; secrets in server `.env` only; gitleaks + CI. | Long-running app with workers; webhook needs a stable URL. | Q-DEVOPS-01/03/04 |

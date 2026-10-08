@@ -77,7 +77,7 @@ status: open
 
 ## Q-SEC-07 — Post-quantum claims
 - Why it matters: `ARCHITECTURE.md` promises ML-KEM/ML-DSA and ZK. Over-claiming to a security audience backfires. ML-DSA signatures cannot be verified on-chain by Solana natively (no precompile), so the on-chain part can only be a hash commitment plus an Ed25519 signature.
-- Options: A) Honest scope: audit-report attestations are hashed (SHA3-256, salted) and signed off-chain with ML-DSA-65; the hash + the ML-DSA public-key hash are stored in the attestation PDA; verification is off-chain via an API and a CLI, and the pitch says exactly that ("quantum-safe signature, on-chain commitment"). B) Also encrypt report blobs with ML-KEM-768 + AES-GCM in a vault entity. C) Drop PQC entirely. D) Keep the zkVM story.
+- Options: A) Honest scope: audit-report attestations are hashed (SHA3-256, salted) and signed off-chain with ML-DSA-44; the hash + the ML-DSA public-key hash are stored in the attestation PDA; verification is off-chain via an API and a CLI, and the pitch says exactly that ("quantum-safe signature, on-chain commitment"). B) Also encrypt report blobs with ML-KEM-768 + AES-GCM in a vault entity. C) Drop PQC entirely. D) Keep the zkVM story.
 - Default (used if unanswered): A
 - AI recommendation: A, confidence high; B only if the Rust and payments packages finish early. D is rejected (see `research/03-source-docs-review.md`).
 - Impact if wrong: medium

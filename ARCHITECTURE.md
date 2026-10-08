@@ -11,7 +11,7 @@
 Stworzenie platformy nowej generacji łączącej:
 - **Autonomicznych agentów AI na Solanie** z pełną obserwowalnością i audytowalnością.
 - **Interakcję z użytkownikiem w mediach społecznościowych** za pomocą protokołu **Solana Actions & Dialect Blinks** (Human-in-the-Loop bezpośrednio z Twittera/X, Discorda oraz Dialect Inspectora `dial.to`).
-- **Bezpieczeństwo post-kwantowe (PQC)** i **prywatność stanów (Zero-Knowledge Commitments)**: Ochrona wrażliwych danych agentów (strategie, klucze API, salda) przed złamaniem przez komputery kwantowe poprzez wykorzystanie algorytmów NIST PQC (ML-DSA-65 / Dilithium, ML-KEM-768 / Kyber) oraz kotwiczenie kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie w koncie PDA programu Anchor.
+- **Bezpieczeństwo post-kwantowe (PQC)** i **prywatność stanów (Zero-Knowledge Commitments)**: Ochrona wrażliwych danych agentów (strategie, klucze API, salda) przed złamaniem przez komputery kwantowe poprzez wykorzystanie algorytmów NIST PQC (ML-DSA-44 / Dilithium, ML-KEM-768 / Kyber) oraz kotwiczenie kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie w koncie PDA programu Anchor.
 
 ---
 
@@ -40,7 +40,7 @@ flowchart TB
     end
 
     subgraph Crypto_Pipeline ["PQC & Commitment Pipeline"]
-        PQC_Engine["ML-KEM-768 (KEM) + ML-DSA-65 (Signatures)\n@noble/post-quantum"]
+        PQC_Engine["ML-KEM-768 (KEM) + ML-DSA-44 (Signatures)\n@noble/post-quantum"]
         Commitment_Engine["Hash Commitments (SHA3-256 / Merkle Root)\nOptional zkVM (SP1 / RISC Zero Prover)"]
     end
 
@@ -173,7 +173,7 @@ Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
 - **Model Dual-Mode Signature (DMS) & One-Time Attestation w Aegis**:
   1. **Dual Mode Signature (DMS)**:
      - **Mode 1 (Legacy)**: Standardowy podpis Ed25519 używany w normalnym cyklu życia Solany.
-     - **Mode 2 (Quantum-Safe)**: Podpisy **ML-DSA-65 (Dilithium)** wspierane przez kapsułkowanie **ML-KEM-768 (Kyber)**.
+     - **Mode 2 (Quantum-Safe)**: Podpisy **ML-DSA-44 (Dilithium)** wspierane przez kapsułkowanie **ML-KEM-768 (Kyber)**.
   2. **One-Time Key Certification (Atestacja powiązania)**:
      - Zamiast generować ogromny dowód ZK (~5.4 MB w zkVM) do każdej transakcji, agent dokonuje **jednorazowej certyfikacji** powiązania: rejestruje hash swojego klucza post-kwantowego `pqc_pubkey_hash` w koncie PDA programu `aegis-registry`.
      - Kolejne decyzje, logi i akcje agenta autoryzowane są przez podpis ML-DSA weryfikowany względem zarejestrowanego stanu.
@@ -189,7 +189,7 @@ Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
 
 ### 5.1. Serwis PQC & Commitments (`src/lib/server/modules/zk-pqc/services/pqc-crypto.service.ts`)
 ```typescript
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa';
+import { ml_dsa44 } from '@noble/post-quantum/ml-dsa';
 import { ml_kem768 } from '@noble/post-quantum/ml-kem';
 import { createHash, randomBytes } from 'crypto';
 
@@ -200,10 +200,10 @@ export interface PqcKeyPair {
 
 export class PqcCryptoService {
   /**
-   * Generuje parę kluczy ML-DSA-65 (Dilithium) dla agenta
+   * Generuje parę kluczy ML-DSA-44 (Dilithium) dla agenta
    */
   generateDsaKeys(): PqcKeyPair {
-    const keys = ml_dsa65.keygen();
+    const keys = ml_dsa44.keygen();
     return {
       publicKey: keys.publicKey,
       secretKey: keys.secretKey,
@@ -240,14 +240,14 @@ export class PqcCryptoService {
    * Podpisuje stan agenta przy użyciu post-kwantowego podpisu ML-DSA
    */
   signState(stateHash: Uint8Array, secretKey: Uint8Array): Uint8Array {
-    return ml_dsa65.sign(secretKey, stateHash);
+    return ml_dsa44.sign(secretKey, stateHash);
   }
 
   /**
    * Weryfikuje podpis ML-DSA
    */
   verifyStateSignature(stateHash: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean {
-    return ml_dsa65.verify(publicKey, stateHash, signature);
+    return ml_dsa44.verify(publicKey, stateHash, signature);
   }
 }
 ```
@@ -446,5 +446,5 @@ pub enum AegisError {
 2. **Dlaczego PQC + Dual-Mode Signature (DMS)?**
    - Komputery kwantowe (algorytm Shora) nieodwracalnie łamią ECDSA (Ethereum/Bitcoin), niszcząc tożsamość kont.
    - Wskazujemy na **przełomową przewagę Solany (RFC 8032 / SLIP-0010)** udowodnioną w pracy *Baldimtsi et al. (FC 2026)*: klucz Solany to w istocie seed za hashem SHA-512, którego komputer kwantowy nie potrafi odwrócić.
-   - Aegis Mercato jako pierwsze rozwiązanie na Solanie wdraża formalny model **Dual-Mode Signatures (DMS)** i jednorazową atestację klucza **ML-DSA-65 (NIST PQC)**, pozwalając agentom na bezpieczną migrację post-kwantową bez konieczności porzucania adresów portfeli.
+   - Aegis Mercato jako pierwsze rozwiązanie na Solanie wdraża formalny model **Dual-Mode Signatures (DMS)** i jednorazową atestację klucza **ML-DSA-44 (NIST PQC)**, pozwalając agentom na bezpieczną migrację post-kwantową bez konieczności porzucania adresów portfeli.
 3. **Efekt "WOW" na żywo**: Bezpośrednia interakcja z agentem AI na Twitterze/X za pośrednictwem Blinka (Human-in-the-Loop i awaryjny Kill-Switch), bez konieczności opuszczania platformy społecznościowej.
