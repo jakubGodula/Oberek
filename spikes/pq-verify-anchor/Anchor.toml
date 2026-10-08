@@ -1,0 +1,7 @@
+# The programs entry stops the first `anchor build` from rewriting declare_id! with a freshly generated keypair.
+[programs.localnet]
+pq_verify = "5Li4eRzF17yEfAEpbNceWuvrkUesCYbX5jf7xDV4oe1Q"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"

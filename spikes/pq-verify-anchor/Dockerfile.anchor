@@ -1,0 +1,7 @@
+# Agave 4.3.0 toolchain (../falcon-noble-compat/Dockerfile.sbf, built as falcon-sbf by run-mollusk.sh) plus the
+# Anchor CLI built from crates.io: the prebuilt release binary needs glibc 2.39, Debian bookworm has 2.36.
+# The registry is removed in the same layer so the host user (docker run --user) can recreate it writable.
+FROM falcon-sbf
+ARG ANCHOR_VERSION=1.2.1
+RUN cargo install anchor-cli --version "${ANCHOR_VERSION}" --locked \
+ && rm -rf /usr/local/cargo/registry /usr/local/cargo/git

@@ -1,0 +1,7 @@
+{
+  "name": "pq-verify-anchor-fixtures",
+  "private": true,
+  "dependencies": {
+    "@noble/post-quantum": "0.7.1"
+  }
+}
