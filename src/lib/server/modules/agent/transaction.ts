@@ -2,12 +2,15 @@ import {
 	appendTransactionMessageInstructions,
 	assertIsSendableTransaction,
 	assertIsTransactionWithBlockhashLifetime,
-	createSolanaRpc,
+	createDefaultRpcTransport,
+	createSolanaRpcFromTransport,
 	createSolanaRpcSubscriptions,
 	createTransactionMessage,
 	getSignatureFromTransaction,
 	getTransactionSize,
+	isSolanaError,
 	pipe,
+	SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
 	sendAndConfirmTransactionFactory,
 	setTransactionMessageComputeUnitLimit,
 	setTransactionMessageFeePayerSigner,
@@ -17,6 +20,7 @@ import {
 	signTransactionMessageWithSigners,
 	type Instruction,
 	type Rpc,
+	type RpcTransport,
 	type Signature,
 	type SolanaRpcApi,
 	type TransactionSigner
@@ -31,6 +35,11 @@ const PRIORITY_FEE_LAMPORTS = 10_000n;
 // getTransaction can return null for a few seconds after the send is confirmed.
 const LEDGER_POLL_ATTEMPTS = 20;
 const LEDGER_POLL_INTERVAL_MS = 1000;
+// The free-tier devnet RPC limits each method per window (getTransaction: 10) and answers bursts with HTTP 429 and
+// `retry-after: 10`.
+const HTTP_TOO_MANY_REQUESTS = 429;
+const RATE_LIMIT_BACKOFF_MS = 10_000;
+const RATE_LIMIT_ATTEMPTS = 6;
 
 export interface SolanaConnection {
 	rpc: Rpc<SolanaRpcApi>;
@@ -46,9 +55,30 @@ export interface SendResult {
 }
 
 export function connect(rpcUrl: string, rpcSubscriptionsUrl: string): SolanaConnection {
-	const rpc = createSolanaRpc(rpcUrl);
+	const rpc = createSolanaRpcFromTransport(withRateLimitRetry(createDefaultRpcTransport({ url: rpcUrl })));
 	const rpcSubscriptions = createSolanaRpcSubscriptions(rpcSubscriptionsUrl);
 	return { rpc, sendAndConfirm: sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions }) };
+}
+
+/** Retries every RPC request the server rate-limited (sends included: resending a signed transaction is idempotent). */
+export function withRateLimitRetry(transport: RpcTransport, backoffMs = RATE_LIMIT_BACKOFF_MS): RpcTransport {
+	return (async (config: Parameters<RpcTransport>[0]) => {
+		for (let attempt = 1; ; attempt++) {
+			try {
+				return await transport(config);
+			} catch (error) {
+				if (attempt >= RATE_LIMIT_ATTEMPTS || !isRateLimited(error)) throw error;
+				await new Promise((resolve) => setTimeout(resolve, backoffMs));
+			}
+		}
+	}) as RpcTransport;
+}
+
+function isRateLimited(error: unknown): boolean {
+	return (
+		isSolanaError(error, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR) &&
+		error.context.statusCode === HTTP_TOO_MANY_REQUESTS
+	);
 }
 
 /**

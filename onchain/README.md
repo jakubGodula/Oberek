@@ -37,3 +37,26 @@ bun scripts/agent.ts kill       # owner's wallet only
 bun scripts/agent.ts resume     # owner's wallet + the agent's ML-DSA-44 signature
 bun scripts/agent.ts status
 ```
+
+## Devnet end-to-end check
+
+```sh
+bun scripts/devnet-e2e.ts       # fresh agent: register → 3 steps → kill (step rejected) → resume → step; PASS/FAIL
+```
+
+Costs ~0.15 SOL per run (key account rent). The public devnet RPC rate-limits each method (e.g. 10 `getTransaction`
+per window) and answers bursts with HTTP 429; the client retries those after 10 s (`withRateLimitRetry` in
+`src/lib/server/modules/agent/transaction.ts`).
+
+### Result (2026-10-10 01:36 Europe/Warsaw: PASS)
+
+| Step | CU | V1 tx |
+|---|---:|---:|
+| register (create key account + prepare key + init Agent) | 1,093,189 | 1,736 B |
+| record_step | 271,845–272,112 | 2,720 B |
+| kill | 2,362 | 232 B |
+| record_step while killed → `AgentKilled` | 3,639 | 2,720 B |
+| resume | 262,281 | 2,689 B |
+
+Program `BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`, agent `GKhjRGXYJSz4cVXBo5kCQCu5Urynr5Nmbzuwfb2e67E7`
+([explorer](https://explorer.solana.com/address/GKhjRGXYJSz4cVXBo5kCQCu5Urynr5Nmbzuwfb2e67E7?cluster=devnet)).
