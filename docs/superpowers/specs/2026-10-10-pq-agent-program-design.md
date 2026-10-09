@@ -15,7 +15,7 @@ reference only.
 ## Scope
 
 In: the Anchor program, a TypeScript client module on `@solana/kit`, an agent loop and an owner CLI run with Bun,
-tests, a manual devnet run.
+tests, an on-demand devnet end-to-end script.
 
 Out (later specs): wiring into the SvelteKit UI and endpoints (`blink.service.ts`, `pqc-crypto.service.ts` stay
 unchanged), running the loop inside the SvelteKit server, a real decision rule or AI model, moving funds, closing
@@ -151,13 +151,23 @@ step and resume message bytes in hex. The Rust test and `bun test` both check it
 - `agent-loop.ts` with injected fakes: Killed sends nothing; Active sends `record_step` with counter n + 1 and the
   hash of the record; a send error is logged and the loop continues.
 
-### Devnet (manual)
+### Devnet (end-to-end script, on demand)
 
-Deploy from Docker (program ~340 KB, ~2.4 SOL rent; payer `ftbM4rfE…` has ~7.39 SOL; upgrade authority kept), then
-`register` → `run` for at least 3 ticks → `kill` (loop logs "paused") → `resume` (loop continues, counter
-contiguous). Record CU, transaction sizes and signatures in `onchain/README.md`.
+Deploy is a separate one-off step from Docker (program ~340 KB, ~2.4 SOL rent; payer `ftbM4rfE…` has ~7.39 SOL;
+upgrade authority kept). `scripts/devnet-e2e.ts` then runs the scenario against the deployed program with
+assertions, using the same module code as the CLI (cycles called directly, no timer):
+
+1. register a fresh agent → Active, counter 0
+2. 3 cycles → counter 3, `last_decision` equals the hash of the third record
+3. `kill` → Killed; a cycle sends nothing; a directly sent `record_step` fails with `AgentKilled`
+4. `resume` → Active, counter 4
+5. 1 cycle → counter 5
+
+It exits with PASS/FAIL and prints CU, transaction sizes and explorer links. It is not part of `bun test` (costs
+~0.15 SOL per run for the key account rent and depends on the public devnet RPC). Results go into
+`onchain/README.md`.
 
 ## Done when
 
-Mollusk tests pass, `bun test src` passes (existing 3 tests plus the new ones), the devnet scenario passed and its
-results are in `onchain/README.md`.
+Mollusk tests pass, `bun test src` passes (existing 3 tests plus the new ones), `scripts/devnet-e2e.ts` reports PASS
+and its results are in `onchain/README.md`.
