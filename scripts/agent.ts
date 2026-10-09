@@ -1,7 +1,7 @@
 // Owner and agent CLI for onchain_agent_guard. Run from the repo root; Bun reads .env (see .env.example).
 // Usage: bun scripts/agent.ts <register|run|kill|resume|status>
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
-import { getBase16Decoder } from '@solana/kit';
+import { generateKeyPairSigner, getBase16Decoder } from '@solana/kit';
 import { runLoop } from '../src/lib/server/modules/agent/agent-loop';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { createCyclePorts } from '../src/lib/server/modules/agent/cycle-ports';
@@ -10,7 +10,7 @@ import {
 	assertAgentFileAbsent,
 	loadAgentFile,
 	loadKeypairSigner,
-	saveAgentFile
+	sendWithAgentFileWriteAhead
 } from '../src/lib/server/modules/agent/files';
 import {
 	fetchAgent,
@@ -19,6 +19,7 @@ import {
 	resumeAgent,
 	type GuardClient
 } from '../src/lib/server/modules/agent/guard-client';
+import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
 import { signResume } from '../src/lib/server/modules/agent/resume';
 import { connect } from '../src/lib/server/modules/agent/transaction';
 import { reportSend } from './report';
@@ -41,9 +42,15 @@ const commands: Record<string, () => Promise<boolean>> = {
 		assertAgentFileAbsent(config.agentFilePath);
 		const owner = await loadOwner();
 		const keys = ml_dsa44.keygen();
-		const { agent, agentKey, result } = await registerAgent(client, owner, keys.publicKey);
+		const agentKey = await generateKeyPairSigner();
+		const agent = await findAgentAddress(config.programAddress, owner.address, agentKey.address);
+		const agentFile = { owner: owner.address, agentKey: agentKey.address, agent, mldsaSecretKey: keys.secretKey };
+		const register = () => registerAgent(client, { owner, agentKey, agent, publicKey: keys.publicKey });
+		const result = await sendWithAgentFileWriteAhead(config.agentFilePath, agentFile, register).catch((error) => {
+			console.error(`registration outcome unknown: ${config.agentFilePath} kept; check with bun scripts/agent.ts status`);
+			throw error;
+		});
 		if (!reportSend('register', result)) return false;
-		saveAgentFile(config.agentFilePath, { owner: owner.address, agentKey, agent, mldsaSecretKey: keys.secretKey });
 		console.log(`agent ${agent} saved to ${config.agentFilePath}`);
 		return true;
 	},

@@ -2,7 +2,7 @@
 // → resume → step. Needs the program deployed (onchain/deploy-devnet.sh) and .env set; the fee payer is also the
 // owner. Costs ~0.15 SOL (key account rent). Usage: bun scripts/devnet-e2e.ts
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
-import { getBase16Decoder } from '@solana/kit';
+import { generateKeyPairSigner, getBase16Decoder } from '@solana/kit';
 import { runCycle, type DecisionLogEntry } from '../src/lib/server/modules/agent/agent-loop';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { createCyclePorts } from '../src/lib/server/modules/agent/cycle-ports';
@@ -17,6 +17,7 @@ import {
 	type GuardClient
 } from '../src/lib/server/modules/agent/guard-client';
 import { signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
 import { signResume } from '../src/lib/server/modules/agent/resume';
 import { connect } from '../src/lib/server/modules/agent/transaction';
 import { reportSend } from './report';
@@ -37,15 +38,22 @@ const client: GuardClient = {
 const payer = await loadKeypairSigner(config.feePayerPath);
 const keys = ml_dsa44.keygen();
 
-const registered = await registerAgent(client, payer, keys.publicKey);
-if (!reportSend('register', registered.result)) {
+const agentKeySigner = await generateKeyPairSigner();
+const registeredAgent = await findAgentAddress(config.programAddress, payer.address, agentKeySigner.address);
+const registered = await registerAgent(client, {
+	owner: payer,
+	agentKey: agentKeySigner,
+	agent: registeredAgent,
+	publicKey: keys.publicKey
+});
+if (!reportSend('register', registered)) {
 	console.log('FAIL: register');
 	process.exit(1);
 }
 const agentFile: AgentFile = {
 	owner: payer.address,
-	agentKey: registered.agentKey,
-	agent: registered.agent,
+	agentKey: agentKeySigner.address,
+	agent: registeredAgent,
 	mldsaSecretKey: keys.secretKey
 };
 const { agent, agentKey } = agentFile;

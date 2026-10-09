@@ -1,9 +1,8 @@
-import { fetchEncodedAccount, generateKeyPairSigner, type Address, type TransactionSigner } from '@solana/kit';
+import { fetchEncodedAccount, type Address, type TransactionSigner } from '@solana/kit';
 import { getCreateAccountInstruction } from '@solana-program/system';
 import {
 	AGENT_KEY_ACCOUNT_SIZE,
 	decodeAgent,
-	findAgentAddress,
 	killInstruction,
 	recordStepInstruction,
 	registerAgentInstruction,
@@ -32,10 +31,15 @@ export async function fetchAgent(client: GuardClient, agent: Address): Promise<A
 	return decodeAgent(new Uint8Array(account.data));
 }
 
-/** Creates the 20,552 B key account and registers the agent in one transaction; the owner pays. */
-export async function registerAgent(client: GuardClient, owner: TransactionSigner, publicKey: Uint8Array) {
-	const agentKey = await generateKeyPairSigner();
-	const agent = await findAgentAddress(client.programAddress, owner.address, agentKey.address);
+/**
+ * Creates the 20,552 B key account and registers the agent in one transaction; the owner pays. The caller generates
+ * the key account signer and derives `agent` (findAgentAddress) first, so it can save the agent file before sending.
+ */
+export async function registerAgent(
+	client: GuardClient,
+	registration: { owner: TransactionSigner; agentKey: TransactionSigner; agent: Address; publicKey: Uint8Array }
+): Promise<SendResult> {
+	const { owner, agentKey, agent, publicKey } = registration;
 	const lamports = await client.connection.rpc.getMinimumBalanceForRentExemption(AGENT_KEY_ACCOUNT_SIZE).send();
 	const instructions = [
 		getCreateAccountInstruction({
@@ -47,8 +51,7 @@ export async function registerAgent(client: GuardClient, owner: TransactionSigne
 		}),
 		registerAgentInstruction({ programAddress: client.programAddress, owner, agentKey: agentKey.address, agent, publicKey })
 	];
-	const result = await sendV1(client.connection, owner, instructions, REGISTER_COMPUTE_UNIT_LIMIT);
-	return { agent, agentKey: agentKey.address, result };
+	return sendV1(client.connection, owner, instructions, REGISTER_COMPUTE_UNIT_LIMIT);
 }
 
 export function recordStep(

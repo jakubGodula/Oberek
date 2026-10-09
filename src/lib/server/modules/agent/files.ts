@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
 import { address, createKeyPairSignerFromBytes, type Address, type KeyPairSigner } from '@solana/kit';
 
@@ -22,6 +22,21 @@ export function saveAgentFile(path: string, file: AgentFile): void {
 	mkdirSync(dirname(path), { recursive: true });
 	const json = { ...file, mldsaSecretKey: Buffer.from(file.mldsaSecretKey).toString('base64') };
 	writeFileSync(path, JSON.stringify(json, null, 2), { mode: 0o600, flag: 'wx' });
+}
+
+/**
+ * Saves the agent file before `send` registers the agent, so a send that throws after the transaction landed cannot lose
+ * the secret key. Removes the file only when the registration definitely failed on-chain.
+ */
+export async function sendWithAgentFileWriteAhead<TResult extends { err: unknown }>(
+	path: string,
+	file: AgentFile,
+	send: () => Promise<TResult>
+): Promise<TResult> {
+	saveAgentFile(path, file);
+	const result = await send();
+	if (result.err !== null) unlinkSync(path);
+	return result;
 }
 
 export function loadAgentFile(path: string): AgentFile {
