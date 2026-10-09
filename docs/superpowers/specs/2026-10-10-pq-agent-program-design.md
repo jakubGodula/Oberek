@@ -1,4 +1,4 @@
-# Design: one PQ-signed agent on Solana (program `aegis_agent` + server agent)
+# Design: one PQ-signed agent on Solana (program `onchain_agent_guard` + server agent)
 
 Date: 2026-10-10. Branch: `first_agent`. Status: approved in brainstorming, awaiting spec review.
 
@@ -22,9 +22,9 @@ unchanged), running the loop inside the SvelteKit server, a real decision rule o
 the agent and reclaiming rent, key rotation, a separate operator PQ key, Falcon, `--final` upgrade authority (done
 at the demo deploy).
 
-## 1. Program `aegis_agent`
+## 1. Program `onchain_agent_guard`
 
-Anchor workspace in `onchain/` (`Anchor.toml`, `Cargo.toml`, `programs/aegis_agent`), separate from the SvelteKit
+Anchor workspace in `onchain/` (`Anchor.toml`, `Cargo.toml`, `programs/onchain_agent_guard`), separate from the SvelteKit
 `package.json`. Toolchain and build rules from `spikes/pq-verify-anchor/README.md`: Anchor 1.2.1, Agave 4.3.0,
 SBPF v3, Docker build, overflow checks off for the `solana-ml-dsa` crate only, `Cargo.lock` committed,
 `[programs.localnet]` kept in `Anchor.toml`, build output checked for stack frame errors.
@@ -62,7 +62,7 @@ decision hash):
 tag (u8: 1 = step, 2 = resume) ‖ Agent address (32 B) ‖ new counter = counter + 1 (u64 LE) ‖ decision_hash (32 B, step only)
 ```
 
-FIPS 204 context string: `aegis:agent:v1`, a constant in the program and in the client. Binding the Agent address,
+FIPS 204 context string: `onchain-agent-guard:v1`, a constant in the program and in the client. Binding the Agent address,
 the counter and the tag stops a signature from being replayed on another agent, at another position, or as the other
 action. Resume consumes a counter value, so a resume signature works once.
 
@@ -80,7 +80,7 @@ decision follows the rule; that is checked off-chain by recomputing the hash fro
 
 ## 2. TypeScript client and agent
 
-New module `src/lib/server/modules/aegis-agent/`. New dependencies: `@solana/kit`, `@solana-program/system`
+New module `src/lib/server/modules/agent/` (the agent loop and the client of `onchain_agent_guard`). New dependencies: `@solana/kit`, `@solana-program/system`
 (`@noble/post-quantum` is already present).
 
 | File | Responsibility |
