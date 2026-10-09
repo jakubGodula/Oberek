@@ -1,0 +1,324 @@
+{
+  "address": "BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs",
+  "metadata": {
+    "name": "onchain_agent_guard",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "instructions": [
+    {
+      "name": "register_agent",
+      "discriminator": [
+        135,
+        157,
+        66,
+        195,
+        2,
+        113,
+        175,
+        30
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "agent_key",
+          "docs": [
+            "Allocated by a preceding System Program `create_account` in the same transaction: `init` allocates through",
+            "CPI, which caps account size at 10 KiB, and this account is 20,552 B."
+          ],
+          "writable": true
+        },
+        {
+          "name": "agent",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  103,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "agent_key"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "public_key",
+          "type": "bytes"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Agent",
+      "discriminator": [
+        47,
+        166,
+        112,
+        147,
+        155,
+        197,
+        86,
+        7
+      ]
+    },
+    {
+      "name": "AgentKey",
+      "discriminator": [
+        196,
+        240,
+        185,
+        122,
+        11,
+        217,
+        220,
+        233
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AgentKilled",
+      "discriminator": [
+        235,
+        89,
+        178,
+        134,
+        66,
+        35,
+        83,
+        45
+      ]
+    },
+    {
+      "name": "AgentResumed",
+      "discriminator": [
+        138,
+        191,
+        50,
+        131,
+        92,
+        153,
+        211,
+        143
+      ]
+    },
+    {
+      "name": "StepRecorded",
+      "discriminator": [
+        250,
+        200,
+        20,
+        101,
+        12,
+        102,
+        227,
+        140
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AgentKilled",
+      "msg": "Agent is killed"
+    },
+    {
+      "code": 6001,
+      "name": "AgentNotKilled",
+      "msg": "Agent is not killed"
+    },
+    {
+      "code": 6002,
+      "name": "AgentNotActive",
+      "msg": "Agent is not active"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidPublicKey",
+      "msg": "Malformed ML-DSA-44 public key"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidSignature",
+      "msg": "Malformed ML-DSA-44 signature"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidKeyAccount",
+      "msg": "Key account does not hold a valid prepared key"
+    },
+    {
+      "code": 6006,
+      "name": "VerifyFailed",
+      "msg": "ML-DSA-44 signature verification failed"
+    }
+  ],
+  "types": [
+    {
+      "name": "Agent",
+      "docs": [
+        "PDA with seeds `[AGENT_SEED, owner, agent_key]`: the only mutable state of an agent."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "agent_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "AgentStatus"
+              }
+            }
+          },
+          {
+            "name": "counter",
+            "docs": [
+              "Number of accepted steps and resumes; every signed message names the next value, so a signature works once."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_decision",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentKey",
+      "docs": [
+        "The agent's prepared ML-DSA-44 public key. Written once by `register_agent`, read by every signed instruction."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "prepared",
+            "type": {
+              "array": [
+                "u8",
+                20544
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentKilled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "counter",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentResumed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "counter",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Killed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StepRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "counter",
+            "type": "u64"
+          },
+          {
+            "name": "decision_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

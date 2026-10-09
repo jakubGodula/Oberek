@@ -1,0 +1,39 @@
+[package]
+name = "onchain-agent-guard"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "onchain_agent_guard"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+anchor-lang = "=1.2.1"
+# Pod for the 20,544-byte array in the zero-copy key account (without it bytemuck stops at fixed sizes).
+bytemuck = { version = "1", features = ["min_const_generics"] }
+solana-ml-dsa = { git = "https://github.com/blueshift-gg/solana-ml-dsa", rev = "e61fac4920bd7ca21464ab4ed04afa2259227e0d" }
+
+# Mollusk 0.16 matches Agave 4.3 (solana-program-runtime 4.3); 0.15.1 does not compile against it.
+[dev-dependencies]
+mollusk-svm = "0.16.0"
+serde_json = "1"
+solana-account = "4.3.1"
+solana-address = "2.6.1"
+solana-instruction = "3.4.1"
+solana-system-interface = { version = "3.2.0", features = ["wincode"] }
+solana-transaction-error = "3"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

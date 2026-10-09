@@ -21,3 +21,11 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Devnet keypairs, agent secret key and decision log
+.devnet/
+
+# Anchor workspace build output and generated test fixtures
+/onchain/target/
+/onchain/.anchor/
+/onchain/programs/onchain_agent_guard/tests/fixtures/
