@@ -13,7 +13,8 @@ export interface SentTransaction {
 export interface DecisionLogEntry {
 	record: DecisionRecord;
 	decisionHash: string;
-	transaction: string;
+	/** `null` when the send threw before its outcome was known; the step may still have landed. */
+	transaction: string | null;
 	err: unknown;
 }
 
@@ -38,7 +39,7 @@ export async function runCycle(ports: CyclePorts): Promise<CycleOutcome> {
 	try {
 		return await recordNextStep(ports);
 	} catch (error) {
-		ports.log(`cycle failed: ${error instanceof Error ? error.message : String(error)}`);
+		ports.log(`cycle failed: ${errorMessage(error)}`);
 		return 'failed';
 	}
 }
@@ -53,19 +54,27 @@ async function recordNextStep(ports: CyclePorts): Promise<CycleOutcome> {
 	const record = tickDecision(ports.agent, counter, ports.now());
 	const decisionHash = hashDecision(record);
 	const signature = ports.sign(stepMessage(ports.agent, counter, decisionHash));
-	const sent = await ports.sendStep(decisionHash, signature);
-	await ports.appendLog({
-		record,
-		decisionHash: getBase16Decoder().decode(decisionHash),
-		transaction: sent.signature,
-		err: sent.err
-	});
+	const logStep = (transaction: string | null, err: unknown) =>
+		ports.appendLog({ record, decisionHash: getBase16Decoder().decode(decisionHash), transaction, err });
+	let sent: SentTransaction;
+	try {
+		sent = await ports.sendStep(decisionHash, signature);
+	} catch (error) {
+		// Logged anyway: the step may land after the send gave up, and the record is the only way to audit its hash.
+		await logStep(null, errorMessage(error));
+		throw error;
+	}
+	await logStep(sent.signature, sent.err);
 	if (sent.err !== null) {
 		ports.log(`step ${counter} failed: ${describeTransactionError(sent.err)} (${sent.signature})`);
 		return 'failed';
 	}
 	ports.log(`step ${counter} recorded (${sent.signature})`);
 	return 'recorded';
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 /** Runs a cycle every `tickMs` until `signal` aborts. */

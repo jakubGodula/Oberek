@@ -81,6 +81,19 @@ describe('runCycle', () => {
 		expect(calls.lines.at(-1)).toContain('fetch failed');
 	});
 
+	it('logs the record of a send that throws, since the step may still land', async () => {
+		const { ports, calls } = fakePorts({
+			sendStep: async () => {
+				throw new Error('blockhash not found');
+			}
+		});
+		expect(await runCycle(ports)).toBe('failed');
+		expect(calls.logEntries).toHaveLength(1);
+		expect(calls.logEntries[0]?.record.counter).toBe(5);
+		expect(calls.logEntries[0]?.transaction).toBeNull();
+		expect(calls.logEntries[0]?.err).toBe('blockhash not found');
+	});
+
 	it('survives a send that throws', async () => {
 		const { ports } = fakePorts({
 			sendStep: async () => {
