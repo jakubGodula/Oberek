@@ -16,7 +16,8 @@ import {
 	resumeAgent,
 	type GuardClient
 } from '../src/lib/server/modules/agent/guard-client';
-import { resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { signResume } from '../src/lib/server/modules/agent/resume';
 import { connect } from '../src/lib/server/modules/agent/transaction';
 import { reportSend } from './report';
 
@@ -89,7 +90,7 @@ const forced = await recordStep(client, {
 reportSend('record_step while killed', forced);
 check('step while killed fails with AgentKilled', customErrorCode(forced.err) === GUARD_ERROR_CODES.AgentKilled);
 
-const resumeSignature = signGuardMessage(resumeMessage(agent, state.counter + 1n), keys.secretKey);
+const resumeSignature = signResume(agent, state, keys.secretKey);
 check('resume', reportSend('resume', await resumeAgent(client, { owner: payer, agent, agentKey, signature: resumeSignature })));
 state = await readAgent();
 check('resumed agent is Active with counter 4', state.status === 'Active' && state.counter === 4n, `counter ${state.counter}`);

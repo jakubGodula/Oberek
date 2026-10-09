@@ -19,7 +19,7 @@ import {
 	resumeAgent,
 	type GuardClient
 } from '../src/lib/server/modules/agent/guard-client';
-import { resumeMessage, signGuardMessage } from '../src/lib/server/modules/agent/message';
+import { signResume } from '../src/lib/server/modules/agent/resume';
 import { connect } from '../src/lib/server/modules/agent/transaction';
 import { reportSend } from './report';
 
@@ -74,7 +74,7 @@ const commands: Record<string, () => Promise<boolean>> = {
 		const owner = await loadOwner();
 		const agentFile = loadAgentFile(config.agentFilePath);
 		const state = await fetchAgent(client, agentFile.agent);
-		const signature = signGuardMessage(resumeMessage(agentFile.agent, state.counter + 1n), agentFile.mldsaSecretKey);
+		const signature = signResume(agentFile.agent, state, agentFile.mldsaSecretKey);
 		const result = await resumeAgent(client, { owner, agent: agentFile.agent, agentKey: agentFile.agentKey, signature });
 		return reportSend('resume', result);
 	},
