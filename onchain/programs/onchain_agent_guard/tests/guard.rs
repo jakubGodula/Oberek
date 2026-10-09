@@ -21,6 +21,8 @@ const AGENT_KEY_ACCOUNT_LEN: usize = 20_552;
 const REGISTER_INSTRUCTION_INDEX: u8 = 1; // after the System Program create_account
 
 const PUBLIC_KEY: &[u8] = include_bytes!("fixtures/agent-key.pk");
+const STEP_1_SIGNATURE: &[u8] = include_bytes!("fixtures/step-1.sig");
+const SIGNED_INSTRUCTION_INDEX: u8 = 0;
 
 const PROGRAM: Address = Address::new_from_array(onchain_agent_guard::ID.to_bytes());
 const OWNER: Address = Address::new_from_array([2; 32]);
@@ -47,6 +49,30 @@ fn mollusk() -> Mollusk {
 
 fn guard_error(instruction: u8, error: GuardError) -> Result<(), TransactionError> {
     Err(TransactionError::InstructionError(instruction, InstructionError::Custom(error.into())))
+}
+
+/// Must match decisionHash() in scripts/gen-guard-fixtures.ts.
+fn decision_hash(counter: u64) -> [u8; 32] {
+    [counter as u8; 32]
+}
+
+fn flipped(bytes: &[u8], index: usize) -> Vec<u8> {
+    let mut out = bytes.to_vec();
+    out[index] ^= 1;
+    out
+}
+
+fn step_with(decision_hash: [u8; 32], signature: &[u8]) -> Instruction {
+    Instruction::new_with_bytes(
+        PROGRAM,
+        &program_ix::RecordStep { decision_hash, signature: signature.to_vec() }.data(),
+        vec![AccountMeta::new(agent_address(), false), AccountMeta::new_readonly(AGENT_KEY, false)],
+    )
+}
+
+/// The step that moves the counter to `counter`, with the fixture's decision hash for it.
+fn step(counter: u64, signature: &[u8]) -> Instruction {
+    step_with(decision_hash(counter), signature)
 }
 
 /// Accounts carried from one transaction to the next, as a validator would.
@@ -137,5 +163,52 @@ fn register_rejects_a_malformed_public_key() {
     assert_eq!(
         ledger.send("register malformed key", &register),
         guard_error(REGISTER_INSTRUCTION_INDEX, GuardError::InvalidPublicKey)
+    );
+}
+
+#[test]
+fn valid_step_advances_the_counter_and_records_the_decision() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
+    let agent = ledger.agent();
+    assert_eq!(agent.counter, 1);
+    assert_eq!(agent.last_decision, decision_hash(1));
+}
+
+#[test]
+fn step_with_a_tampered_signature_fails() {
+    let mut ledger = Ledger::registered();
+    let tampered = flipped(STEP_1_SIGNATURE, STEP_1_SIGNATURE.len() / 2);
+    assert_eq!(
+        ledger.send("step 1 tampered signature", &[step(1, &tampered)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn step_with_another_decision_hash_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("step 1 other hash", &[step_with(decision_hash(9), STEP_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn step_with_a_malformed_signature_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("step 1 short signature", &[step(1, &STEP_1_SIGNATURE[..100])]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::InvalidSignature)
+    );
+}
+
+#[test]
+fn replayed_step_signature_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
+    assert_eq!(
+        ledger.send("step 1 replayed", &[step(1, STEP_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
     );
 }

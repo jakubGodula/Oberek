@@ -7,6 +7,46 @@
   },
   "instructions": [
     {
+      "name": "record_step",
+      "discriminator": [
+        73,
+        169,
+        197,
+        19,
+        10,
+        159,
+        58,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "writable": true
+        },
+        {
+          "name": "agent_key",
+          "relations": [
+            "agent"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "decision_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "register_agent",
       "discriminator": [
         135,
