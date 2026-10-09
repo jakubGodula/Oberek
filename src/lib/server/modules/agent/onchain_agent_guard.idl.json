@@ -7,6 +7,33 @@
   },
   "instructions": [
     {
+      "name": "kill",
+      "discriminator": [
+        46,
+        229,
+        132,
+        89,
+        87,
+        194,
+        20,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "record_step",
       "discriminator": [
         73,
@@ -106,6 +133,44 @@
       "args": [
         {
           "name": "public_key",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "name": "resume",
+      "discriminator": [
+        1,
+        166,
+        51,
+        170,
+        127,
+        32,
+        141,
+        206
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "agent"
+          ]
+        },
+        {
+          "name": "agent",
+          "writable": true
+        },
+        {
+          "name": "agent_key",
+          "relations": [
+            "agent"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "signature",
           "type": "bytes"
         }
       ]

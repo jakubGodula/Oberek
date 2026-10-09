@@ -1,6 +1,6 @@
 //! Mollusk tests for onchain_agent_guard with noble ML-DSA-44 fixtures from scripts/gen-guard-fixtures.ts (run
 //! onchain/run-tests.sh). OWNER, AGENT_KEY and decision_hash() must match the constants in that script.
-use anchor_lang::{prelude::Pubkey, AccountDeserialize, InstructionData};
+use anchor_lang::{error::ErrorCode as AnchorError, prelude::Pubkey, AccountDeserialize, InstructionData};
 use mollusk_svm::{program::keyed_account_for_system_program, Mollusk};
 use onchain_agent_guard::{
     error::GuardError,
@@ -22,6 +22,9 @@ const REGISTER_INSTRUCTION_INDEX: u8 = 1; // after the System Program create_acc
 
 const PUBLIC_KEY: &[u8] = include_bytes!("fixtures/agent-key.pk");
 const STEP_1_SIGNATURE: &[u8] = include_bytes!("fixtures/step-1.sig");
+const STEP_2_SIGNATURE: &[u8] = include_bytes!("fixtures/step-2.sig");
+const STEP_3_SIGNATURE: &[u8] = include_bytes!("fixtures/step-3.sig");
+const RESUME_2_SIGNATURE: &[u8] = include_bytes!("fixtures/resume-2.sig");
 const SIGNED_INSTRUCTION_INDEX: u8 = 0;
 
 const PROGRAM: Address = Address::new_from_array(onchain_agent_guard::ID.to_bytes());
@@ -75,6 +78,30 @@ fn step(counter: u64, signature: &[u8]) -> Instruction {
     step_with(decision_hash(counter), signature)
 }
 
+fn anchor_error(instruction: u8, error: AnchorError) -> Result<(), TransactionError> {
+    Err(TransactionError::InstructionError(instruction, InstructionError::Custom(error.into())))
+}
+
+fn kill(signer: Address) -> Instruction {
+    Instruction::new_with_bytes(
+        PROGRAM,
+        &program_ix::Kill.data(),
+        vec![AccountMeta::new_readonly(signer, true), AccountMeta::new(agent_address(), false)],
+    )
+}
+
+fn resume(signature: &[u8], owner_signs: bool) -> Instruction {
+    Instruction::new_with_bytes(
+        PROGRAM,
+        &program_ix::Resume { signature: signature.to_vec() }.data(),
+        vec![
+            AccountMeta::new_readonly(OWNER, owner_signs),
+            AccountMeta::new(agent_address(), false),
+            AccountMeta::new_readonly(AGENT_KEY, false),
+        ],
+    )
+}
+
 /// Accounts carried from one transaction to the next, as a validator would.
 struct Ledger {
     svm: Mollusk,
@@ -100,6 +127,14 @@ impl Ledger {
         let mut ledger = Self::new();
         let register = ledger.register_instructions(PUBLIC_KEY);
         assert_eq!(ledger.send("register", &register), Ok(()));
+        ledger
+    }
+
+    /// Registered, one step taken (counter 1), then killed by the owner.
+    fn killed_after_first_step() -> Self {
+        let mut ledger = Self::registered();
+        assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
+        assert_eq!(ledger.send("kill", &[kill(OWNER)]), Ok(()));
         ledger
     }
 
@@ -209,6 +244,81 @@ fn replayed_step_signature_fails() {
     assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
     assert_eq!(
         ledger.send("step 1 replayed", &[step(1, STEP_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn owner_kills_the_agent() {
+    let agent = Ledger::killed_after_first_step().agent();
+    assert_eq!(agent.status, AgentStatus::Killed);
+    assert_eq!(agent.counter, 1);
+}
+
+#[test]
+fn step_on_a_killed_agent_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(
+        ledger.send("step 2 while killed", &[step(2, STEP_2_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentKilled)
+    );
+}
+
+#[test]
+fn kill_by_a_non_owner_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("kill by stranger", &[kill(STRANGER)]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintHasOne)
+    );
+}
+
+#[test]
+fn kill_on_a_killed_agent_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(
+        ledger.send("kill again", &[kill(OWNER)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentNotActive)
+    );
+}
+
+#[test]
+fn resume_without_the_owner_signature_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(
+        ledger.send_paid_by(STRANGER, "resume unsigned by owner", &[resume(RESUME_2_SIGNATURE, false)]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::AccountNotSigner)
+    );
+}
+
+#[test]
+fn resume_on_an_active_agent_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
+    assert_eq!(
+        ledger.send("resume while active", &[resume(RESUME_2_SIGNATURE, true)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentNotKilled)
+    );
+}
+
+#[test]
+fn resume_reactivates_the_agent_and_steps_continue() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(ledger.send("resume", &[resume(RESUME_2_SIGNATURE, true)]), Ok(()));
+    let agent = ledger.agent();
+    assert_eq!(agent.status, AgentStatus::Active);
+    assert_eq!(agent.counter, 2);
+    assert_eq!(ledger.send("step 3", &[step(3, STEP_3_SIGNATURE)]), Ok(()));
+    assert_eq!(ledger.agent().counter, 3);
+}
+
+#[test]
+fn replayed_resume_signature_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(ledger.send("resume", &[resume(RESUME_2_SIGNATURE, true)]), Ok(()));
+    assert_eq!(ledger.send("kill", &[kill(OWNER)]), Ok(()));
+    assert_eq!(
+        ledger.send("resume replayed", &[resume(RESUME_2_SIGNATURE, true)]),
         guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
     );
 }

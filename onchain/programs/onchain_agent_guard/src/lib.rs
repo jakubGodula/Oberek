@@ -8,8 +8,8 @@ pub mod message;
 pub mod state;
 
 use error::GuardError;
-use message::{step_message, CONTEXT as MLDSA_CONTEXT};
-use state::{Agent, AgentKey, AgentStatus, MldsaPreparedKey, StepRecorded, AGENT_SEED};
+use message::{resume_message, step_message, CONTEXT as MLDSA_CONTEXT};
+use state::{Agent, AgentKey, AgentKilled, AgentResumed, AgentStatus, MldsaPreparedKey, StepRecorded, AGENT_SEED};
 
 declare_id!("BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs");
 
@@ -51,6 +51,27 @@ pub mod onchain_agent_guard {
         emit!(StepRecorded { agent: agent_address, counter, decision_hash });
         Ok(())
     }
+
+    pub fn kill(ctx: Context<Kill>) -> Result<()> {
+        let agent_address = ctx.accounts.agent.key();
+        let agent = &mut ctx.accounts.agent;
+        require!(agent.status == AgentStatus::Active, GuardError::AgentNotActive);
+        agent.status = AgentStatus::Killed;
+        emit!(AgentKilled { agent: agent_address, counter: agent.counter });
+        Ok(())
+    }
+
+    pub fn resume(ctx: Context<Resume>, signature: Vec<u8>) -> Result<()> {
+        let agent_address = ctx.accounts.agent.key();
+        let agent = &mut ctx.accounts.agent;
+        require!(agent.status == AgentStatus::Killed, GuardError::AgentNotKilled);
+        let counter = agent.counter + 1;
+        verify_signature(&ctx.accounts.agent_key, &resume_message(&agent_address, counter), &signature)?;
+        agent.counter = counter;
+        agent.status = AgentStatus::Active;
+        emit!(AgentResumed { agent: agent_address, counter });
+        Ok(())
+    }
 }
 
 fn verify_signature(agent_key: &AccountLoader<AgentKey>, signed: &[u8], signature: &[u8]) -> Result<()> {
@@ -84,6 +105,24 @@ pub struct RegisterAgent<'info> {
 #[derive(Accounts)]
 pub struct RecordStep<'info> {
     #[account(mut, has_one = agent_key)]
+    pub agent: Account<'info, Agent>,
+    pub agent_key: AccountLoader<'info, AgentKey>,
+}
+
+/// Needs only the owner's wallet, so the owner can stop the agent while its server is down or compromised.
+#[derive(Accounts)]
+pub struct Kill<'info> {
+    pub owner: Signer<'info>,
+    #[account(mut, has_one = owner)]
+    pub agent: Account<'info, Agent>,
+}
+
+/// Needs both the owner's wallet and the agent's ML-DSA-44 signature: neither a compromised server nor a forged
+/// Ed25519 signature resumes the agent alone.
+#[derive(Accounts)]
+pub struct Resume<'info> {
+    pub owner: Signer<'info>,
+    #[account(mut, has_one = owner, has_one = agent_key)]
     pub agent: Account<'info, Agent>,
     pub agent_key: AccountLoader<'info, AgentKey>,
 }
