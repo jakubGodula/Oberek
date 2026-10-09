@@ -16,3 +16,24 @@ Builds the program in Docker (the host's glibc 2.31 is too old for the Agave and
 `scripts/gen-guard-fixtures.ts` and runs the Mollusk tests in `programs/onchain_agent_guard/tests/`.
 
 The program keypair is `onchain/.devnet/program-keypair.json`: gitignored and the only copy, so back it up.
+
+## Deploy to devnet
+
+```sh
+onchain/deploy-devnet.sh      # builds, deploys or upgrades at onchain/.devnet/program-keypair.json, prints GUARD_PROGRAM_ID
+cp .env.example .env          # then set GUARD_PROGRAM_ID
+```
+
+The payer is `spikes/falcon-noble-compat/.devnet/payer.json`. The program is 423 KB and locks ~2.95 SOL rent. The
+upgrade authority stays with the payer until the demo deploy (`solana program set-upgrade-authority --final`).
+Deployed: `BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`.
+
+## Agent CLI
+
+```sh
+bun scripts/agent.ts register   # new ML-DSA-44 key + Agent; writes .devnet/agent.json (refuses to overwrite it)
+bun scripts/agent.ts run        # the agent loop: one TICK step every AGENT_TICK_MS, log in .devnet/decisions.jsonl
+bun scripts/agent.ts kill       # owner's wallet only
+bun scripts/agent.ts resume     # owner's wallet + the agent's ML-DSA-44 signature
+bun scripts/agent.ts status
+```

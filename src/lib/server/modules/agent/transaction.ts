@@ -25,7 +25,7 @@ import {
 // V1 transactions (needed for the ~2.7 KB ML-DSA-44 signatures), pattern from
 // spikes/mldsa44-dilithium-noble-compat/js/devnet-client.cjs.
 
-/** V1 budgets zero bytes when unset. Covers the ~340 KB program data plus the 20.5 KB key account. */
+/** V1 budgets zero bytes when unset. Covers the ~423 KB program data plus the 20.5 KB key account. */
 const LOADED_ACCOUNTS_DATA_SIZE_LIMIT = 512 * 1024;
 const PRIORITY_FEE_LAMPORTS = 10_000n;
 // getTransaction can return null for a few seconds after the send is confirmed.
