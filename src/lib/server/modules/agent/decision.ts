@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash } from 'crypto';
 import type { Address } from '@solana/kit';
 
 // The agent's fixed rule: every cycle records a TICK. A real rule replaces tickDecision; the program only sees the
