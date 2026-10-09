@@ -31,12 +31,16 @@ const PROGRAM: Address = Address::new_from_array(onchain_agent_guard::ID.to_byte
 const OWNER: Address = Address::new_from_array([2; 32]);
 const AGENT_KEY: Address = Address::new_from_array([3; 32]);
 const STRANGER: Address = Address::new_from_array([4; 32]);
+/// A key account the stranger registers for an agent of their own.
+const ATTACKER_KEY: Address = Address::new_from_array([5; 32]);
 
 fn agent_address() -> Address {
-    let (agent, _) = Pubkey::find_program_address(
-        &[AGENT_SEED, OWNER.as_ref(), AGENT_KEY.as_ref()],
-        &onchain_agent_guard::ID,
-    );
+    agent_address_for(OWNER, AGENT_KEY)
+}
+
+fn agent_address_for(owner: Address, agent_key: Address) -> Address {
+    let (agent, _) =
+        Pubkey::find_program_address(&[AGENT_SEED, owner.as_ref(), agent_key.as_ref()], &onchain_agent_guard::ID);
     Address::new_from_array(agent.to_bytes())
 }
 
@@ -66,10 +70,14 @@ fn flipped(bytes: &[u8], index: usize) -> Vec<u8> {
 }
 
 fn step_with(decision_hash: [u8; 32], signature: &[u8]) -> Instruction {
+    step_using_key(AGENT_KEY, decision_hash, signature)
+}
+
+fn step_using_key(agent_key: Address, decision_hash: [u8; 32], signature: &[u8]) -> Instruction {
     Instruction::new_with_bytes(
         PROGRAM,
         &program_ix::RecordStep { decision_hash, signature: signature.to_vec() }.data(),
-        vec![AccountMeta::new(agent_address(), false), AccountMeta::new_readonly(AGENT_KEY, false)],
+        vec![AccountMeta::new(agent_address(), false), AccountMeta::new_readonly(agent_key, false)],
     )
 }
 
@@ -91,13 +99,18 @@ fn kill(signer: Address) -> Instruction {
 }
 
 fn resume(signature: &[u8], owner_signs: bool) -> Instruction {
+    resume_with(OWNER, owner_signs, AGENT_KEY, signature)
+}
+
+/// Resume of the owner's agent, with `owner` and `agent_key` accounts chosen by the caller.
+fn resume_with(owner: Address, owner_signs: bool, agent_key: Address, signature: &[u8]) -> Instruction {
     Instruction::new_with_bytes(
         PROGRAM,
         &program_ix::Resume { signature: signature.to_vec() }.data(),
         vec![
-            AccountMeta::new_readonly(OWNER, owner_signs),
+            AccountMeta::new_readonly(owner, owner_signs),
             AccountMeta::new(agent_address(), false),
-            AccountMeta::new_readonly(AGENT_KEY, false),
+            AccountMeta::new_readonly(agent_key, false),
         ],
     )
 }
@@ -118,6 +131,8 @@ impl Ledger {
                 (STRANGER, wallet()),
                 (AGENT_KEY, Account::default()),
                 (agent_address(), Account::default()),
+                (ATTACKER_KEY, Account::default()),
+                (agent_address_for(STRANGER, ATTACKER_KEY), Account::default()),
                 keyed_account_for_system_program(),
             ],
         }
@@ -159,20 +174,31 @@ impl Ledger {
     }
 
     fn register_instructions(&self, public_key: &[u8]) -> Vec<Instruction> {
+        self.register_instructions_for(OWNER, AGENT_KEY, public_key)
+    }
+
+    fn register_instructions_for(&self, owner: Address, agent_key: Address, public_key: &[u8]) -> Vec<Instruction> {
         let rent = self.svm.sysvars.rent.minimum_balance(AGENT_KEY_ACCOUNT_LEN);
         vec![
-            create_account(&OWNER, &AGENT_KEY, rent, AGENT_KEY_ACCOUNT_LEN as u64, &PROGRAM),
+            create_account(&owner, &agent_key, rent, AGENT_KEY_ACCOUNT_LEN as u64, &PROGRAM),
             Instruction::new_with_bytes(
                 PROGRAM,
                 &program_ix::RegisterAgent { public_key: public_key.to_vec() }.data(),
                 vec![
-                    AccountMeta::new(OWNER, true),
-                    AccountMeta::new(AGENT_KEY, false),
-                    AccountMeta::new(agent_address(), false),
+                    AccountMeta::new(owner, true),
+                    AccountMeta::new(agent_key, false),
+                    AccountMeta::new(agent_address_for(owner, agent_key), false),
                     AccountMeta::new_readonly(SYSTEM_PROGRAM, false),
                 ],
             ),
         ]
+    }
+
+    /// The stranger registers an agent of their own, so ATTACKER_KEY is a valid key account.
+    fn with_attacker_agent(mut self) -> Self {
+        let register = self.register_instructions_for(STRANGER, ATTACKER_KEY, PUBLIC_KEY);
+        assert_eq!(self.send_paid_by(STRANGER, "attacker register", &register), Ok(()));
+        self
     }
 }
 
@@ -320,5 +346,32 @@ fn replayed_resume_signature_fails() {
     assert_eq!(
         ledger.send("resume replayed", &[resume(RESUME_2_SIGNATURE, true)]),
         guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn step_with_another_agents_key_fails() {
+    let mut ledger = Ledger::registered().with_attacker_agent();
+    assert_eq!(
+        ledger.send("step 1 with attacker key", &[step_using_key(ATTACKER_KEY, decision_hash(1), STEP_1_SIGNATURE)]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintHasOne)
+    );
+}
+
+#[test]
+fn resume_with_another_agents_key_fails() {
+    let mut ledger = Ledger::killed_after_first_step().with_attacker_agent();
+    assert_eq!(
+        ledger.send("resume with attacker key", &[resume_with(OWNER, true, ATTACKER_KEY, RESUME_2_SIGNATURE)]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintHasOne)
+    );
+}
+
+#[test]
+fn resume_by_a_non_owner_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(
+        ledger.send_paid_by(STRANGER, "resume by stranger", &[resume_with(STRANGER, true, AGENT_KEY, RESUME_2_SIGNATURE)]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintHasOne)
     );
 }
