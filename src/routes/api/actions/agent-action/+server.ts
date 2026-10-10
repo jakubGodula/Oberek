@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { createActionHeaders, type ActionPostRequest } from '@solana/actions';
 import { blinkService } from '#lib/server/modules/solana-blink/blink.service';
+import { GuardError, HTTP_STATUS_BY_GUARD_ERROR } from '#lib/server/modules/agent-guard/guard';
 
 const ACTIONS_CORS_HEADERS = {
   ...createActionHeaders(),
@@ -19,7 +20,7 @@ export const OPTIONS: RequestHandler = async () => {
 
 export const GET: RequestHandler = async ({ url }) => {
   const agentId = url.searchParams.get('agentId') || 'sentinel-01';
-  const metadata = blinkService.getActionMetadata(agentId, url.origin);
+  const metadata = await blinkService.getActionMetadata(agentId, url.origin);
 
   return json(metadata, {
     headers: ACTIONS_CORS_HEADERS
@@ -47,9 +48,10 @@ export const POST: RequestHandler = async ({ request, url }) => {
       headers: ACTIONS_CORS_HEADERS
     });
   } catch (err: any) {
+    const status = err instanceof GuardError ? HTTP_STATUS_BY_GUARD_ERROR[err.code] : 500;
     return json(
       { message: err?.message || 'Błąd przetwarzania akcji Blinka' },
-      { status: 500, headers: ACTIONS_CORS_HEADERS }
+      { status, headers: ACTIONS_CORS_HEADERS }
     );
   }
 };

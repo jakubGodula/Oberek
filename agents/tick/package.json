@@ -1,0 +1,10 @@
+{
+	"name": "tick-agent",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"scripts": {
+		"start": "bun index.ts",
+		"test": "bun test"
+	}
+}

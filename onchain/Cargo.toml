@@ -1,0 +1,23 @@
+# Anchor 1.2.1 workspace template (anchor init) plus the verifier crate override at the end.
+[workspace]
+members = [
+    "programs/*"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.89"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+# With overflow checks solana-ml-dsa does not compile for SBPF v3 ("rustc-LLVM ERROR: Branch target out of insn
+# range"); upstream builds it without them. The program's own code keeps them.
+[profile.release.package.solana-ml-dsa]
+overflow-checks = false

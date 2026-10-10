@@ -1,0 +1,10 @@
+# The programs entries stop the first `anchor build` from rewriting declare_id! with a freshly generated keypair.
+[programs.localnet]
+onchain_agent_guard = "BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs"
+
+[programs.devnet]
+onchain_agent_guard = "BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"

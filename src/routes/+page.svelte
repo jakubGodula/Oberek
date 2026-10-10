@@ -34,7 +34,8 @@
   const statusColors: Record<string, string> = {
     ACTIVE: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
     PAUSED: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
-    IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30'
+    IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
+    UNAVAILABLE: 'text-amber-400 bg-amber-500/15 border-amber-500/30'
   };
 
   function timeAgo(ts: number): string {
@@ -65,6 +66,13 @@
       console.error('Błąd odświeżania:', e);
     }
   }
+
+  // Fleet agents run as their own processes and change state on their own.
+  const REFRESH_INTERVAL_MS = 5000;
+  $effect(() => {
+    const timer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  });
 
   async function copyText(text: string, id: string) {
     await navigator.clipboard.writeText(text);
