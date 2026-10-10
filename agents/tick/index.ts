@@ -1,6 +1,7 @@
 // Tick: the simplest agent. Every tick it submits the same decision, TICK, so what the guard does is easy to see.
 // It runs as its own process, holds no keys and keeps no status of its own.
 import { positiveNumber } from '../shared/env';
+import { runLoop, stopOnSignals } from '../shared/loop';
 import { createRuntimeClient, describeSubmitOutcome } from '../shared/runtime-client';
 
 const KIND = 'tick';
@@ -28,8 +29,12 @@ function intervalFromEnv(): number {
 }
 
 console.log(`Tick (${agentId}) → ${apiUrl}, one TICK every ${intervalMs} ms; Ctrl+C stops`);
-while (true) {
-	const outcome = await submit({ kind: KIND, decision: DECISION, summary: SUMMARY });
-	console.log(`${new Date().toISOString()} TICK → ${describeSubmitOutcome(outcome)}`);
-	await new Promise((resolve) => setTimeout(resolve, intervalMs));
-}
+await runLoop(
+	async () => {
+		const outcome = await submit({ kind: KIND, decision: DECISION, summary: SUMMARY });
+		console.log(`${new Date().toISOString()} TICK → ${describeSubmitOutcome(outcome)}`);
+	},
+	intervalMs,
+	stopOnSignals()
+);
+console.log('Tick stopped');

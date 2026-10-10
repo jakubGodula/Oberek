@@ -21,7 +21,21 @@ bun install
 bun run dev                      # http://localhost:5173
 ```
 
-### A real agent on devnet
+### Quick start: setup and demo
+
+```sh
+bun install
+bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
+bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo in one command"
+```
+
+`setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
+payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
+first; that is often rate-limited, so it may print the address and wait until you send SOL from
+https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it registers `sentinel-01` and
+`tick-01` (agent files in `.devnet/agents/`) and imports them into the fleet.
+
+### A real agent on devnet, by hand
 
 ```sh
 cp .env.example .env
@@ -59,9 +73,21 @@ is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. D
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 
+### The whole demo in one command
+
+With both agents set up as above:
+
+```sh
+bun scripts/demo.ts              # server, then Sentinel at demo pace and Tick, in one terminal
+```
+
+Each output line is prefixed with `[server]`, `[sentinel]` or `[tick]`. Ctrl+C stops it gracefully: the agents finish
+the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
+same way. Port 5173 must be free.
+
 ## Test
 
 ```sh
-bun test src agents              # server, fleet and agents, no network
+bun test src agents scripts      # server, fleet, agents and scripts, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
