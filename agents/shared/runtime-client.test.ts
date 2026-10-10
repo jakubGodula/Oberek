@@ -67,6 +67,49 @@ describe('submit', () => {
 			reason: 'server unreachable: connection refused'
 		});
 	});
+
+	test('reports a refusal while a proposal waits as awaiting, not as a kill', async () => {
+		const { fetchFn } = answering(409, { error: 'AwaitingApproval', message: 'waiting for a verdict' });
+		expect(await createRuntimeClient('http://server', 'sentinel-01', fetchFn).submit(SUBMISSION)).toEqual({
+			kind: 'awaiting'
+		});
+	});
+
+	test('sends the approval flag with a proposal', async () => {
+		const { fetchFn, requests } = answering(200, { counter: 2 });
+		await createRuntimeClient('http://server', 'sentinel-01', fetchFn).submit({ ...SUBMISSION, requiresApproval: true });
+		expect(JSON.parse(requests[0].init?.body as string).requiresApproval).toBe(true);
+	});
+});
+
+describe('claimShock', () => {
+	test('posts to the agent shock claim endpoint and reports an armed shock', async () => {
+		const { fetchFn, requests } = answering(200, { shock: { pct: -3 } });
+		expect(await createRuntimeClient('http://server', 'sentinel-01', fetchFn).claimShock()).toEqual({
+			kind: 'armed',
+			pct: -3
+		});
+		expect(requests[0].url).toBe('http://server/api/agents/sentinel-01/shock/claim');
+		expect(requests[0].init?.method).toBe('POST');
+	});
+
+	test('reports none when nothing is armed', async () => {
+		const { fetchFn } = answering(200, { shock: null });
+		expect(await createRuntimeClient('http://server', 'sentinel-01', fetchFn).claimShock()).toEqual({ kind: 'none' });
+	});
+
+	test.each([
+		['an error answer', 404, { error: 'AgentNotFound', message: 'not in the fleet' }],
+		['an answer without a shock field', 200, {}],
+		['a shock without a number', 200, { shock: { pct: '-3' } }]
+	])('reports %s as failed', async (_, status, body) => {
+		const { fetchFn } = answering(status, body);
+		expect((await createRuntimeClient('http://server', 'sentinel-01', fetchFn).claimShock()).kind).toBe('failed');
+	});
+
+	test('reports an unreachable server as failed', async () => {
+		expect((await createRuntimeClient('http://server', 'sentinel-01', unreachable).claimShock()).kind).toBe('failed');
+	});
 });
 
 describe('latest', () => {
@@ -124,4 +167,8 @@ test('describes each submit outcome in one line', () => {
 	expect(describeSubmitOutcome({ kind: 'recorded', counter: 3 })).toBe('recorded #3');
 	expect(describeSubmitOutcome({ kind: 'paused' })).toBe('refused: the owner killed the agent');
 	expect(describeSubmitOutcome({ kind: 'failed', reason: 'HTTP 502: x' })).toBe('failed: HTTP 502: x');
+});
+
+test('describes a refusal while waiting for approval', () => {
+	expect(describeSubmitOutcome({ kind: 'awaiting' })).toBe('refused: waiting for approval');
 });

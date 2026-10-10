@@ -1,16 +1,22 @@
-// The agent's only link to the server: it submits decisions and reads back its last recorded one. The contract is
-// HTTP, so nothing here comes from the server's code.
+// The agent's only link to the server: it submits decisions, reads back its last recorded one and claims the demo's
+// price shock. The contract is HTTP, so nothing here comes from the server's code.
 
 export interface Submission {
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
+	/** The agent stops after this decision until the owner accepts or rejects it. */
+	requiresApproval?: true;
 }
 
 export type SubmitOutcome =
 	| { kind: 'recorded'; counter: number }
 	| { kind: 'paused' }
+	| { kind: 'awaiting' }
 	| { kind: 'failed'; reason: string };
+
+/** A one-off simulated price shock the demo armed for this agent. */
+export type ShockOutcome = { kind: 'none' } | { kind: 'armed'; pct: number } | { kind: 'failed'; reason: string };
 
 /** A decision as the server recorded it: the submission plus the step counter and the server's time. */
 export interface RecordedDecision extends Submission {
@@ -28,15 +34,19 @@ export interface RuntimeClient {
 	submit(submission: Submission): Promise<SubmitOutcome>;
 	/** The agent's last decision recorded on chain; `none` before its first step. */
 	latest(): Promise<LatestOutcome>;
+	/** Claims the shock armed for this agent's next cycle, which disarms it. */
+	claimShock(): Promise<ShockOutcome>;
 }
 
-/** The server answers 409 when the guard refuses the step because the owner killed the agent. */
+/** The server answers 409 when the owner killed the agent or its proposal waits for the owner's verdict. */
 const HTTP_CONFLICT = 409;
+const AWAITING_APPROVAL = 'AwaitingApproval';
 
 type Answer = { kind: 'answered'; response: Response; body: Record<string, any> } | { kind: 'unreachable'; reason: string };
 
 export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: typeof fetch = fetch): RuntimeClient {
-	const decisionsUrl = `${apiUrl}/api/agents/${encodeURIComponent(agentId)}/decisions`;
+	const agentUrl = `${apiUrl}/api/agents/${encodeURIComponent(agentId)}`;
+	const decisionsUrl = `${agentUrl}/decisions`;
 
 	async function request(url: string, init?: RequestInit): Promise<Answer> {
 		try {
@@ -60,7 +70,9 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				if (typeof counter !== 'number') return { kind: 'failed', reason: 'unexpected answer: no counter in it' };
 				return { kind: 'recorded', counter };
 			}
-			if (answer.response.status === HTTP_CONFLICT) return { kind: 'paused' };
+			if (answer.response.status === HTTP_CONFLICT) {
+				return answer.body.error === AWAITING_APPROVAL ? { kind: 'awaiting' } : { kind: 'paused' };
+			}
 			return { kind: 'failed', reason: httpFailure(answer) };
 		},
 
@@ -74,6 +86,16 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				return { kind: 'failed', reason: 'unexpected answer: no latest decision in it' };
 			}
 			return { kind: 'found', record: answer.body.latest.record };
+		},
+
+		async claimShock() {
+			const answer = await request(`${agentUrl}/shock/claim`, { method: 'POST' });
+			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
+			if (!answer.response.ok) return { kind: 'failed', reason: httpFailure(answer) };
+			const { shock } = answer.body;
+			if (shock === null) return { kind: 'none' };
+			if (typeof shock?.pct !== 'number') return { kind: 'failed', reason: 'unexpected answer: no shock in it' };
+			return { kind: 'armed', pct: shock.pct };
 		}
 	};
 }
@@ -93,6 +115,8 @@ export function describeSubmitOutcome(outcome: SubmitOutcome): string {
 			return `recorded #${outcome.counter}`;
 		case 'paused':
 			return 'refused: the owner killed the agent';
+		case 'awaiting':
+			return 'refused: waiting for approval';
 		case 'failed':
 			return `failed: ${outcome.reason}`;
 	}
