@@ -77,7 +77,7 @@
   {/if}
 
   <div class="space-y-2 max-h-[420px] overflow-y-auto pr-0.5">
-    {#each rows as row (row.counter + row.chip)}
+    {#each rows as row (row.key)}
       <div class="p-3 rounded-xl bg-black/20 border border-white/[0.05]">
         <div class="flex items-center gap-2 mb-1.5">
           <span class="text-[10px] font-mono text-slate-500">{clock(row.observedAt)}</span>

@@ -106,6 +106,17 @@ describe('recordVerdict', () => {
 		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(2);
 	});
 
+	test('records one of two verdicts sent at once and refuses the other as already decided', async () => {
+		await submitDecision(runtime, AGENT, PROPOSAL);
+		const outcomes = await Promise.allSettled([
+			recordVerdict(runtime, AGENT, 'accept'),
+			recordVerdict(runtime, AGENT, 'reject')
+		]);
+		expect(outcomes.map((outcome) => outcome.status)).toEqual(['fulfilled', 'rejected']);
+		expect((outcomes[1] as PromiseRejectedResult).reason).toBeInstanceOf(NoPendingProposalError);
+		expect(runtime.fleet.recentDecisions(AGENT, 10).map((entry) => entry.record.counter)).toEqual([2, 1]);
+	});
+
 	test('is refused by the guard while the agent is killed, logging nothing', async () => {
 		await submitDecision(runtime, AGENT, PROPOSAL);
 		await runtime.guard.kill(AGENT, OWNER);

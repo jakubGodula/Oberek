@@ -50,6 +50,12 @@ describe('toFeedRow', () => {
 		expect(row).toMatchObject({ chip: 'DECISION', summary: 'summary #2', details: null });
 	});
 
+	test('keys each row by its record hash, so two entries with one counter (an unlanded step and its retry) differ', () => {
+		const unlanded = { ...entry(4, 'sentinel', { action: 'HOLD' }), decisionHash: 'aa'.repeat(32), unconfirmed: true as const };
+		const retry = { ...entry(4, 'sentinel', { action: 'HOLD' }), decisionHash: 'bb'.repeat(32) };
+		expect([toFeedRow(unlanded, null).key, toFeedRow(retry, null).key]).toEqual(['aa'.repeat(32), 'bb'.repeat(32)]);
+	});
+
 	test('keeps the unconfirmed mark', () => {
 		expect(toFeedRow({ ...entry(4, 'sentinel', { action: 'HOLD' }), unconfirmed: true }, null).unconfirmed).toBe(true);
 	});

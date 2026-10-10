@@ -25,6 +25,8 @@ export interface TradeDetails {
 }
 
 export interface FeedRow {
+	/** The record's hash: unique, unlike the counter, which an unlanded step and its retry share. */
+	key: string;
 	counter: number;
 	observedAt: string;
 	chip: Chip;
@@ -40,6 +42,7 @@ const SHOCK_KINDS = new Set(['sentinel', 'approval']);
 export function toFeedRow(entry: FeedEntry, pendingCounter: number | null): FeedRow {
 	const { record } = entry;
 	return {
+		key: entry.decisionHash,
 		counter: record.counter,
 		observedAt: record.observedAt,
 		chip: chipOf(record, pendingCounter),

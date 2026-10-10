@@ -24,6 +24,12 @@ export type Verdict = 'accept' | 'reject';
 export const APPROVAL_KIND = 'approval';
 const VERDICT_LABELS: Record<Verdict, string> = { accept: 'APPROVED', reject: 'REJECTED' };
 
+/**
+ * Agents whose verdict is being recorded. A second verdict meanwhile (a double click, two tabs) is refused here: on
+ * chain it would only fail after paying for its transaction.
+ */
+const verdictsInFlight = new Set<string>();
+
 /** A verdict arrived while no proposal waits (none was made, or it was already decided). */
 export class NoPendingProposalError extends Error {}
 
@@ -37,6 +43,18 @@ export async function recordVerdict(
 	verdict: Verdict
 ): Promise<DecisionLogEntry> {
 	assertInFleet(runtime, agentId);
+	if (verdictsInFlight.has(agentId)) {
+		throw new NoPendingProposalError(`agent ${agentId}: a verdict on its proposal is already being recorded`);
+	}
+	verdictsInFlight.add(agentId);
+	try {
+		return await recordVerdictOnChain(runtime, agentId, verdict);
+	} finally {
+		verdictsInFlight.delete(agentId);
+	}
+}
+
+async function recordVerdictOnChain(runtime: FleetRuntime, agentId: string, verdict: Verdict): Promise<DecisionLogEntry> {
 	const account = await runtime.guard.readAgent(agentId);
 	const proposal = proposalAwaiting(runtime.fleet, agentId, account);
 	if (!proposal) throw new NoPendingProposalError(`agent ${agentId} has no proposal waiting for a verdict`);
