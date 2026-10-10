@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { decide, INITIAL_PORTFOLIO, summarize, type Policy, type PriceReading } from './policy';
+import { applyShock } from './shock';
 
-const POLICY: Policy = { targetSolShare: 0.5, driftThreshold: 0.0002, scheduleMinutes: 15 };
+/** approvalShare 1: no trade is worth the whole treasury, so these decisions never need approval. */
+const POLICY: Policy = { targetSolShare: 0.5, driftThreshold: 0.0002, scheduleMinutes: 15, approvalShare: 1 };
+const DEMO_POLICY: Policy = { ...POLICY, approvalShare: 0.0025 };
 const T0 = '2026-10-10T14:00:00.000Z';
 const BALANCED = { sol: 956.913095129, usdc: 104715 };
 
@@ -86,5 +89,46 @@ describe('summarize', () => {
 	test('describes a hold with the band', () => {
 		const decision = decide({ after: BALANCED, lastRebalanceAt: T0 }, price(109.44, minutesAfterT0(1)), POLICY);
 		expect(summarize(decision)).toBe('HOLD @ $109.44 (SOL 50.00%, band ±0.02 pp)');
+	});
+});
+
+describe('approval', () => {
+	const previous = { after: BALANCED, lastRebalanceAt: T0 };
+	const shocked = applyShock(price(109.43, minutesAfterT0(1)), -3);
+
+	test('turns a rebalance worth more than the approval share into a proposal, with the portfolio as if approved', () => {
+		const decision = decide(previous, shocked, DEMO_POLICY);
+		expect(decision).toMatchObject({
+			action: 'REBALANCE',
+			reason: 'drift',
+			approval: 'required',
+			trade: { side: 'BUY', sol: 14.797625183, usdc: 1570.725 },
+			after: { sol: 971.710720312, usdc: 103144.275 },
+			lastRebalanceAt: minutesAfterT0(1)
+		});
+	});
+
+	test('leaves a smaller rebalance without approval', () => {
+		const decision = decide(previous, price(109.2, minutesAfterT0(1)), DEMO_POLICY);
+		expect(decision.action).toBe('REBALANCE');
+		expect(decision.trade?.usdc).toBe(110.045006);
+		expect('approval' in decision).toBe(false);
+	});
+
+	test('never asks approval for a hold', () => {
+		const decision = decide(previous, price(109.43, minutesAfterT0(1)), { ...POLICY, approvalShare: 0.000001 });
+		expect(decision.action).toBe('HOLD');
+		expect('approval' in decision).toBe(false);
+	});
+
+	test('summarizes a proposal made at a shocked price', () => {
+		expect(summarize(decide(previous, shocked, DEMO_POLICY))).toBe(
+			'PROPOSE (drift, needs approval): buy 14.798 SOL @ $106.15 (SOL 49.24% → 50.00%) [simulated shock -3%]'
+		);
+	});
+
+	test('marks any decision made at a shocked price', () => {
+		const smallShock = applyShock(price(109.43, minutesAfterT0(1)), -0.001);
+		expect(summarize(decide(previous, smallShock, POLICY))).toEndWith(' [simulated shock -0.001%]');
 	});
 });

@@ -1,5 +1,6 @@
 // Sentinel's policy: keep a virtual SOL/USDC treasury at its target SOL share. Rebalances when the share drifts out of
-// the band, or on schedule when the last rebalance is old enough. Pure: no I/O, the decision time is the price's.
+// the band, or on schedule when the last rebalance is old enough; a rebalance worth more than the approval share of the
+// treasury is a proposal that waits for the owner. Pure: no I/O, the decision time is the price's.
 
 export interface Portfolio {
 	sol: number;
@@ -10,6 +11,8 @@ export interface PriceReading {
 	usd: number;
 	source: string;
 	observedAt: string;
+	/** Set when the demo shocked the price: the shock and the real price. */
+	simulatedShock?: { pct: number; realUsd: number };
 }
 
 export interface Policy {
@@ -17,6 +20,8 @@ export interface Policy {
 	/** How far the SOL share may drift from the target, as a share (0.0002 = 0.02 percentage points). */
 	driftThreshold: number;
 	scheduleMinutes: number;
+	/** A rebalance worth more than this share of the treasury waits for the owner's approval (0.0025 = 0.25%). */
+	approvalShare: number;
 }
 
 /** What Sentinel continues from: the portfolio after its last recorded decision. */
@@ -30,6 +35,8 @@ export type Trade = { side: 'SELL' | 'BUY'; sol: number; usdc: number };
 export type SentinelDecision = {
 	action: 'REBALANCE' | 'HOLD';
 	reason?: 'drift' | 'schedule';
+	/** Set on a proposal: `after` is the portfolio if the owner accepts it. */
+	approval?: 'required';
 	price: PriceReading;
 	policy: Policy;
 	before: Portfolio & { solShare: number };
@@ -55,9 +62,11 @@ export function decide(previous: Previous | null, price: PriceReading, policy: P
 	const trade = reason && tradeToTarget(before, price.usd, policy.targetSolShare);
 	const inputs = { price, policy, before: { ...before, solShare: round(solShare, SHARE_DECIMALS) } };
 	if (!reason || !trade) return { action: 'HOLD', ...inputs, after: before, lastRebalanceAt };
+	const approval = needsApproval(trade, before, price.usd, policy) ? { approval: 'required' as const } : {};
 	return {
 		action: 'REBALANCE',
 		reason,
+		...approval,
 		...inputs,
 		trade,
 		after: applyTrade(before, trade),
@@ -66,6 +75,10 @@ export function decide(previous: Previous | null, price: PriceReading, policy: P
 }
 
 export function summarize(decision: SentinelDecision): string {
+	return actionLine(decision) + shockNote(decision.price);
+}
+
+function actionLine(decision: SentinelDecision): string {
 	const at = `@ $${decision.price.usd.toFixed(2)}`;
 	const share = percent(decision.before.solShare);
 	if (decision.action === 'HOLD' || !decision.trade) {
@@ -73,7 +86,16 @@ export function summarize(decision: SentinelDecision): string {
 	}
 	const { side, sol } = decision.trade;
 	const afterShare = percent(solShareOf(decision.after, decision.price.usd));
-	return `REBALANCE (${decision.reason}): ${side.toLowerCase()} ${sol.toFixed(3)} SOL ${at} (SOL ${share} → ${afterShare})`;
+	const label = decision.approval ? `PROPOSE (${decision.reason}, needs approval)` : `REBALANCE (${decision.reason})`;
+	return `${label}: ${side.toLowerCase()} ${sol.toFixed(3)} SOL ${at} (SOL ${share} → ${afterShare})`;
+}
+
+function shockNote({ simulatedShock }: PriceReading): string {
+	return simulatedShock ? ` [simulated shock ${simulatedShock.pct}%]` : '';
+}
+
+function needsApproval({ usdc }: Trade, portfolio: Portfolio, usd: number, policy: Policy): boolean {
+	return usdc > policy.approvalShare * totalValue(portfolio, usd);
 }
 
 function rebalanceReason(
