@@ -14,10 +14,8 @@ import {
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
-import type { OnchainLogItem } from '../../../onchain-log';
-import { findFleetRuntime, getFleetRuntime, onchainLog, shockStore } from '../fleet/app-runtime';
+import { findFleetRuntime, getFleetRuntime, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
-import { describeTransactions } from '../fleet/onchain-log';
 import type { FleetRuntime } from '../fleet/submit-decision';
 import { memoText } from './memo';
 
@@ -160,12 +158,6 @@ export class BlinkService {
     const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
     // Real agents first; the mocks follow until Arbiter and Guardian replace them.
     return [...fleetAgents, ...agentsStore.values()];
-  }
-
-  /** The newest guard transactions that landed, newest first; empty while the fleet is not configured. */
-  async getOnchainLog(limit: number, agentId?: string): Promise<OnchainLogItem[]> {
-    const runtime = await findFleetRuntime();
-    return runtime ? describeTransactions(onchainLog.recent(limit, agentId), runtime.fleet) : [];
   }
 
   async getActionMetadata(agentId: string, origin: string): Promise<ActionGetResponse> {

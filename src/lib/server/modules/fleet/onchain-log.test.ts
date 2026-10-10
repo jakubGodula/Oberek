@@ -1,97 +1,63 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { describe, expect, test } from 'bun:test';
 import type { LandedTransaction } from '../agent-guard/guard';
-import { APPROVAL_KIND } from './approval';
-import { Fleet } from './fleet';
-import { describeTransactions, OnchainLog } from './onchain-log';
+import type { DecisionLogEntry } from './fleet';
+import { OnchainLog, withTransactions, type LoggedTransaction } from './onchain-log';
 
 const SENTINEL = 'sentinel-01';
 const TICK = 'tick-01';
 const NOW = 1_000;
 
-const kill = (agentId: string, counter: number): LandedTransaction => ({
+const hashOf = (counter: number) => String(counter).padStart(64, '0');
+
+const landed = (event: LandedTransaction['event'], counter: number, agentId = SENTINEL): LoggedTransaction => ({
 	agentId,
-	event: 'AgentKilled',
+	event,
 	counter,
-	signature: `sig-${agentId}-${counter}`
+	signature: `sig-${event}-${counter}`,
+	...(event === 'StepRecorded' ? { decisionHash: hashOf(counter) } : {}),
+	landedAt: NOW
 });
 
-const step = (counter: number, decisionHash: string): LandedTransaction => ({
-	agentId: SENTINEL,
-	event: 'StepRecorded',
-	counter,
-	signature: `sig-${counter}`,
-	decisionHash
+const decision = (counter: number): DecisionLogEntry => ({
+	record: { agent: SENTINEL, counter, kind: 'sentinel', decision: {}, summary: `#${counter}`, observedAt: '' },
+	decisionHash: hashOf(counter)
 });
 
 describe('OnchainLog', () => {
-	test('lists the newest transactions first, at most the limit, stamped when they landed', () => {
+	test("lists one agent's transactions, oldest first, stamped when they landed", () => {
 		let now = NOW;
 		const log = new OnchainLog(() => now++);
-		[1, 2, 3].forEach((counter) => log.record(kill(SENTINEL, counter)));
-		expect(log.recent(2)).toEqual([
-			{ ...kill(SENTINEL, 3), landedAt: NOW + 2 },
-			{ ...kill(SENTINEL, 2), landedAt: NOW + 1 }
+		const { landedAt: _, ...kill } = landed('AgentKilled', 1);
+		[kill, { ...kill, agentId: TICK }, { ...kill, counter: 2 }].forEach((transaction) => log.record(transaction));
+		expect(log.ofAgent(SENTINEL)).toEqual([
+			{ ...kill, landedAt: NOW },
+			{ ...kill, counter: 2, landedAt: NOW + 2 }
 		]);
-	});
-
-	test("lists one agent's transactions", () => {
-		const log = new OnchainLog(() => NOW);
-		[kill(SENTINEL, 1), kill(TICK, 1), kill(SENTINEL, 2)].forEach((transaction) => log.record(transaction));
-		expect(log.recent(10, TICK).map((entry) => entry.agentId)).toEqual([TICK]);
 	});
 
 	test('drops the oldest transactions beyond its capacity', () => {
 		const log = new OnchainLog(() => NOW, 2);
-		[1, 2, 3].forEach((counter) => log.record(kill(SENTINEL, counter)));
-		expect(log.recent(10).map((entry) => entry.counter)).toEqual([3, 2]);
+		[1, 2, 3].forEach((counter) => log.record(landed('AgentKilled', counter)));
+		expect(log.ofAgent(SENTINEL).map((transaction) => transaction.counter)).toEqual([2, 3]);
 	});
 });
 
-describe('describeTransactions', () => {
-	let rootDir: string;
-	let fleet: Fleet;
-
-	beforeEach(() => {
-		rootDir = mkdtempSync(join(tmpdir(), 'onchain-log-'));
-		fleet = new Fleet(join(rootDir, 'fleet'));
-		fleet.register({ id: SENTINEL, name: 'Sentinel Alpha', riskLevel: 'MEDIUM', registeredAt: 0 });
+describe('withTransactions', () => {
+	test("gives each decision its step's signature, and none to a decision the server did not see land", () => {
+		const { entries } = withTransactions([decision(6), decision(5)], [landed('StepRecorded', 6)]);
+		expect(entries).toEqual([{ ...decision(6), signature: 'sig-StepRecorded-6' }, decision(5)]);
 	});
 
-	afterEach(() => rmSync(rootDir, { recursive: true, force: true }));
-
-	function logDecision(counter: number, kind: string, decision: Record<string, unknown>, summary: string): string {
-		const decisionHash = String(counter).padStart(64, '0');
-		const record = { agent: SENTINEL, counter, kind, decision, summary, observedAt: '2026-10-10T15:00:00.000Z' };
-		fleet.appendDecision(SENTINEL, { record, decisionHash });
-		return decisionHash;
-	}
-
-	test("adds a step's summary from the decision log", () => {
-		const hash = logDecision(5, 'sentinel', { action: 'HOLD' }, 'HOLD: SOL 142.10');
-		const [item] = describeTransactions([{ ...step(5, hash), landedAt: NOW }], fleet);
-		expect(item).toEqual({
-			id: 'sig-5',
-			agentId: SENTINEL,
-			event: 'StepRecorded',
-			counter: 5,
-			signature: 'sig-5',
-			decisionHash: hash,
-			landedAt: NOW,
-			summary: 'HOLD: SOL 142.10'
-		});
+	test('adds the kills and resumes from the oldest decision shown on', () => {
+		const transactions = [landed('AgentKilled', 3), landed('AgentKilled', 5), landed('AgentResumed', 6)];
+		const { operatorActions } = withTransactions([decision(7), decision(5)], transactions);
+		expect(operatorActions).toEqual([
+			{ event: 'AgentKilled', counter: 5, signature: 'sig-AgentKilled-5', landedAt: NOW },
+			{ event: 'AgentResumed', counter: 6, signature: 'sig-AgentResumed-6', landedAt: NOW }
+		]);
 	});
 
-	test("marks a step that records the owner's verdict", () => {
-		const hash = logDecision(6, APPROVAL_KIND, { verdict: 'reject' }, 'REJECTED: sell 1 SOL');
-		const [item] = describeTransactions([{ ...step(6, hash), landedAt: NOW }], fleet);
-		expect(item).toMatchObject({ verdict: 'reject', summary: 'REJECTED: sell 1 SOL' });
-	});
-
-	test('leaves out the summary of a step the decision log does not hold', () => {
-		const [item] = describeTransactions([{ ...step(7, 'ff'.repeat(32)), landedAt: NOW }], fleet);
-		expect(item.summary).toBeUndefined();
+	test('adds every kill and resume while the agent has no decision yet', () => {
+		expect(withTransactions([], [landed('AgentKilled', 0)]).operatorActions).toHaveLength(1);
 	});
 });

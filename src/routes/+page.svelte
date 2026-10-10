@@ -6,9 +6,7 @@
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import OnchainLog from '#lib/components/OnchainLog.svelte';
-  import { acceptsShock, type FeedEntry } from '#lib/fleet-feed';
-  import { ONCHAIN_LOG_LIMIT, type OnchainLogItem } from '#lib/onchain-log';
+  import { acceptsShock, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
 
@@ -18,8 +16,8 @@
   let isSimulating = $state(false);
   let simulationMessage = $state<string | null>(null);
   let simulationSuccess = $state<boolean | null>(null);
-  let history = $state<OnchainLogItem[]>(data.history);
   let feedEntries = $state<FeedEntry[]>([]);
+  let feedActions = $state<OperatorAction[]>([]);
   const FEED_LIMIT = 10;
   /** The demo shock the card's button arms, in percent of the price. */
   const SHOCK_PCT = -3;
@@ -80,31 +78,24 @@
     return () => clearInterval(timer);
   });
 
-  // The selected fleet agent's feed and on-chain log follow the page refresh, which replaces selectedAgent every 5 s.
-  // Mock agents send no transactions and log no decisions.
+  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s. Mock agents send
+  // no transactions and log no decisions.
   $effect(() => {
     if (selectedAgent?.fleet) {
       loadFeed(selectedAgent.id);
-      loadHistory(selectedAgent.id);
     } else {
       feedEntries = [];
-      history = [];
+      feedActions = [];
     }
   });
-
-  async function loadHistory(agentId: string) {
-    try {
-      const res = await fetch(`/api/actions/history?agentId=${agentId}&limit=${ONCHAIN_LOG_LIMIT}`);
-      if (res.ok && selectedAgent?.id === agentId) history = (await res.json()).history;
-    } catch (e) {
-      console.error('Błąd odczytu logu on-chain:', e);
-    }
-  }
 
   async function loadFeed(agentId: string) {
     try {
       const res = await fetch(`/api/agents/${agentId}/decisions?limit=${FEED_LIMIT}`);
-      if (res.ok && selectedAgent?.id === agentId) feedEntries = (await res.json()).entries;
+      if (!res.ok || selectedAgent?.id !== agentId) return;
+      const feed = await res.json();
+      feedEntries = feed.entries;
+      feedActions = feed.operatorActions;
     } catch (e) {
       console.error('Błąd odczytu decyzji:', e);
     }
@@ -279,10 +270,6 @@
             <span class="text-[13px] font-mono font-bold text-violet-300">
               {agents.reduce((s, a) => s + (a.actionsExecuted || 0), 0)}
             </span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Zdarzenia w logu</span>
-            <span class="text-[13px] font-mono font-bold text-sky-300">{history.length}</span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-[11px] text-slate-400">Algorytm PQC</span>
@@ -553,18 +540,17 @@
       {/if}
     </section>
 
-    <!-- ─── RIGHT COLUMN: Observability History Log ─── -->
+    <!-- ─── RIGHT COLUMN: the selected agent's on-chain history ─── -->
     <aside class="flex flex-col gap-4">
 
-      <!-- With a fleet agent selected its decisions fill the column below; otherwise the log does. -->
-      <OnchainLog items={history} fill={!selectedAgent?.fleet} />
-
-      {#if selectedAgent?.fleet}
+      {#if selectedAgent}
         <div class="flex-1">
           <DecisionFeed
             agentId={selectedAgent.id}
             entries={feedEntries}
-            pendingCounter={selectedAgent.fleet.pendingProposal?.counter ?? null}
+            operatorActions={feedActions}
+            pendingCounter={selectedAgent.fleet?.pendingProposal?.counter ?? null}
+            mock={!selectedAgent.fleet}
           />
         </div>
       {/if}

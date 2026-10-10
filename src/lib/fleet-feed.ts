@@ -1,5 +1,6 @@
-// How the page shows a fleet agent's decisions: one row per log entry, read from the record's JSON. Records it cannot
-// read as Sentinel's (e.g. Tick's) show their summary only.
+// How the page shows a fleet agent's on-chain history: one row per decision log entry, read from the record's JSON,
+// with the owner's kills and resumes between them. Records it cannot read as Sentinel's (e.g. Tick's) show their
+// summary only.
 
 export type Chip = 'HOLD' | 'REBALANCE' | 'AWAITING_APPROVAL' | 'PROPOSAL' | 'APPROVED' | 'REJECTED' | 'DECISION';
 
@@ -14,6 +15,17 @@ export interface FeedEntry {
 	};
 	decisionHash: string;
 	unconfirmed?: true;
+	/** The transaction that recorded it on chain; absent when this server did not see it land. */
+	signature?: string;
+}
+
+/** The owner's kill or resume, as this server saw it land on chain. */
+export interface OperatorAction {
+	event: 'AgentKilled' | 'AgentResumed';
+	/** A kill keeps the counter of the step before it; a resume uses up the next one. */
+	counter: number;
+	signature: string;
+	landedAt: number;
 }
 
 export interface TradeDetails {
@@ -34,6 +46,34 @@ export interface FeedRow {
 	unconfirmed: boolean;
 	/** From the decision, or for a verdict from its proposal; null when the record has no price and portfolio. */
 	details: TradeDetails | null;
+	signature: string | null;
+}
+
+export type TimelineRow =
+	| { type: 'decision'; row: FeedRow }
+	| ({ type: 'action'; key: string } & OperatorAction);
+
+/** A kill keeps the counter of the step before it, so it ranks just above that step. */
+const KILL_RANK_OFFSET = 0.5;
+const EXPLORER_CLUSTER = 'devnet';
+
+export function explorerTxUrl(signature: string): string {
+	return `https://explorer.solana.com/tx/${signature}?cluster=${EXPLORER_CLUSTER}`;
+}
+
+/** The decisions (newest first) and the owner's actions, merged newest first by counter. */
+export function toTimeline(entries: FeedEntry[], actions: OperatorAction[], pendingCounter: number | null): TimelineRow[] {
+	const rows: TimelineRow[] = [
+		...entries.map((entry) => ({ type: 'decision' as const, row: toFeedRow(entry, pendingCounter) })),
+		...actions.map((action) => ({ type: 'action' as const, key: action.signature, ...action }))
+	];
+	// Stable: decisions sharing a counter (an unlanded step and its retry) keep their log order.
+	return rows.sort((a, b) => rankOf(b) - rankOf(a));
+}
+
+function rankOf(row: TimelineRow): number {
+	if (row.type === 'decision') return row.row.counter;
+	return row.event === 'AgentKilled' ? row.counter + KILL_RANK_OFFSET : row.counter;
 }
 
 const SHOCK_KINDS = new Set(['sentinel', 'approval']);
@@ -48,7 +88,8 @@ export function toFeedRow(entry: FeedEntry, pendingCounter: number | null): Feed
 		chip: chipOf(record, pendingCounter),
 		summary: record.summary,
 		unconfirmed: entry.unconfirmed === true,
-		details: tradeDetails(record.kind === 'approval' ? proposalDecision(record.decision) : record.decision)
+		details: tradeDetails(record.kind === 'approval' ? proposalDecision(record.decision) : record.decision),
+		signature: entry.signature ?? null
 	};
 }
 
