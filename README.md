@@ -96,7 +96,8 @@ Reads the agent account and every transaction in its history (read-only, no fees
 holds a record for every on-chain hash that still hashes to it, and that every log entry not marked `unconfirmed` is
 on-chain with the same hash. The free-tier devnet RPC allows only a few `getTransaction` calls per window, so it takes
 about 3 s per transaction: ~20 minutes for 400. Steps run with `bun scripts/agent.ts run` before the import into the
-fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as missing.
+fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as missing. How it works:
+[spec/history-audit.md](spec/history-audit.md).
 
 ## Test
 
