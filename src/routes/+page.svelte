@@ -4,6 +4,7 @@
     ExternalLink, RefreshCw, Zap, Clock, Activity, AlertTriangle,
     ChevronRight, Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
+  import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
   import { acceptsShock, type FeedEntry } from '#lib/fleet-feed';
 
@@ -390,13 +391,8 @@
           </div>
         </div>
 
-        {#if selectedAgent.fleet}
-          <DecisionFeed
-            entries={feedEntries}
-            pending={selectedAgent.fleet.pendingProposal}
-            busy={isSimulating}
-            onVerdict={sendVerdict}
-          />
+        {#if selectedAgent.fleet?.pendingProposal}
+          <ApprovalPanel pending={selectedAgent.fleet.pendingProposal} busy={isSimulating} onVerdict={sendVerdict} />
         {/if}
 
         <!-- HITL Decision Console -->
@@ -539,7 +535,8 @@
     <!-- ─── RIGHT COLUMN: Observability History Log ─── -->
     <aside class="flex flex-col gap-4">
 
-      <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm flex flex-col flex-1">
+      <!-- With a fleet agent selected its decisions fill the column below; otherwise the log does. -->
+      <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm flex flex-col {selectedAgent?.fleet ? '' : 'flex-1'}">
         <h2 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
           <Activity class="w-3.5 h-3.5 text-rose-400" />
           On-Chain Observability Log
@@ -609,6 +606,16 @@
           {/each}
         </div>
       </div>
+
+      {#if selectedAgent?.fleet}
+        <div class="flex-1">
+          <DecisionFeed
+            agentId={selectedAgent.id}
+            entries={feedEntries}
+            pendingCounter={selectedAgent.fleet.pendingProposal?.counter ?? null}
+          />
+        </div>
+      {/if}
 
       <!-- PQC Algorithm Info -->
       <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
