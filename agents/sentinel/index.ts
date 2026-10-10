@@ -3,6 +3,7 @@
 // recorded on chain.
 import { createRuntimeClient } from '../shared/runtime-client';
 import { loadSentinelConfig, type SentinelConfig } from './config';
+import { runLoop, stopOnSignals } from '../shared/loop';
 import { runCycle } from './cycle';
 import { fetchSolPrice } from './jupiter';
 
@@ -25,8 +26,12 @@ console.log(
 		`band ±${driftThreshold}, schedule ${scheduleMinutes} min, approval above ${approvalShare * 100}% of the ` +
 		`treasury; Ctrl+C stops`
 );
-while (true) {
-	const line = await runCycle({ client, fetchPrice: () => fetchSolPrice(), policy: config.policy });
-	console.log(`${new Date().toISOString()} ${line}`);
-	await new Promise((resolve) => setTimeout(resolve, config.intervalMs));
-}
+await runLoop(
+	async () => {
+		const line = await runCycle({ client, fetchPrice: () => fetchSolPrice(), policy: config.policy });
+		console.log(`${new Date().toISOString()} ${line}`);
+	},
+	config.intervalMs,
+	stopOnSignals()
+);
+console.log('Sentinel stopped');
