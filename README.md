@@ -21,7 +21,21 @@ bun install
 bun run dev                      # http://localhost:5173
 ```
 
-### A real agent on devnet
+### Quick start: setup and demo
+
+```sh
+bun install
+bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
+bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo in one command"
+```
+
+`setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
+payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
+first; that is often rate-limited, so it may print the address and wait until you send SOL from
+https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it registers `sentinel-01` and
+`tick-01` (agent files in `.devnet/agents/`) and imports them into the fleet.
+
+### A real agent on devnet, by hand
 
 ```sh
 cp .env.example .env

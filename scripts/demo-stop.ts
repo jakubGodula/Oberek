@@ -24,12 +24,11 @@ async function stopStage({ processes, graceMs }: StopStage): Promise<void> {
 }
 
 async function stopWithin(process: DemoProcess, graceMs: number): Promise<void> {
-	const exitedInTime = await Promise.race([process.exited.then(() => true), delay(graceMs).then(() => false)]);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const graceOver = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), graceMs)));
+	const exitedInTime = await Promise.race([process.exited.then(() => true), graceOver]);
+	clearTimeout(timer);
 	if (exitedInTime) return;
 	process.signal('SIGKILL');
 	await process.exited;
-}
-
-function delay(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms).unref());
 }
