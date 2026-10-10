@@ -69,13 +69,12 @@ describe('describeTransactions', () => {
 		return decisionHash;
 	}
 
-	test("names the agent and adds a step's summary from the decision log", () => {
+	test("adds a step's summary from the decision log", () => {
 		const hash = logDecision(5, 'sentinel', { action: 'HOLD' }, 'HOLD: SOL 142.10');
 		const [item] = describeTransactions([{ ...step(5, hash), landedAt: NOW }], fleet);
 		expect(item).toEqual({
 			id: 'sig-5',
 			agentId: SENTINEL,
-			agentName: 'Sentinel Alpha',
 			event: 'StepRecorded',
 			counter: 5,
 			signature: 'sig-5',
@@ -91,15 +90,8 @@ describe('describeTransactions', () => {
 		expect(item).toMatchObject({ verdict: 'reject', summary: 'REJECTED: sell 1 SOL' });
 	});
 
-	test('leaves out the summary of a step the decision log does not hold, and names an unknown agent by its id', () => {
-		const [stepItem, killItem] = describeTransactions(
-			[
-				{ ...step(7, 'ff'.repeat(32)), landedAt: NOW },
-				{ ...kill(TICK, 3), landedAt: NOW }
-			],
-			fleet
-		);
-		expect(stepItem.summary).toBeUndefined();
-		expect(killItem.agentName).toBe(TICK);
+	test('leaves out the summary of a step the decision log does not hold', () => {
+		const [item] = describeTransactions([{ ...step(7, 'ff'.repeat(32)), landedAt: NOW }], fleet);
+		expect(item.summary).toBeUndefined();
 	});
 });

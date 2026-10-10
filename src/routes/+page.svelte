@@ -59,12 +59,7 @@
 
   async function refreshAll() {
     try {
-      const [agentsRes, histRes] = await Promise.all([
-        fetch('/api/agents'),
-        fetch(`/api/actions/history?limit=${ONCHAIN_LOG_LIMIT}`)
-      ]);
-      const agentsJson = await agentsRes.json();
-      const histJson = await histRes.json();
+      const agentsJson = await (await fetch('/api/agents')).json();
 
       if (agentsJson.success) {
         agents = agentsJson.agents;
@@ -73,7 +68,6 @@
           if (updated) selectedAgent = updated;
         }
       }
-      if (histJson.success) history = histJson.history;
     } catch (e) {
       console.error('Błąd odświeżania:', e);
     }
@@ -86,11 +80,26 @@
     return () => clearInterval(timer);
   });
 
-  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s.
+  // The selected fleet agent's feed and on-chain log follow the page refresh, which replaces selectedAgent every 5 s.
+  // Mock agents send no transactions and log no decisions.
   $effect(() => {
-    if (selectedAgent?.fleet) loadFeed(selectedAgent.id);
-    else feedEntries = [];
+    if (selectedAgent?.fleet) {
+      loadFeed(selectedAgent.id);
+      loadHistory(selectedAgent.id);
+    } else {
+      feedEntries = [];
+      history = [];
+    }
   });
+
+  async function loadHistory(agentId: string) {
+    try {
+      const res = await fetch(`/api/actions/history?agentId=${agentId}&limit=${ONCHAIN_LOG_LIMIT}`);
+      if (res.ok && selectedAgent?.id === agentId) history = (await res.json()).history;
+    } catch (e) {
+      console.error('Błąd odczytu logu on-chain:', e);
+    }
+  }
 
   async function loadFeed(agentId: string) {
     try {

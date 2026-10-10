@@ -36,16 +36,12 @@ export class OnchainLog {
 	}
 }
 
-/** Adds what the chain does not hold: the agent's name and, for a step, its summary from the decision log. */
+/** Adds what the chain does not hold: a step's summary from the decision log. */
 export function describeTransactions(transactions: LoggedTransaction[], fleet: Fleet): OnchainLogItem[] {
 	const findDecision = decisionLookup(fleet);
 	return transactions.map((transaction) => {
 		const { agentId, decisionHash } = transaction;
-		const item: OnchainLogItem = {
-			...transaction,
-			id: transaction.signature,
-			agentName: fleet.get(agentId)?.name ?? agentId
-		};
+		const item: OnchainLogItem = { ...transaction, id: transaction.signature };
 		const entry = decisionHash ? findDecision(agentId, decisionHash) : undefined;
 		return entry ? { ...item, summary: entry.record.summary, ...verdictOf(entry) } : item;
 	});

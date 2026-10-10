@@ -4,7 +4,8 @@ import { blinkService } from '#lib/server/modules/solana-blink/blink.service';
 
 export const load: PageServerLoad = async ({ url }) => {
   const agents = await blinkService.listAgents();
-  const history = await blinkService.getOnchainLog(ONCHAIN_LOG_LIMIT);
+  // The page opens on the first agent; its log is the one shown.
+  const history = agents[0] ? await blinkService.getOnchainLog(ONCHAIN_LOG_LIMIT, agents[0].id) : [];
 
   return {
     agents,
