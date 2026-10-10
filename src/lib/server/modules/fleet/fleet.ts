@@ -78,11 +78,21 @@ export class Fleet {
 		return readFileSync(path, 'utf8')
 			.split('\n')
 			.filter((line) => line !== '')
-			.map((line) => JSON.parse(line));
+			.flatMap((line) => parseLogLine(agentId, line));
 	}
 
 	private agentDir(agentId: string): string {
 		assertAgentId(agentId);
 		return join(this.fleetDir, agentId);
+	}
+}
+
+/** A line that is not JSON (e.g. cut short by a crash mid-append) is reported and passed over, not fatal to the log. */
+function parseLogLine(agentId: string, line: string): DecisionLogEntry[] {
+	try {
+		return [JSON.parse(line)];
+	} catch {
+		console.warn(`decision log of agent ${agentId}: skipping a line that is not JSON: ${line.slice(0, 80)}`);
+		return [];
 	}
 }

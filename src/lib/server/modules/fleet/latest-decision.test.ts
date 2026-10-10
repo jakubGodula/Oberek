@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
+import { appendFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
@@ -70,6 +70,13 @@ describe('latestDecision', () => {
 		fleet.appendDecision(AGENT, entry(1, HASH_A));
 		fleet.appendDecision(AGENT, entry(2, HASH_B, true));
 		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
+	});
+
+	test('passes over a corrupt log line, e.g. one cut short by a crash mid-append', async () => {
+		fleet.appendDecision(AGENT, entry(1, HASH_A));
+		appendFileSync(join(rootDir, 'fleet', AGENT, 'decisions.jsonl'), '{"record":{"agent":"sentinel-01","coun\n');
+		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
+		expect(fleet.lastDecision(AGENT)).toEqual(entry(1, HASH_A));
 	});
 
 	test('reports a chain hash that no log entry has', async () => {
