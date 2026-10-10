@@ -7,8 +7,8 @@ owner kill and resume the agent.
 - `onchain/`: the program (Anchor), deployed on devnet at `BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`.
 - `src/`: the SvelteKit server and operator page. It runs the fleet: signs each agent's steps with its key and sends
   them to the program, and shows the agents with Kill-Switch and resume.
-- `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys
-  (`agents/tick`, the simplest one).
+- `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys:
+  `agents/tick` (the simplest one) and `agents/sentinel` (rebalances a virtual SOL/USDC treasury from the live price).
 
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
