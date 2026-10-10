@@ -175,7 +175,8 @@ export class BlinkService {
     const runtime = await findFleetRuntime();
     if (!runtime) return [...agentsStore.values()];
     const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
-    return [...agentsStore.values(), ...fleetAgents];
+    // Real agents first; the mocks follow until Arbiter and Guardian replace them.
+    return [...fleetAgents, ...agentsStore.values()];
   }
 
   getActionHistory(limit = 20, agentId?: string): ActionHistoryEntry[] {

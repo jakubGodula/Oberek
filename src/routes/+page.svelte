@@ -31,6 +31,9 @@
     blinkUrl ? `https://dial.to/?action=solana-action:${encodeURIComponent(blinkUrl)}&cluster=devnet` : ''
   );
 
+  /** Mock agents are demo data, not real agents: the page says so on every card. */
+  const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
+
   const riskColors: Record<string, string> = {
     LOW: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
     MEDIUM: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
@@ -234,8 +237,13 @@
               </div>
               <p class="text-[11px] text-slate-400 line-clamp-2 mb-2.5">{agent.currentTask}</p>
               <div class="flex items-center justify-between">
-                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono border {riskColors[agent.riskLevel]}">
-                  RISK: {agent.riskLevel}
+                <span class="flex items-center gap-1.5">
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-mono border {riskColors[agent.riskLevel]}">
+                    RISK: {agent.riskLevel}
+                  </span>
+                  {#if !agent.fleet}
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
+                  {/if}
                 </span>
                 <span class="text-[10px] text-slate-500 font-mono">{agent.actionsExecuted} tx</span>
               </div>
@@ -300,6 +308,9 @@
                     <Shield class="w-5 h-5 text-slate-400" />
                   {/if}
                   <h2 class="text-lg font-bold text-white">{selectedAgent.name}</h2>
+                  {#if !selectedAgent.fleet}
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
+                  {/if}
                 </div>
                 <p class="text-[12px] text-slate-400 max-w-lg">{selectedAgent.currentTask}</p>
               </div>
