@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { acceptsShock, toFeedRow, type FeedEntry } from './fleet-feed';
+import { acceptsShock, explorerTxUrl, toFeedRow, toTimeline, type FeedEntry, type OperatorAction } from './fleet-feed';
 
 const AT = '2026-10-10T15:00:00.000Z';
 const BEFORE = { sol: 956.913095129, usdc: 104715, solShare: 0.492386 };
@@ -75,4 +75,31 @@ describe('acceptsShock', () => {
 	])('%p → %p', (kind, expected) => {
 		expect(acceptsShock(kind)).toBe(expected);
 	});
+});
+
+describe('toTimeline', () => {
+	const hold = (counter: number) => ({ ...entry(counter, 'sentinel', { action: 'HOLD' }), decisionHash: `hash-${counter}` });
+	const action = (event: OperatorAction['event'], counter: number): OperatorAction => ({
+		event,
+		counter,
+		signature: `sig-${event}-${counter}`,
+		landedAt: 0
+	});
+	const labels = (rows: ReturnType<typeof toTimeline>) =>
+		rows.map((row) => (row.type === 'decision' ? `step ${row.row.counter}` : `${row.event} ${row.counter}`));
+
+	test('puts a kill right above the step whose counter it keeps, and the resume above the kill', () => {
+		const rows = toTimeline([hold(8), hold(7), hold(5)], [action('AgentKilled', 5), action('AgentResumed', 6)], null);
+		expect(labels(rows)).toEqual(['step 8', 'step 7', 'AgentResumed 6', 'AgentKilled 5', 'step 5']);
+	});
+
+	test("links a decision to its transaction only when the server saw it land", () => {
+		const [linked, unlinked] = toTimeline([{ ...hold(6), signature: 'sig-6' }, hold(5)], [], null);
+		expect(linked.type === 'decision' && linked.row.signature).toBe('sig-6');
+		expect(unlinked.type === 'decision' && unlinked.row.signature).toBeNull();
+	});
+});
+
+test('links a transaction to the devnet explorer', () => {
+	expect(explorerTxUrl('5Kx3abc')).toBe('https://explorer.solana.com/tx/5Kx3abc?cluster=devnet');
 });

@@ -1,12 +1,12 @@
 <script lang="ts">
   import {
     Shield, ShieldAlert, ShieldCheck, Cpu, Terminal, Key, Copy, Check,
-    ExternalLink, RefreshCw, Zap, Clock, Activity, AlertTriangle,
-    ChevronRight, Lock, Unlock, BarChart3, Play
+    ExternalLink, RefreshCw, Zap, AlertTriangle,
+    Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import { acceptsShock, type FeedEntry } from '#lib/fleet-feed';
+  import { acceptsShock, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
 
@@ -16,9 +16,8 @@
   let isSimulating = $state(false);
   let simulationMessage = $state<string | null>(null);
   let simulationSuccess = $state<boolean | null>(null);
-  let history = $state<any[]>(data.history || []);
-  let isLoadingHistory = $state(false);
   let feedEntries = $state<FeedEntry[]>([]);
+  let feedActions = $state<OperatorAction[]>([]);
   const FEED_LIMIT = 10;
   /** The demo shock the card's button arms, in percent of the price. */
   const SHOCK_PCT = -3;
@@ -58,12 +57,7 @@
 
   async function refreshAll() {
     try {
-      const [agentsRes, histRes] = await Promise.all([
-        fetch('/api/agents'),
-        fetch('/api/actions/history?limit=15')
-      ]);
-      const agentsJson = await agentsRes.json();
-      const histJson = await histRes.json();
+      const agentsJson = await (await fetch('/api/agents')).json();
 
       if (agentsJson.success) {
         agents = agentsJson.agents;
@@ -72,7 +66,6 @@
           if (updated) selectedAgent = updated;
         }
       }
-      if (histJson.success) history = histJson.history;
     } catch (e) {
       console.error('Błąd odświeżania:', e);
     }
@@ -85,16 +78,24 @@
     return () => clearInterval(timer);
   });
 
-  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s.
+  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s. Mock agents send
+  // no transactions and log no decisions.
   $effect(() => {
-    if (selectedAgent?.fleet) loadFeed(selectedAgent.id);
-    else feedEntries = [];
+    if (selectedAgent?.fleet) {
+      loadFeed(selectedAgent.id);
+    } else {
+      feedEntries = [];
+      feedActions = [];
+    }
   });
 
   async function loadFeed(agentId: string) {
     try {
       const res = await fetch(`/api/agents/${agentId}/decisions?limit=${FEED_LIMIT}`);
-      if (res.ok && selectedAgent?.id === agentId) feedEntries = (await res.json()).entries;
+      if (!res.ok || selectedAgent?.id !== agentId) return;
+      const feed = await res.json();
+      feedEntries = feed.entries;
+      feedActions = feed.operatorActions;
     } catch (e) {
       console.error('Błąd odczytu decyzji:', e);
     }
@@ -269,10 +270,6 @@
             <span class="text-[13px] font-mono font-bold text-violet-300">
               {agents.reduce((s, a) => s + (a.actionsExecuted || 0), 0)}
             </span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Zdarzenia w logu</span>
-            <span class="text-[13px] font-mono font-bold text-sky-300">{history.length}</span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-[11px] text-slate-400">Algorytm PQC</span>
@@ -543,87 +540,17 @@
       {/if}
     </section>
 
-    <!-- ─── RIGHT COLUMN: Observability History Log ─── -->
+    <!-- ─── RIGHT COLUMN: the selected agent's on-chain history ─── -->
     <aside class="flex flex-col gap-4">
 
-      <!-- With a fleet agent selected its decisions fill the column below; otherwise the log does. -->
-      <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm flex flex-col {selectedAgent?.fleet ? '' : 'flex-1'}">
-        <h2 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <Activity class="w-3.5 h-3.5 text-rose-400" />
-          On-Chain Observability Log
-          <span class="ml-auto text-rose-300 font-mono">{history.length}</span>
-        </h2>
-
-        <div class="space-y-2 flex-1 overflow-y-auto max-h-[580px] pr-0.5">
-          {#each history as entry (entry.id)}
-            <div class="group p-3 rounded-xl bg-black/20 border border-white/[0.04] hover:border-white/[0.1] transition-all">
-              <div class="flex items-center justify-between mb-1.5">
-                <div class="flex items-center gap-1.5">
-                  {#if entry.decision === 'approve'}
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
-                    <span class="text-[10px] font-bold text-emerald-400 uppercase">APPROVE</span>
-                  {:else if entry.decision === 'pause'}
-                    <span class="w-2 h-2 rounded-full bg-rose-400 shadow-sm shadow-rose-400/50"></span>
-                    <span class="text-[10px] font-bold text-rose-400 uppercase">KILL-SWITCH</span>
-                  {:else if entry.decision === 'resume'}
-                    <span class="w-2 h-2 rounded-full bg-sky-400 shadow-sm shadow-sky-400/50"></span>
-                    <span class="text-[10px] font-bold text-sky-400 uppercase">RESUME</span>
-                  {:else if entry.decision === 'accept'}
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
-                    <span class="text-[10px] font-bold text-emerald-400 uppercase">APPROVED</span>
-                  {:else if entry.decision === 'reject'}
-                    <span class="w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"></span>
-                    <span class="text-[10px] font-bold text-amber-400 uppercase">REJECTED</span>
-                  {:else}
-                    <span class="w-2 h-2 rounded-full bg-slate-400"></span>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase">SYSTEM</span>
-                  {/if}
-                </div>
-                <span class="text-[9px] font-mono text-slate-500 flex items-center gap-1">
-                  <Clock class="w-2.5 h-2.5" />
-                  {timeAgo(entry.timestamp)}
-                </span>
-              </div>
-
-              <p class="text-[11px] font-semibold text-slate-200 mb-1 leading-tight">{entry.agentName}</p>
-
-              <div class="flex items-center gap-1.5 mb-1.5">
-                <span class="text-[9px] text-slate-500">Operator:</span>
-                <span class="text-[10px] font-mono text-violet-300">{entry.operator}</span>
-                <ChevronRight class="w-2.5 h-2.5 text-slate-600" />
-                <span class="px-1 py-0.5 rounded text-[9px] font-mono uppercase {entry.newStatus === 'ACTIVE' ? 'text-emerald-400' : entry.newStatus === 'AWAITING_APPROVAL' ? 'text-amber-400' : 'text-rose-400'}">
-                  {entry.newStatus}
-                </span>
-              </div>
-
-              <div class="bg-black/30 rounded-lg p-1.5 border border-white/[0.04]">
-                <p class="text-[9px] font-mono text-slate-500 break-all leading-relaxed">
-                  {entry.memoHash}
-                </p>
-              </div>
-
-              <div class="mt-1.5">
-                <p class="text-[9px] text-slate-600 font-mono">
-                  root: <span class="text-slate-400">{entry.newRoot.slice(0, 12)}…{entry.newRoot.slice(-8)}</span>
-                </p>
-              </div>
-            </div>
-          {:else}
-            <div class="flex flex-col items-center justify-center py-12 text-slate-600">
-              <Activity class="w-8 h-8 mb-3 opacity-30" />
-              <p class="text-[12px]">Brak zdarzeń w logu</p>
-              <p class="text-[10px] mt-1">Wykonaj akcję HITL, aby zobaczyć wpisy</p>
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      {#if selectedAgent?.fleet}
+      {#if selectedAgent}
         <div class="flex-1">
           <DecisionFeed
             agentId={selectedAgent.id}
             entries={feedEntries}
-            pendingCounter={selectedAgent.fleet.pendingProposal?.counter ?? null}
+            operatorActions={feedActions}
+            pendingCounter={selectedAgent.fleet?.pendingProposal?.counter ?? null}
+            mock={!selectedAgent.fleet}
           />
         </div>
       {/if}
