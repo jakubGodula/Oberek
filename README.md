@@ -85,6 +85,19 @@ Each output line is prefixed with `[server]`, `[sentinel]` or `[tick]`. Ctrl+C s
 the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
 same way. Port 5173 must be free.
 
+### Audit an agent's history
+
+```sh
+bun scripts/audit.ts sentinel-01  # decision log vs. on-chain history; exit code 1 on a problem
+```
+
+Reads the agent account and every transaction in its history (read-only, no fees). It checks that each counter
+1..N has exactly one step or resume on-chain, that the account's last decision is the last step's hash, and that the
+log holds a record for every on-chain hash that still hashes to it. The free-tier devnet RPC allows only a few
+`getTransaction` calls per window, so a few hundred steps take minutes. Steps run with `bun scripts/agent.ts run`
+before the import into the fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as
+missing.
+
 ## Test
 
 ```sh
