@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { LandedTransaction } from '../agent-guard/guard';
-import type { DecisionLogEntry } from './fleet';
-import { OnchainLog, withTransactions, type LoggedTransaction } from './onchain-log';
+import type { DecisionLogEntry, LoggedTransaction } from './fleet';
+import { withTransactions } from './onchain-feed';
 
 const SENTINEL = 'sentinel-01';
-const TICK = 'tick-01';
 const NOW = 1_000;
 
 const hashOf = (counter: number) => String(counter).padStart(64, '0');
@@ -23,27 +22,8 @@ const decision = (counter: number): DecisionLogEntry => ({
 	decisionHash: hashOf(counter)
 });
 
-describe('OnchainLog', () => {
-	test("lists one agent's transactions, oldest first, stamped when they landed", () => {
-		let now = NOW;
-		const log = new OnchainLog(() => now++);
-		const { landedAt: _, ...kill } = landed('AgentKilled', 1);
-		[kill, { ...kill, agentId: TICK }, { ...kill, counter: 2 }].forEach((transaction) => log.record(transaction));
-		expect(log.ofAgent(SENTINEL)).toEqual([
-			{ ...kill, landedAt: NOW },
-			{ ...kill, counter: 2, landedAt: NOW + 2 }
-		]);
-	});
-
-	test('drops the oldest transactions beyond its capacity', () => {
-		const log = new OnchainLog(() => NOW, 2);
-		[1, 2, 3].forEach((counter) => log.record(landed('AgentKilled', counter)));
-		expect(log.ofAgent(SENTINEL).map((transaction) => transaction.counter)).toEqual([2, 3]);
-	});
-});
-
 describe('withTransactions', () => {
-	test("gives each decision its step's signature, and none to a decision the server did not see land", () => {
+	test("gives each decision its step's signature, and none to a decision the transaction log does not hold", () => {
 		const { entries } = withTransactions([decision(6), decision(5)], [landed('StepRecorded', 6)]);
 		expect(entries).toEqual([{ ...decision(6), signature: 'sig-StepRecorded-6' }, decision(5)]);
 	});

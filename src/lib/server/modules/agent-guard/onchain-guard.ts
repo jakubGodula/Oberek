@@ -30,7 +30,7 @@ export interface OnchainGuardDeps {
 	owner: TransactionSigner;
 	/** The agent's on-chain addresses and ML-DSA-44 secret key; throws AgentNotFound for an unknown agent. */
 	identityOf(agentId: string): AgentFile;
-	/** Told of every transaction that landed and succeeded: the page's on-chain log. */
+	/** Told of every transaction that landed and succeeded, for the agent's transaction log. */
 	onLanded?(transaction: LandedTransaction): void;
 	chain?: ChainCalls;
 }

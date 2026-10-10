@@ -15,11 +15,11 @@ export interface FeedEntry {
 	};
 	decisionHash: string;
 	unconfirmed?: true;
-	/** The transaction that recorded it on chain; absent when this server did not see it land. */
+	/** The transaction that recorded it on chain; absent when the transaction log does not hold it. */
 	signature?: string;
 }
 
-/** The owner's kill or resume, as this server saw it land on chain. */
+/** The owner's kill or resume, from the agent's transaction log. */
 export interface OperatorAction {
 	event: 'AgentKilled' | 'AgentResumed';
 	/** A kill keeps the counter of the step before it; a resume uses up the next one. */

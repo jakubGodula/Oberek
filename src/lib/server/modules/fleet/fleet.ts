@@ -1,9 +1,10 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { assertAgentId, isAgentId } from '../agent-guard/guard';
+import { assertAgentId, isAgentId, type LandedTransaction } from '../agent-guard/guard';
 
-// The fleet: what the server knows about each registered agent (name, risk level) and the log of its decisions.
-// One directory per agent: <fleetDir>/<agentId>/agent.json and decisions.jsonl.
+// The fleet: what the server knows about each registered agent (name, risk level), the log of its decisions and the
+// log of its guard transactions that landed. One directory per agent: <fleetDir>/<agentId>/agent.json, decisions.jsonl
+// and transactions.jsonl.
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
@@ -33,8 +34,14 @@ export interface DecisionLogEntry {
 	unconfirmed?: true;
 }
 
+export interface LoggedTransaction extends LandedTransaction {
+	/** When the server saw it land, in ms. */
+	landedAt: number;
+}
+
 const ENTRY_FILE = 'agent.json';
 const DECISION_LOG_FILE = 'decisions.jsonl';
+const TRANSACTION_LOG_FILE = 'transactions.jsonl';
 
 export class Fleet {
 	constructor(private readonly fleetDir: string) {}
@@ -60,7 +67,16 @@ export class Fleet {
 	}
 
 	appendDecision(agentId: string, entry: DecisionLogEntry): void {
-		appendFileSync(join(this.agentDir(agentId), DECISION_LOG_FILE), JSON.stringify(entry) + '\n');
+		this.appendLine(agentId, DECISION_LOG_FILE, entry);
+	}
+
+	appendTransaction(transaction: LoggedTransaction): void {
+		this.appendLine(transaction.agentId, TRANSACTION_LOG_FILE, transaction);
+	}
+
+	/** The agent's guard transactions that landed, oldest first. */
+	transactions(agentId: string): LoggedTransaction[] {
+		return this.readLines(agentId, TRANSACTION_LOG_FILE);
 	}
 
 	lastDecision(agentId: string): DecisionLogEntry | undefined {
@@ -85,12 +101,20 @@ export class Fleet {
 	}
 
 	private readLog(agentId: string): DecisionLogEntry[] {
-		const path = join(this.agentDir(agentId), DECISION_LOG_FILE);
+		return this.readLines(agentId, DECISION_LOG_FILE);
+	}
+
+	private appendLine(agentId: string, file: string, value: unknown): void {
+		appendFileSync(join(this.agentDir(agentId), file), JSON.stringify(value) + '\n');
+	}
+
+	private readLines<T>(agentId: string, file: string): T[] {
+		const path = join(this.agentDir(agentId), file);
 		if (!existsSync(path)) return [];
 		return readFileSync(path, 'utf8')
 			.split('\n')
 			.filter((line) => line !== '')
-			.flatMap((line) => parseLogLine(agentId, line));
+			.flatMap((line) => parseLogLine<T>(path, line));
 	}
 
 	private agentDir(agentId: string): string {
@@ -100,11 +124,11 @@ export class Fleet {
 }
 
 /** A line that is not JSON (e.g. cut short by a crash mid-append) is reported and passed over, not fatal to the log. */
-function parseLogLine(agentId: string, line: string): DecisionLogEntry[] {
+function parseLogLine<T>(path: string, line: string): T[] {
 	try {
 		return [JSON.parse(line)];
 	} catch {
-		console.warn(`decision log of agent ${agentId}: skipping a line that is not JSON: ${line.slice(0, 80)}`);
+		console.warn(`${path}: skipping a line that is not JSON: ${line.slice(0, 80)}`);
 		return [];
 	}
 }

@@ -33,18 +33,19 @@ export function guardClientFrom(config: AgentConfig): GuardClient {
 /** The server has no usable fleet configuration (a variable or a keypair file is missing); the mock agents still work. */
 export class FleetNotConfiguredError extends Error {}
 
-/** `onLanded` hears of every guard transaction that landed (see OnchainGuardDeps). */
-export async function createFleetRuntime(
-	env: Env,
-	onLanded?: (transaction: LandedTransaction) => void
-): Promise<FleetRuntime> {
+export async function createFleetRuntime(env: Env): Promise<FleetRuntime> {
+	const fleet = new Fleet(FLEET_DIR);
+	const now = () => new Date();
+	// Every guard transaction that lands goes to the agent's transaction log, next to its decision log.
+	const onLanded = (transaction: LandedTransaction) =>
+		fleet.appendTransaction({ ...transaction, landedAt: now().getTime() });
 	const guard = await createGuard(env, onLanded).catch((error: unknown) => {
 		throw new FleetNotConfiguredError(error instanceof Error ? error.message : String(error));
 	});
-	return { guard, fleet: new Fleet(FLEET_DIR), throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now: () => new Date() };
+	return { guard, fleet, throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now };
 }
 
-async function createGuard(env: Env, onLanded?: (transaction: LandedTransaction) => void): Promise<OnchainGuard> {
+async function createGuard(env: Env, onLanded: (transaction: LandedTransaction) => void): Promise<OnchainGuard> {
 	const config = loadConfig(env);
 	if (!config.ownerPath) throw new Error('OWNER_KEYPAIR is not set: the server signs kill and resume as the owner');
 	return new OnchainGuard({

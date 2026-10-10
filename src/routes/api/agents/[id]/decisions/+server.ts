@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { getFleetRuntime, onchainLog } from '#lib/server/modules/fleet/app-runtime';
+import { getFleetRuntime } from '#lib/server/modules/fleet/app-runtime';
 import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
-import { withTransactions } from '#lib/server/modules/fleet/onchain-log';
+import { withTransactions } from '#lib/server/modules/fleet/onchain-feed';
 import { assertInFleet } from '#lib/server/modules/fleet/record-decision';
 import { RateLimitedError } from '#lib/server/modules/fleet/step-throttle';
 import { parseSubmission, submitDecision } from '#lib/server/modules/fleet/submit-decision';
@@ -36,15 +36,15 @@ const DEFAULT_FEED_LIMIT = 10;
 const MAX_FEED_LIMIT = 50;
 
 /**
- * The agent's newest log entries, newest first, with the transactions this server saw land: each entry's signature and
- * the owner's kills and resumes among them. For the page's on-chain feed.
+ * The agent's newest log entries, newest first, with its logged transactions: each entry's signature and the owner's
+ * kills and resumes among them. For the page's on-chain feed.
  */
 export const GET: RequestHandler = async ({ params, url }) => {
 	try {
 		const runtime = await getFleetRuntime();
 		assertInFleet(runtime, params.id!);
 		const entries = runtime.fleet.recentDecisions(params.id!, feedLimit(url.searchParams.get('limit')));
-		return json(withTransactions(entries, onchainLog.ofAgent(params.id!)));
+		return json(withTransactions(entries, runtime.fleet.transactions(params.id!)));
 	} catch (error) {
 		return fleetErrorResponse(error, `decisions of agent ${params.id}`);
 	}
