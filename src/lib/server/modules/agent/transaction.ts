@@ -32,6 +32,9 @@ import {
 /** V1 budgets zero bytes when unset. Covers the ~423 KB program data plus the 20.5 KB key account. */
 const LOADED_ACCOUNTS_DATA_SIZE_LIMIT = 512 * 1024;
 const PRIORITY_FEE_LAMPORTS = 10_000n;
+const LAMPORTS_PER_SIGNATURE = 5_000n;
+/** What one transaction sent by sendV1 costs its fee payer, the only Solana signer. */
+export const TRANSACTION_FEE_LAMPORTS = LAMPORTS_PER_SIGNATURE + PRIORITY_FEE_LAMPORTS;
 // getTransaction can return null for a few seconds after the send is confirmed.
 const LEDGER_POLL_ATTEMPTS = 20;
 const LEDGER_POLL_INTERVAL_MS = 1000;

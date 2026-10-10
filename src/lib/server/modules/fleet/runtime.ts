@@ -30,16 +30,25 @@ export function guardClientFrom(config: AgentConfig): GuardClient {
 	return { connection: connect(config.rpcUrl, config.rpcSubscriptionsUrl), programAddress: config.programAddress };
 }
 
+/** The server has no usable fleet configuration (a variable or a keypair file is missing); the mock agents still work. */
+export class FleetNotConfiguredError extends Error {}
+
 export async function createFleetRuntime(env: Env): Promise<FleetRuntime> {
+	const guard = await createGuard(env).catch((error: unknown) => {
+		throw new FleetNotConfiguredError(error instanceof Error ? error.message : String(error));
+	});
+	return { guard, fleet: new Fleet(FLEET_DIR), throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now: () => new Date() };
+}
+
+async function createGuard(env: Env): Promise<OnchainGuard> {
 	const config = loadConfig(env);
 	if (!config.ownerPath) throw new Error('OWNER_KEYPAIR is not set: the server signs kill and resume as the owner');
-	const guard = new OnchainGuard({
+	return new OnchainGuard({
 		client: guardClientFrom(config),
 		feePayer: await loadKeypairSigner(config.feePayerPath),
 		owner: await loadKeypairSigner(config.ownerPath),
 		identityOf: loadOnchainIdentity
 	});
-	return { guard, fleet: new Fleet(FLEET_DIR), throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now: () => new Date() };
 }
 
 function loadOnchainIdentity(agentId: string): AgentFile {

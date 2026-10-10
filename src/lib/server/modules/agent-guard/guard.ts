@@ -16,7 +16,8 @@ export const NO_DECISION = '00'.repeat(32);
 
 /**
  * Error names follow the program's errors. NotOwner stands for its `has_one = owner` check, CounterMismatch for a step
- * signed for a counter that is no longer the next one (the program rejects that signature).
+ * signed for a counter that is no longer the next one (the program rejects that signature). PayerUnfunded is the
+ * guard's own: the account that would pay the transaction cannot, so nothing is sent.
  */
 export type GuardErrorCode =
 	| 'AgentNotFound'
@@ -24,7 +25,8 @@ export type GuardErrorCode =
 	| 'AgentNotKilled'
 	| 'AgentNotActive'
 	| 'NotOwner'
-	| 'CounterMismatch';
+	| 'CounterMismatch'
+	| 'PayerUnfunded';
 
 export class GuardError extends Error {
 	constructor(
@@ -41,7 +43,8 @@ export const HTTP_STATUS_BY_GUARD_ERROR: Record<GuardErrorCode, number> = {
 	AgentKilled: 409,
 	AgentNotKilled: 409,
 	AgentNotActive: 409,
-	CounterMismatch: 409
+	CounterMismatch: 409,
+	PayerUnfunded: 503
 };
 
 export interface AgentGuard {

@@ -13,7 +13,7 @@ import {
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
-import { getFleetRuntime } from '../fleet/app-runtime';
+import { findFleetRuntime } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
 import type { FleetRuntime } from '../fleet/submit-decision';
 
@@ -196,13 +196,14 @@ export class BlinkService {
   }
 
   async getAgent(agentId: string): Promise<AgentStatusRecord | undefined> {
-    const runtime = await getFleetRuntime();
-    const fleetEntry = runtime.fleet.get(agentId);
-    return fleetEntry ? toAgentStatusRecord(runtime, fleetEntry) : agentsStore.get(agentId);
+    const runtime = await findFleetRuntime();
+    const fleetEntry = runtime?.fleet.get(agentId);
+    return runtime && fleetEntry ? toAgentStatusRecord(runtime, fleetEntry) : agentsStore.get(agentId);
   }
 
   async listAgents(): Promise<AgentStatusRecord[]> {
-    const runtime = await getFleetRuntime();
+    const runtime = await findFleetRuntime();
+    if (!runtime) return [...agentsStore.values()];
     const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
     return [...agentsStore.values(), ...fleetAgents];
   }
@@ -257,8 +258,8 @@ export class BlinkService {
     decision: 'approve' | 'pause'
   ): Promise<ActionPostResponse> {
     const userPubkey = new PublicKey(userAccount);
-    const runtime = await getFleetRuntime();
-    const newRoot = runtime.fleet.get(agentId)
+    const runtime = await findFleetRuntime();
+    const newRoot = runtime?.fleet.get(agentId)
       ? await this.applyGuardedDecision(runtime, userAccount, agentId, decision)
       : this.applyMockDecision(userAccount, agentId, decision);
 

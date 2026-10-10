@@ -1,22 +1,23 @@
 import { getBase16Decoder, getBase16Encoder, type Address, type TransactionSigner } from '@solana/kit';
 import type { AgentFile } from '../agent/files';
-import { fetchAgent, killAgent, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
+import { fetchAgent, fetchBalance, killAgent, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
 import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from '../agent/guard-errors';
 import type { AgentState } from '../agent/instructions';
 import { signGuardMessage, stepMessage } from '../agent/message';
 import { signResume } from '../agent/resume';
-import type { SendResult } from '../agent/transaction';
+import { TRANSACTION_FEE_LAMPORTS, type SendResult } from '../agent/transaction';
 import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode } from './guard';
 
 /** The program calls the guard makes; injected so tests run without a network. */
 export interface ChainCalls {
 	fetchAgent(client: GuardClient, agent: Address): Promise<AgentState>;
+	fetchBalance: typeof fetchBalance;
 	recordStep: typeof recordStep;
 	killAgent: typeof killAgent;
 	resumeAgent: typeof resumeAgent;
 }
 
-const PROGRAM_CHAIN_CALLS: ChainCalls = { fetchAgent, recordStep, killAgent, resumeAgent };
+const PROGRAM_CHAIN_CALLS: ChainCalls = { fetchAgent, fetchBalance, recordStep, killAgent, resumeAgent };
 
 export interface OnchainGuardDeps {
 	client: GuardClient;
@@ -38,7 +39,10 @@ const GUARD_ERROR_BY_PROGRAM_CODE = new Map<number, GuardErrorCode>([
 	[GUARD_ERROR_CODES.AgentNotActive, 'AgentNotActive']
 ]);
 
-/** The guard on Solana: the onchain_agent_guard program. Checks each rule before sending, so a refusal costs no fee. */
+/**
+ * The guard on Solana: the onchain_agent_guard program. Checks each rule and the payer's balance before sending, so a
+ * refusal costs no fee (a transaction from an empty payer is silently dropped and would only time out).
+ */
 export class OnchainGuard implements AgentGuard {
 	private readonly chain: ChainCalls;
 
@@ -57,6 +61,7 @@ export class OnchainGuard implements AgentGuard {
 		if (BigInt(counter) !== state.counter + 1n) {
 			throw new GuardError('CounterMismatch', `agent ${agentId} is at step ${state.counter}, not ${counter - 1}`);
 		}
+		await this.assertCanPay(this.deps.feePayer, `step ${counter} of agent ${agentId}`);
 		const hash = new Uint8Array(getBase16Encoder().encode(decisionHash));
 		const signature = signGuardMessage(stepMessage(identity.agent, BigInt(counter), hash), identity.mldsaSecretKey);
 		const step = {
@@ -73,6 +78,7 @@ export class OnchainGuard implements AgentGuard {
 	async kill(agentId: string): Promise<GuardAccount> {
 		const state = await this.readOwnedState(agentId);
 		if (state.status === 'Killed') throw new GuardError('AgentNotActive', `agent ${agentId} is already killed`);
+		await this.assertCanPay(this.deps.owner, `kill of agent ${agentId}`);
 		const { agent } = this.deps.identityOf(agentId);
 		assertLanded(await this.chain.killAgent(this.deps.client, this.deps.owner, agent), 'kill');
 		return { ...toGuardAccount(state), status: 'Killed' };
@@ -81,11 +87,22 @@ export class OnchainGuard implements AgentGuard {
 	async resume(agentId: string): Promise<GuardAccount> {
 		const state = await this.readOwnedState(agentId);
 		if (state.status === 'Active') throw new GuardError('AgentNotKilled', `agent ${agentId} is not killed`);
+		await this.assertCanPay(this.deps.owner, `resume of agent ${agentId}`);
 		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
 		const signature = signResume(agent, state, mldsaSecretKey);
 		const resume = { owner: this.deps.owner, agent, agentKey, signature };
 		assertLanded(await this.chain.resumeAgent(this.deps.client, resume), 'resume');
 		return { ...toGuardAccount(state), status: 'Active', counter: Number(state.counter + 1n) };
+	}
+
+	private async assertCanPay(payer: TransactionSigner, transaction: string): Promise<void> {
+		const balance = await this.chain.fetchBalance(this.deps.client, payer.address);
+		if (balance >= TRANSACTION_FEE_LAMPORTS) return;
+		throw new GuardError(
+			'PayerUnfunded',
+			`${payer.address} has ${balance} lamports and cannot pay ${TRANSACTION_FEE_LAMPORTS} for the ${transaction}; ` +
+				`fund it on devnet (https://faucet.solana.com)`
+		);
 	}
 
 	private readState(agentId: string): Promise<AgentState> {

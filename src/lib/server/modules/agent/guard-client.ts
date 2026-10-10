@@ -22,6 +22,11 @@ export interface GuardClient {
 	programAddress: Address;
 }
 
+export async function fetchBalance(client: GuardClient, account: Address): Promise<bigint> {
+	const { value } = await client.connection.rpc.getBalance(account).send();
+	return value;
+}
+
 export async function fetchAgent(client: GuardClient, agent: Address): Promise<AgentState> {
 	const account = await fetchEncodedAccount(client.connection.rpc, agent);
 	if (!account.exists) throw new Error(`agent account ${agent} not found (not registered, or wrong cluster)`);
