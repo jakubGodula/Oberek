@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { GuardError } from '../agent-guard/guard';
-import { AwaitingApprovalError } from './approval';
+import { AwaitingApprovalError, NoPendingProposalError } from './approval';
 import { fleetErrorResponse } from './http-errors';
 import { DecisionNotInLogError } from './latest-decision';
 import { FleetNotConfiguredError } from './runtime';
@@ -42,5 +42,12 @@ test('answers a decision submitted while a proposal waits with 409 AwaitingAppro
 	expect(await answer(new AwaitingApprovalError('waiting'))).toEqual({
 		status: 409,
 		body: { error: 'AwaitingApproval', message: 'waiting' }
+	});
+});
+
+test('answers a verdict without a waiting proposal with 409 NoPendingProposal', async () => {
+	expect(await answer(new NoPendingProposalError('none'))).toEqual({
+		status: 409,
+		body: { error: 'NoPendingProposal', message: 'none' }
 	});
 });
