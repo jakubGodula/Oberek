@@ -15,7 +15,7 @@
 7. [Faza 6: Telemetria, Indeksowanie & Event Bus (`agent-tracker`)](#faza-6-telemetria-indeksowanie--event-bus-agent-tracker)
 8. [Faza 7: Dashboard Operatora w Svelte 5 + Tailwind CSS](#faza-7-dashboard-operatora-w-svelte-5--tailwind-css)
 9. [Faza 8: Testy E2E, Wdrożenie Produkcyjne i Prezentacja Demo](#faza-8-testy-e2e-wdrożenie-produkcyjne-i-prezentacja-demo)
-10. [Matryca Zależności, Ryzyk i Kryteria Odbioru](#10-matryca-zależności-ryzyk-i-kryteria-odbioru)
+10. [Matryca Zależności, Ryzyk i Kryteria Odbioru](#9-matryca-zależności-ryzyk-i-kryteria-odbioru)
 
 ---
 

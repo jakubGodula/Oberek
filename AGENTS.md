@@ -1,6 +1,6 @@
 # Zasady repozytorium
 
-## Struktura Dokumnetacji Technicznej
+## Struktura Dokumentacji Technicznej
 
 ```
 .
