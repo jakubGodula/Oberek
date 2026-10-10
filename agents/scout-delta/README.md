@@ -24,7 +24,8 @@ bun agents/scout-delta
 ## Contract
 
 `POST {SCOUT_API_URL}/api/agents/{SCOUT_AGENT_ID}/decisions` with `{ kind, decision, summary }`:
-200 `{ counter }` recorded, 409 killed by the owner, 404 not in the fleet, 400 malformed.
+200 `{ counter }` recorded, 409 killed by the owner, 404 not in the fleet, 400 malformed, 429 too soon (on devnet at most one step per agent every 10 s), 502 the guard gave no
+verdict (e.g. RPC failure).
 
 ## Test
 

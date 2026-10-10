@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { GuardError, type AgentGuard } from '../agent-guard/guard';
 import type { DecisionRecord, Fleet } from './fleet';
+import type { StepThrottle } from './step-throttle';
 
 /** What an agent process sends: its own kind, its decision and one line describing it. */
 export interface DecisionSubmission {
@@ -12,6 +13,7 @@ export interface DecisionSubmission {
 export interface FleetRuntime {
 	guard: AgentGuard;
 	fleet: Fleet;
+	throttle: StepThrottle;
 	now(): Date;
 }
 
@@ -25,6 +27,7 @@ export async function submitDecision(
 	submission: DecisionSubmission
 ): Promise<{ counter: number }> {
 	if (!runtime.fleet.get(agentId)) throw new GuardError('AgentNotFound', `agent ${agentId} is not in the fleet`);
+	runtime.throttle.claim(agentId, runtime.now().getTime());
 	const account = await runtime.guard.readAgent(agentId);
 	const record: DecisionRecord = {
 		agent: agentId,
@@ -33,7 +36,15 @@ export async function submitDecision(
 		observedAt: runtime.now().toISOString()
 	};
 	const decisionHash = createHash('sha256').update(JSON.stringify(record)).digest('hex');
-	const recorded = await runtime.guard.recordStep(agentId, decisionHash);
+	let recorded;
+	try {
+		recorded = await runtime.guard.recordStep(agentId, record.counter, decisionHash);
+	} catch (error) {
+		// A refusal is a verdict: nothing was recorded. Any other failure (e.g. a confirmation timeout on the chain) may
+		// still end with the step recorded, and the log is the only way to recompute its hash.
+		if (!(error instanceof GuardError)) runtime.fleet.appendDecision(agentId, { record, decisionHash, unconfirmed: true });
+		throw error;
+	}
 	runtime.fleet.appendDecision(agentId, { record, decisionHash });
 	return { counter: recorded.counter };
 }

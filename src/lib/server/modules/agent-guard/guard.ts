@@ -14,8 +14,17 @@ export interface GuardAccount {
 
 export const NO_DECISION = '00'.repeat(32);
 
-/** Error names follow the program's errors; NotOwner stands for its `has_one = owner` check. */
-export type GuardErrorCode = 'AgentNotFound' | 'AgentKilled' | 'AgentNotKilled' | 'AgentNotActive' | 'NotOwner';
+/**
+ * Error names follow the program's errors. NotOwner stands for its `has_one = owner` check, CounterMismatch for a step
+ * signed for a counter that is no longer the next one (the program rejects that signature).
+ */
+export type GuardErrorCode =
+	| 'AgentNotFound'
+	| 'AgentKilled'
+	| 'AgentNotKilled'
+	| 'AgentNotActive'
+	| 'NotOwner'
+	| 'CounterMismatch';
 
 export class GuardError extends Error {
 	constructor(
@@ -31,13 +40,17 @@ export const HTTP_STATUS_BY_GUARD_ERROR: Record<GuardErrorCode, number> = {
 	NotOwner: 403,
 	AgentKilled: 409,
 	AgentNotKilled: 409,
-	AgentNotActive: 409
+	AgentNotActive: 409,
+	CounterMismatch: 409
 };
 
 export interface AgentGuard {
 	readAgent(agentId: string): Promise<GuardAccount>;
-	/** Rejected with AgentKilled while the agent is killed. */
-	recordStep(agentId: string, decisionHash: string): Promise<GuardAccount>;
+	/**
+	 * Records the decision as step `counter`, which must be the agent's next one. Rejected with AgentKilled while the
+	 * agent is killed and with CounterMismatch when another step took that counter first.
+	 */
+	recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount>;
 	/** Owner only; the agent must be active. */
 	kill(agentId: string, owner: string): Promise<GuardAccount>;
 	/** Owner only; the agent must be killed. Uses up one counter value, like the program. */

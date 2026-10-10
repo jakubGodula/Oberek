@@ -7,6 +7,9 @@
 
   let { data } = $props();
 
+  // CHAIN on the server: devnet means fleet agents are guarded by the real program, fake means by local files.
+  const isDevnet = $derived(data.chain === 'devnet');
+
   let agents = $state(data.agents);
   let selectedAgent = $state(data.agents[0] || null);
   let copiedId = $state<string | null>(null);
@@ -34,7 +37,8 @@
   const statusColors: Record<string, string> = {
     ACTIVE: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
     PAUSED: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
-    IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30'
+    IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
+    UNAVAILABLE: 'text-amber-400 bg-amber-500/15 border-amber-500/30'
   };
 
   function timeAgo(ts: number): string {
@@ -118,15 +122,24 @@
         <h1 class="text-[17px] font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent leading-none">
           Aegis Mercato
         </h1>
-        <p class="text-[11px] text-slate-500 mt-0.5">Post-Quantum Agent Observability Engine · Solana Devnet</p>
+        <p class="text-[11px] text-slate-500 mt-0.5">
+          Post-Quantum Agent Observability Engine · {isDevnet ? 'Solana Devnet' : 'fake chain (local files)'}
+        </p>
       </div>
     </div>
 
     <div class="flex items-center gap-2.5">
-      <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-[11px] font-mono">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-        Devnet Live
-      </div>
+      {#if isDevnet}
+        <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 text-[11px] font-mono">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          Devnet Live
+        </div>
+      {:else}
+        <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-500/[0.08] border border-amber-500/20 text-amber-400 text-[11px] font-mono">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+          Fake chain
+        </div>
+      {/if}
       <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-violet-500/[0.08] border border-violet-500/20 text-violet-300 text-[11px] font-mono">
         <Lock class="w-3 h-3" /> ML-DSA-44 · KEM-768
       </div>

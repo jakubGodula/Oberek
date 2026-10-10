@@ -21,10 +21,13 @@ export class FakeGuard implements AgentGuard {
 		return JSON.parse(readFileSync(path, 'utf8'));
 	}
 
-	async recordStep(agentId: string, decisionHash: string): Promise<GuardAccount> {
+	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
 		const account = await this.readAgent(agentId);
 		if (account.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
-		return this.save(agentId, { ...account, counter: account.counter + 1, lastDecision: decisionHash });
+		if (counter !== account.counter + 1) {
+			throw new GuardError('CounterMismatch', `agent ${agentId} is at step ${account.counter}, not ${counter - 1}`);
+		}
+		return this.save(agentId, { ...account, counter, lastDecision: decisionHash });
 	}
 
 	async kill(agentId: string, owner: string): Promise<GuardAccount> {

@@ -57,15 +57,22 @@ describe('readAgent', () => {
 
 describe('recordStep', () => {
 	test('counts the step and stores the decision hash', async () => {
-		const account = await guard.recordStep(AGENT, DECISION_HASH);
+		const account = await guard.recordStep(AGENT, 1, DECISION_HASH);
 		expect(account.counter).toBe(1);
 		expect(account.lastDecision).toBe(DECISION_HASH);
 	});
 
 	test('rejects a step while the agent is killed', async () => {
 		await guard.kill(AGENT, OWNER);
-		await expectGuardError(guard.recordStep(AGENT, DECISION_HASH), 'AgentKilled');
+		await expectGuardError(guard.recordStep(AGENT, 1, DECISION_HASH), 'AgentKilled');
 		expect((await guard.readAgent(AGENT)).counter).toBe(0);
+	});
+
+	test('rejects a step built for any counter but the next one, like a signature over a stale counter', async () => {
+		await guard.recordStep(AGENT, 1, DECISION_HASH);
+		await expectGuardError(guard.recordStep(AGENT, 1, DECISION_HASH), 'CounterMismatch');
+		await expectGuardError(guard.recordStep(AGENT, 3, DECISION_HASH), 'CounterMismatch');
+		expect((await guard.readAgent(AGENT)).counter).toBe(1);
 	});
 });
 

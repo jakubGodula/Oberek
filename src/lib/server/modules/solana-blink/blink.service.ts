@@ -12,14 +12,16 @@ import {
   clusterApiUrl
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
-import type { GuardStatus } from '../agent-guard/guard';
+import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { getFleetRuntime } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
-import { fleetRuntime } from '../fleet/runtime';
+import type { AppRuntime } from '../fleet/runtime';
 
 export interface AgentStatusRecord {
   id: string;
   name: string;
-  status: 'ACTIVE' | 'PAUSED' | 'IDLE';
+  /** UNAVAILABLE: a fleet agent whose guard account could not be read (e.g. the Solana RPC failed). */
+  status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE';
   currentTask: string;
   pqcPubkeyHash: string;
   lastCommitmentRoot: string;
@@ -102,24 +104,39 @@ const CARD_STATUS_BY_GUARD_STATUS: Record<GuardStatus, AgentStatusRecord['status
   Active: 'ACTIVE',
   Killed: 'PAUSED'
 };
-/** The fake guard checks no PQ signatures yet, so fleet agents have no PQ key. */
+/** Fleet cards do not show the agent's PQ key yet. */
 const NO_PQC_KEY = '00'.repeat(32);
 const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
 
-async function toAgentStatusRecord(entry: FleetEntry): Promise<AgentStatusRecord> {
-  const account = await fleetRuntime.guard.readAgent(entry.id);
-  const last = fleetRuntime.fleet.lastDecision(entry.id);
-  return {
+/** One unreadable agent shows as UNAVAILABLE instead of failing the whole list. */
+async function toAgentStatusRecord(runtime: AppRuntime, entry: FleetEntry): Promise<AgentStatusRecord> {
+  const last = runtime.fleet.lastDecision(entry.id);
+  const card = {
     id: entry.id,
     name: entry.name,
-    status: CARD_STATUS_BY_GUARD_STATUS[account.status],
     currentTask: last?.record.summary ?? NO_DECISION_YET,
     pqcPubkeyHash: NO_PQC_KEY,
-    lastCommitmentRoot: account.lastDecision,
     lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
-    riskLevel: entry.riskLevel,
-    actionsExecuted: account.counter
+    riskLevel: entry.riskLevel
   };
+  try {
+    const account = await runtime.guard.readAgent(entry.id);
+    return {
+      ...card,
+      status: CARD_STATUS_BY_GUARD_STATUS[account.status],
+      lastCommitmentRoot: account.lastDecision,
+      actionsExecuted: account.counter
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      ...card,
+      status: 'UNAVAILABLE',
+      currentTask: `Niedostępny: ${reason}`,
+      lastCommitmentRoot: NO_DECISION,
+      actionsExecuted: 0
+    };
+  }
 }
 
 function memoText(agentId: string, decision: 'approve' | 'pause', newRoot: string): string {
@@ -179,12 +196,14 @@ export class BlinkService {
   }
 
   async getAgent(agentId: string): Promise<AgentStatusRecord | undefined> {
-    const fleetEntry = fleetRuntime.fleet.get(agentId);
-    return fleetEntry ? toAgentStatusRecord(fleetEntry) : agentsStore.get(agentId);
+    const runtime = await getFleetRuntime();
+    const fleetEntry = runtime.fleet.get(agentId);
+    return fleetEntry ? toAgentStatusRecord(runtime, fleetEntry) : agentsStore.get(agentId);
   }
 
   async listAgents(): Promise<AgentStatusRecord[]> {
-    const fleetAgents = await Promise.all(fleetRuntime.fleet.list().map(toAgentStatusRecord));
+    const runtime = await getFleetRuntime();
+    const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
     return [...agentsStore.values(), ...fleetAgents];
   }
 
@@ -238,8 +257,9 @@ export class BlinkService {
     decision: 'approve' | 'pause'
   ): Promise<ActionPostResponse> {
     const userPubkey = new PublicKey(userAccount);
-    const newRoot = fleetRuntime.fleet.get(agentId)
-      ? await this.applyGuardedDecision(userAccount, agentId, decision)
+    const runtime = await getFleetRuntime();
+    const newRoot = runtime.fleet.get(agentId)
+      ? await this.applyGuardedDecision(runtime, userAccount, agentId, decision)
       : this.applyMockDecision(userAccount, agentId, decision);
 
     const memoData = Buffer.from(memoText(agentId, decision, newRoot), 'utf-8');
@@ -273,11 +293,12 @@ export class BlinkService {
 
   /** Fleet agents: the guard decides; a refusal (not the owner, wrong state) reaches the caller as a GuardError. */
   private async applyGuardedDecision(
+    runtime: AppRuntime,
     userAccount: string,
     agentId: string,
     decision: 'approve' | 'pause'
   ): Promise<string> {
-    const { guard, fleet } = fleetRuntime;
+    const { guard, fleet } = runtime;
     const account =
       decision === 'pause' ? await guard.kill(agentId, userAccount) : await guard.resume(agentId, userAccount);
     recordHistory({

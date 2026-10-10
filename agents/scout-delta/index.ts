@@ -11,10 +11,22 @@ const DEFAULT_TICK_MS = 5000;
 
 const apiUrl = process.env.SCOUT_API_URL ?? DEFAULT_API_URL;
 const agentId = process.env.SCOUT_AGENT_ID ?? DEFAULT_AGENT_ID;
-const tickMs = Number(process.env.SCOUT_TICK_MS ?? DEFAULT_TICK_MS);
+const tickMs = intervalFromEnv('SCOUT_TICK_MS', DEFAULT_TICK_MS);
 
 const submit = createRuntimeClient(apiUrl, agentId);
 let priceUsd = START_PRICE_USD;
+
+/** A positive whole number of milliseconds from the environment; anything else stops the agent instead of spinning. */
+function intervalFromEnv(name: string, fallbackMs: number): number {
+	const raw = process.env[name];
+	if (raw === undefined) return fallbackMs;
+	const value = Number(raw);
+	if (!Number.isInteger(value) || value <= 0) {
+		console.error(`${name} must be a positive whole number of milliseconds, got "${raw}"`);
+		process.exit(1);
+	}
+	return value;
+}
 
 async function tick(): Promise<void> {
 	const previousPriceUsd = priceUsd;

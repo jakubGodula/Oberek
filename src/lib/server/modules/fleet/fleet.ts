@@ -27,6 +27,8 @@ export interface DecisionRecord {
 export interface DecisionLogEntry {
 	record: DecisionRecord;
 	decisionHash: string;
+	/** Set when the guard failed without a verdict: the step may or may not have been recorded. */
+	unconfirmed?: true;
 }
 
 const ENTRY_FILE = 'agent.json';
