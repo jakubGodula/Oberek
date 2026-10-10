@@ -6,7 +6,7 @@ import type { AgentState } from '../agent/instructions';
 import { signGuardMessage, stepMessage } from '../agent/message';
 import { signResume } from '../agent/resume';
 import { TRANSACTION_FEE_LAMPORTS, type SendResult } from '../agent/transaction';
-import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode } from './guard';
+import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode, type LandedTransaction } from './guard';
 
 /** The program calls the guard makes; injected so tests run without a network. */
 export interface ChainCalls {
@@ -30,6 +30,8 @@ export interface OnchainGuardDeps {
 	owner: TransactionSigner;
 	/** The agent's on-chain addresses and ML-DSA-44 secret key; throws AgentNotFound for an unknown agent. */
 	identityOf(agentId: string): AgentFile;
+	/** Told of every transaction that landed and succeeded: the page's on-chain log. */
+	onLanded?(transaction: LandedTransaction): void;
 	chain?: ChainCalls;
 }
 
@@ -71,7 +73,9 @@ export class OnchainGuard implements AgentGuard {
 			decisionHash: hash,
 			signature
 		};
-		assertLanded(await this.chain.recordStep(this.deps.client, step), 'record_step');
+		const result = await this.chain.recordStep(this.deps.client, step);
+		assertLanded(result, 'record_step');
+		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature: result.signature, decisionHash });
 		return { ...toGuardAccount(state), counter, lastDecision: decisionHash };
 	}
 
@@ -80,7 +84,9 @@ export class OnchainGuard implements AgentGuard {
 		if (state.status === 'Killed') throw new GuardError('AgentNotActive', `agent ${agentId} is already killed`);
 		await this.assertCanPay(this.deps.owner, `kill of agent ${agentId}`);
 		const { agent } = this.deps.identityOf(agentId);
-		assertLanded(await this.chain.killAgent(this.deps.client, this.deps.owner, agent), 'kill');
+		const result = await this.chain.killAgent(this.deps.client, this.deps.owner, agent);
+		assertLanded(result, 'kill');
+		this.deps.onLanded?.({ agentId, event: 'AgentKilled', counter: Number(state.counter), signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Killed' };
 	}
 
@@ -91,8 +97,11 @@ export class OnchainGuard implements AgentGuard {
 		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
 		const signature = signResume(agent, state, mldsaSecretKey);
 		const resume = { owner: this.deps.owner, agent, agentKey, signature };
-		assertLanded(await this.chain.resumeAgent(this.deps.client, resume), 'resume');
-		return { ...toGuardAccount(state), status: 'Active', counter: Number(state.counter + 1n) };
+		const result = await this.chain.resumeAgent(this.deps.client, resume);
+		assertLanded(result, 'resume');
+		const counter = Number(state.counter + 1n);
+		this.deps.onLanded?.({ agentId, event: 'AgentResumed', counter, signature: result.signature });
+		return { ...toGuardAccount(state), status: 'Active', counter };
 	}
 
 	private async assertCanPay(payer: TransactionSigner, transaction: string): Promise<void> {

@@ -14,6 +14,20 @@ export interface GuardAccount {
 
 export const NO_DECISION = '00'.repeat(32);
 
+/** The events the program emits, one per successful transaction. */
+export type GuardEvent = 'StepRecorded' | 'AgentKilled' | 'AgentResumed';
+
+/** A guard transaction that landed and succeeded, named by the event it emitted on chain. */
+export interface LandedTransaction {
+	agentId: string;
+	event: GuardEvent;
+	/** The counter the event carries: the step's or the resume's, or the unchanged one of a kill. */
+	counter: number;
+	signature: string;
+	/** Steps only. */
+	decisionHash?: string;
+}
+
 /**
  * Error names follow the program's errors. NotOwner stands for its `has_one = owner` check, CounterMismatch for a step
  * signed for a counter that is no longer the next one (the program rejects that signature). PayerUnfunded is the

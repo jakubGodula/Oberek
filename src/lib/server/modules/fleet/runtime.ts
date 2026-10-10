@@ -4,7 +4,7 @@ import { loadConfig, type AgentConfig } from '../agent/config';
 import { loadAgentFile, loadKeypairSigner, type AgentFile } from '../agent/files';
 import type { GuardClient } from '../agent/guard-client';
 import { connect } from '../agent/transaction';
-import { assertAgentId, GuardError } from '../agent-guard/guard';
+import { assertAgentId, GuardError, type LandedTransaction } from '../agent-guard/guard';
 import { OnchainGuard } from '../agent-guard/onchain-guard';
 import { Fleet } from './fleet';
 import { StepThrottle } from './step-throttle';
@@ -33,21 +33,26 @@ export function guardClientFrom(config: AgentConfig): GuardClient {
 /** The server has no usable fleet configuration (a variable or a keypair file is missing); the mock agents still work. */
 export class FleetNotConfiguredError extends Error {}
 
-export async function createFleetRuntime(env: Env): Promise<FleetRuntime> {
-	const guard = await createGuard(env).catch((error: unknown) => {
+/** `onLanded` hears of every guard transaction that landed (see OnchainGuardDeps). */
+export async function createFleetRuntime(
+	env: Env,
+	onLanded?: (transaction: LandedTransaction) => void
+): Promise<FleetRuntime> {
+	const guard = await createGuard(env, onLanded).catch((error: unknown) => {
 		throw new FleetNotConfiguredError(error instanceof Error ? error.message : String(error));
 	});
 	return { guard, fleet: new Fleet(FLEET_DIR), throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now: () => new Date() };
 }
 
-async function createGuard(env: Env): Promise<OnchainGuard> {
+async function createGuard(env: Env, onLanded?: (transaction: LandedTransaction) => void): Promise<OnchainGuard> {
 	const config = loadConfig(env);
 	if (!config.ownerPath) throw new Error('OWNER_KEYPAIR is not set: the server signs kill and resume as the owner');
 	return new OnchainGuard({
 		client: guardClientFrom(config),
 		feePayer: await loadKeypairSigner(config.feePayerPath),
 		owner: await loadKeypairSigner(config.ownerPath),
-		identityOf: loadOnchainIdentity
+		identityOf: loadOnchainIdentity,
+		onLanded
 	});
 }
 
