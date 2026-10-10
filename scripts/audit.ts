@@ -1,0 +1,54 @@
+// Audits a fleet agent: compares its decision log (.devnet/fleet/<id>/decisions.jsonl) with its on-chain history and
+// checks that every step and resume is on-chain and that each on-chain hash is backed by a log record that still
+// hashes to it. Read-only: sends no transactions, costs no fees. Run from the repo root.
+// Usage: bun scripts/audit.ts <agent id>
+// Exit code: 0 history OK, 1 problems found, 2 usage error.
+import type { Address } from '@solana/kit';
+import { loadConfig } from '../src/lib/server/modules/agent/config';
+import type { GuardEvent } from '../src/lib/server/modules/agent/events';
+import { loadAgentFile } from '../src/lib/server/modules/agent/files';
+import { fetchAgent, fetchGuardEvents, type GuardClient } from '../src/lib/server/modules/agent/guard-client';
+import type { AgentState } from '../src/lib/server/modules/agent/instructions';
+import { auditHistory, type AuditReport } from '../src/lib/server/modules/fleet/audit';
+import { Fleet } from '../src/lib/server/modules/fleet/fleet';
+import { FLEET_DIR, guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+
+const USAGE = 'Usage: bun scripts/audit.ts <agent id>   (a directory in .devnet/fleet, e.g. sentinel-01)';
+const EXIT_OK = 0;
+const EXIT_PROBLEMS = 1;
+const EXIT_USAGE = 2;
+
+const agentId = agentIdFromArgs();
+const client = guardClientFrom(loadConfig());
+const { agent } = loadAgentFile(onchainIdentityPath(agentId));
+// The account is read before the history, so its counter is the audit's cutoff: steps that land while the history is
+// being fetched are past it and reported as newer, not as problems.
+const state = await fetchAgent(client, agent);
+const events = await fetchEventsShowingProgress(client, agent);
+const report = auditHistory({ agent, state, events, log: new Fleet(FLEET_DIR).decisions(agentId) });
+printReport(agent, state, report);
+process.exitCode = report.problems.length ? EXIT_PROBLEMS : EXIT_OK;
+
+function agentIdFromArgs(): string {
+	const id = process.argv[2];
+	if (id) return id;
+	console.error(USAGE);
+	process.exit(EXIT_USAGE);
+}
+
+/** One getTransaction per transaction, so this takes minutes; the progress line is rewritten in place. */
+async function fetchEventsShowingProgress(guard: GuardClient, account: Address): Promise<GuardEvent[]> {
+	const fetched = await fetchGuardEvents(guard, account, (done, total) =>
+		process.stdout.write(`\rfetching transactions ${done}/${total}`)
+	);
+	process.stdout.write('\n');
+	return fetched;
+}
+
+function printReport(account: Address, agentState: AgentState, audit: AuditReport): void {
+	console.log(`agent ${agentId} (${account}), ${agentState.status}, counter ${agentState.counter}`);
+	console.log(`on-chain: ${audit.steps} steps, ${audit.resumes} resumes, ${audit.kills} kills; log: ${audit.logEntries} entries`);
+	if (audit.newer > 0) console.log(`${audit.newer} events and log entries newer than the account read, not audited`);
+	for (const problem of audit.problems) console.log(`  ✗ ${problem}`);
+	console.log(audit.problems.length ? `${audit.problems.length} problems` : 'history OK');
+}

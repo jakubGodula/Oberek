@@ -19,6 +19,13 @@ describe('client matches the program IDL', () => {
 		expect(Array.from(DISCRIMINATORS.agent)).toEqual(idl.accounts.find((account) => account.name === 'Agent')!.discriminator);
 	});
 
+	it('uses the IDL event discriminators', () => {
+		const eventDiscriminator = (name: string) => idl.events.find((event) => event.name === name)?.discriminator;
+		expect(Array.from(DISCRIMINATORS.stepRecorded)).toEqual(eventDiscriminator('StepRecorded')!);
+		expect(Array.from(DISCRIMINATORS.agentKilled)).toEqual(eventDiscriminator('AgentKilled')!);
+		expect(Array.from(DISCRIMINATORS.agentResumed)).toEqual(eventDiscriminator('AgentResumed')!);
+	});
+
 	it('uses the IDL error codes', () => {
 		expect(Object.fromEntries(idl.errors.map((error) => [error.name, error.code]))).toEqual(GUARD_ERROR_CODES);
 	});

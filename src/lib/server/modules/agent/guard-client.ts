@@ -1,4 +1,4 @@
-import { fetchEncodedAccount, type Address, type TransactionSigner } from '@solana/kit';
+import { fetchEncodedAccount, type Address, type Signature, type TransactionSigner } from '@solana/kit';
 import { getCreateAccountInstruction } from '@solana-program/system';
 import {
 	AGENT_KEY_ACCOUNT_SIZE,
@@ -9,6 +9,7 @@ import {
 	resumeInstruction,
 	type AgentState
 } from './instructions';
+import { parseGuardEvents, type GuardEvent } from './events';
 import { sendV1, type SendResult, type SolanaConnection } from './transaction';
 
 /** Preparing the 1,312 B key costs ~1.09M CU. */
@@ -16,6 +17,8 @@ const REGISTER_COMPUTE_UNIT_LIMIT = 1_400_000;
 /** ML-DSA-44 verification ~260k CU plus Anchor (Mollusk: step 271,861, resume 262,233). */
 const SIGNED_COMPUTE_UNIT_LIMIT = 400_000;
 const KILL_COMPUTE_UNIT_LIMIT = 50_000;
+/** The most getSignaturesForAddress returns at once. */
+const SIGNATURES_PAGE_LIMIT = 1000;
 
 export interface GuardClient {
 	connection: SolanaConnection;
@@ -34,6 +37,43 @@ export async function fetchAgent(client: GuardClient, agent: Address): Promise<A
 		throw new Error(`account ${agent} belongs to ${account.programAddress}, not to GUARD_PROGRAM_ID ${client.programAddress}`);
 	}
 	return decodeAgent(new Uint8Array(account.data));
+}
+
+/**
+ * The guard events in the transaction history of `account`, oldest first. One getTransaction per transaction: on the
+ * free-tier devnet RPC (10 per window) a few hundred steps take minutes. `onProgress` gets (fetched, total).
+ */
+export async function fetchGuardEvents(
+	client: GuardClient,
+	account: Address,
+	onProgress?: (fetched: number, total: number) => void
+): Promise<GuardEvent[]> {
+	const signatures = await fetchSuccessfulSignatures(client, account);
+	const events: GuardEvent[] = [];
+	for (const [index, signature] of signatures.entries()) {
+		const transaction = await client.connection.rpc
+			.getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+			.send();
+		const logs = transaction?.meta?.logMessages;
+		if (!logs) throw new Error(`transaction ${signature} or its logs are not available from this RPC (pruned?)`);
+		events.push(...parseGuardEvents(logs, client.programAddress));
+		onProgress?.(index + 1, signatures.length);
+	}
+	return events;
+}
+
+/** Failed transactions change nothing and emit no events. */
+async function fetchSuccessfulSignatures(client: GuardClient, account: Address): Promise<Signature[]> {
+	const signatures: Signature[] = [];
+	let before: Signature | undefined;
+	for (;;) {
+		const page = await client.connection.rpc
+			.getSignaturesForAddress(account, { commitment: 'confirmed', limit: SIGNATURES_PAGE_LIMIT, ...(before && { before }) })
+			.send();
+		signatures.push(...page.filter((entry) => entry.err === null).map((entry) => entry.signature));
+		if (page.length < SIGNATURES_PAGE_LIMIT) return signatures.reverse();
+		before = page[page.length - 1].signature;
+	}
 }
 
 /**

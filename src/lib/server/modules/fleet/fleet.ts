@@ -67,6 +67,11 @@ export class Fleet {
 		return this.readLog(agentId).at(-1);
 	}
 
+	/** The whole log, oldest first, `unconfirmed` marks included. */
+	decisions(agentId: string): DecisionLogEntry[] {
+		return this.readLog(agentId);
+	}
+
 	/** The newest `limit` log entries, newest first, `unconfirmed` marks included. */
 	recentDecisions(agentId: string, limit: number): DecisionLogEntry[] {
 		return this.readLog(agentId).slice(-limit).reverse();
