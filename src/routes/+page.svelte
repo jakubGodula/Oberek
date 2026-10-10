@@ -66,6 +66,13 @@
     }
   }
 
+  // Fleet agents run as their own processes and change state on their own.
+  const REFRESH_INTERVAL_MS = 5000;
+  $effect(() => {
+    const timer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
+  });
+
   async function copyText(text: string, id: string) {
     await navigator.clipboard.writeText(text);
     copiedId = id;

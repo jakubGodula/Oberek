@@ -1,0 +1,51 @@
+import { createHash } from 'crypto';
+import { GuardError, type AgentGuard } from '../agent-guard/guard';
+import type { DecisionRecord, Fleet } from './fleet';
+
+/** What an agent process sends: its own kind, its decision and one line describing it. */
+export interface DecisionSubmission {
+	kind: string;
+	decision: Record<string, unknown>;
+	summary: string;
+}
+
+export interface FleetRuntime {
+	guard: AgentGuard;
+	fleet: Fleet;
+	now(): Date;
+}
+
+/**
+ * Hashes the agent's decision and records the step with the guard, which refuses it while the agent is killed. The
+ * log keeps the full record, so anyone can recompute the hash the guard holds.
+ */
+export async function submitDecision(
+	runtime: FleetRuntime,
+	agentId: string,
+	submission: DecisionSubmission
+): Promise<{ counter: number }> {
+	if (!runtime.fleet.get(agentId)) throw new GuardError('AgentNotFound', `agent ${agentId} is not in the fleet`);
+	const account = await runtime.guard.readAgent(agentId);
+	const record: DecisionRecord = {
+		agent: agentId,
+		counter: account.counter + 1,
+		...submission,
+		observedAt: runtime.now().toISOString()
+	};
+	const decisionHash = createHash('sha256').update(JSON.stringify(record)).digest('hex');
+	const recorded = await runtime.guard.recordStep(agentId, decisionHash);
+	runtime.fleet.appendDecision(agentId, { record, decisionHash });
+	return { counter: recorded.counter };
+}
+
+/** Returns the submission with exactly its three fields, or null when the body does not have that shape. */
+export function parseSubmission(body: unknown): DecisionSubmission | null {
+	if (!isPlainObject(body)) return null;
+	const { kind, decision, summary } = body;
+	if (typeof kind !== 'string' || kind === '' || typeof summary !== 'string' || !isPlainObject(decision)) return null;
+	return { kind, decision, summary };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}

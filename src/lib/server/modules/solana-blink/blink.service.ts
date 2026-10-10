@@ -12,6 +12,9 @@ import {
   clusterApiUrl
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
+import type { GuardStatus } from '../agent-guard/guard';
+import type { FleetEntry } from '../fleet/fleet';
+import { fleetRuntime } from '../fleet/runtime';
 
 export interface AgentStatusRecord {
   id: string;
@@ -94,6 +97,35 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
   ]
 ]);
 
+// Agents registered in the fleet (scripts/fleet.ts) run as their own processes; their state comes from the guard.
+const CARD_STATUS_BY_GUARD_STATUS: Record<GuardStatus, AgentStatusRecord['status']> = {
+  Active: 'ACTIVE',
+  Killed: 'PAUSED'
+};
+/** The fake guard checks no PQ signatures yet, so fleet agents have no PQ key. */
+const NO_PQC_KEY = '00'.repeat(32);
+const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
+
+async function toAgentStatusRecord(entry: FleetEntry): Promise<AgentStatusRecord> {
+  const account = await fleetRuntime.guard.readAgent(entry.id);
+  const last = fleetRuntime.fleet.lastDecision(entry.id);
+  return {
+    id: entry.id,
+    name: entry.name,
+    status: CARD_STATUS_BY_GUARD_STATUS[account.status],
+    currentTask: last?.record.summary ?? NO_DECISION_YET,
+    pqcPubkeyHash: NO_PQC_KEY,
+    lastCommitmentRoot: account.lastDecision,
+    lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
+    riskLevel: entry.riskLevel,
+    actionsExecuted: account.counter
+  };
+}
+
+function memoText(agentId: string, decision: 'approve' | 'pause', newRoot: string): string {
+  return `AEGIS_PQC_DMS:${agentId}:${decision.toUpperCase()}:${newRoot.slice(0, 16)}`;
+}
+
 // Seed historii demonstracyjnej
 const _seedHistory = () => {
   const entries: Omit<ActionHistoryEntry, 'id'>[] = [
@@ -146,12 +178,14 @@ export class BlinkService {
     );
   }
 
-  getAgent(agentId: string): AgentStatusRecord | undefined {
-    return agentsStore.get(agentId);
+  async getAgent(agentId: string): Promise<AgentStatusRecord | undefined> {
+    const fleetEntry = fleetRuntime.fleet.get(agentId);
+    return fleetEntry ? toAgentStatusRecord(fleetEntry) : agentsStore.get(agentId);
   }
 
-  listAgents(): AgentStatusRecord[] {
-    return Array.from(agentsStore.values());
+  async listAgents(): Promise<AgentStatusRecord[]> {
+    const fleetAgents = await Promise.all(fleetRuntime.fleet.list().map(toAgentStatusRecord));
+    return [...agentsStore.values(), ...fleetAgents];
   }
 
   getActionHistory(limit = 20, agentId?: string): ActionHistoryEntry[] {
@@ -161,8 +195,8 @@ export class BlinkService {
     return filtered.slice(-limit).reverse();
   }
 
-  getActionMetadata(agentId: string, origin: string): ActionGetResponse {
-    const agent = agentsStore.get(agentId) || {
+  async getActionMetadata(agentId: string, origin: string): Promise<ActionGetResponse> {
+    const agent = (await this.getAgent(agentId)) || {
       id: agentId,
       name: `Agent #${agentId}`,
       status: 'ACTIVE' as const,
@@ -204,46 +238,11 @@ export class BlinkService {
     decision: 'approve' | 'pause'
   ): Promise<ActionPostResponse> {
     const userPubkey = new PublicKey(userAccount);
+    const newRoot = fleetRuntime.fleet.get(agentId)
+      ? await this.applyGuardedDecision(userAccount, agentId, decision)
+      : this.applyMockDecision(userAccount, agentId, decision);
 
-    const agent = agentsStore.get(agentId);
-    let newRoot = '00'.repeat(32);
-    if (agent) {
-      if (decision === 'pause') {
-        agent.status = 'PAUSED';
-      } else {
-        agent.status = 'ACTIVE';
-        agent.actionsExecuted += 1;
-      }
-      agent.lastUpdated = Date.now();
-      const updatedCommitment = pqcCrypto.computeStateCommitment({
-        agentId,
-        decision,
-        status: agent.status,
-        timestamp: agent.lastUpdated
-      });
-      agent.lastCommitmentRoot = updatedCommitment.hexRoot;
-      newRoot = updatedCommitment.hexRoot;
-
-      // Zapisz do historii observability
-      const memoHash = `AEGIS_PQC_DMS:${agentId}:${decision.toUpperCase()}:${newRoot.slice(0, 16)}`;
-      const operatorShort = `${userAccount.slice(0, 4)}...${userAccount.slice(-3)}`;
-      actionHistory.push({
-        id: `hist-${Date.now()}`,
-        agentId,
-        agentName: agent.name,
-        decision,
-        operator: operatorShort,
-        newRoot,
-        newStatus: agent.status,
-        timestamp: agent.lastUpdated,
-        memoHash
-      });
-    }
-
-    const memoData = Buffer.from(
-      `AEGIS_PQC_DMS:${agentId}:${decision.toUpperCase()}:${newRoot.slice(0, 16)}`,
-      'utf-8'
-    );
+    const memoData = Buffer.from(memoText(agentId, decision, newRoot), 'utf-8');
 
     const instruction = new TransactionInstruction({
       keys: [{ pubkey: userPubkey, isSigner: true, isWritable: true }],
@@ -271,6 +270,80 @@ export class BlinkService {
       }
     });
   }
+
+  /** Fleet agents: the guard decides; a refusal (not the owner, wrong state) reaches the caller as a GuardError. */
+  private async applyGuardedDecision(
+    userAccount: string,
+    agentId: string,
+    decision: 'approve' | 'pause'
+  ): Promise<string> {
+    const { guard, fleet } = fleetRuntime;
+    const account =
+      decision === 'pause' ? await guard.kill(agentId, userAccount) : await guard.resume(agentId, userAccount);
+    recordHistory({
+      agentId,
+      agentName: fleet.get(agentId)!.name,
+      decision,
+      userAccount,
+      newRoot: account.lastDecision,
+      newStatus: CARD_STATUS_BY_GUARD_STATUS[account.status],
+      timestamp: Date.now()
+    });
+    return account.lastDecision;
+  }
+
+  /** The three built-in mock agents: the decision only changes their in-memory card. */
+  private applyMockDecision(userAccount: string, agentId: string, decision: 'approve' | 'pause'): string {
+    const agent = agentsStore.get(agentId);
+    if (!agent) return '00'.repeat(32);
+    if (decision === 'pause') {
+      agent.status = 'PAUSED';
+    } else {
+      agent.status = 'ACTIVE';
+      agent.actionsExecuted += 1;
+    }
+    agent.lastUpdated = Date.now();
+    agent.lastCommitmentRoot = pqcCrypto.computeStateCommitment({
+      agentId,
+      decision,
+      status: agent.status,
+      timestamp: agent.lastUpdated
+    }).hexRoot;
+    recordHistory({
+      agentId,
+      agentName: agent.name,
+      decision,
+      userAccount,
+      newRoot: agent.lastCommitmentRoot,
+      newStatus: agent.status,
+      timestamp: agent.lastUpdated
+    });
+    return agent.lastCommitmentRoot;
+  }
+}
+
+// Zapisz do historii observability
+function recordHistory(entry: {
+  agentId: string;
+  agentName: string;
+  decision: 'approve' | 'pause';
+  userAccount: string;
+  newRoot: string;
+  newStatus: string;
+  timestamp: number;
+}): void {
+  const { agentId, agentName, decision, userAccount, newRoot, newStatus, timestamp } = entry;
+  actionHistory.push({
+    id: `hist-${timestamp}`,
+    agentId,
+    agentName,
+    decision,
+    operator: `${userAccount.slice(0, 4)}...${userAccount.slice(-3)}`,
+    newRoot,
+    newStatus,
+    timestamp,
+    memoHash: memoText(agentId, decision, newRoot)
+  });
 }
 
 export const blinkService = new BlinkService();

@@ -1,0 +1,10 @@
+{
+	"name": "scout-delta",
+	"private": true,
+	"type": "module",
+	"main": "index.ts",
+	"scripts": {
+		"start": "bun index.ts",
+		"test": "bun test"
+	}
+}
