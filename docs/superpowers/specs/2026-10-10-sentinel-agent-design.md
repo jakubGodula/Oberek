@@ -129,7 +129,7 @@ An invalid value stops the agent at start, as Tick does for its interval.
 
 - Register a new agent from the main repo, paid and owned by the server's wallet `ftbM…` (~0.15 SOL of rent):
   `AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register`, then
-  `bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer (virtual)" --risk MEDIUM`.
+  `bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer (virtual funds)" --risk MEDIUM`.
 - Remove the `sentinel-01` mock and its seeded history entries from `blink.service.ts`, so the page lists the agent
   once, from the fleet. `arbiter-02` and `guardian-03` stay mocks until their own specs.
 
