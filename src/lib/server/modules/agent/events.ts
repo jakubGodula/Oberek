@@ -37,6 +37,7 @@ const stepRecordedDecoder = getStructDecoder([
  * any program can log bytes that look like a guard event.
  */
 export function parseGuardEvents(logs: readonly string[], programAddress: Address): GuardEvent[] {
+	// Program ids of the calls in progress, innermost last: `invoke` lines push, `success` / `failed` lines pop.
 	const invocations: string[] = [];
 	const events: GuardEvent[] = [];
 	for (const line of logs) {
