@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { getFleetRuntime } from '#lib/server/modules/fleet/app-runtime';
 import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
+import { assertInFleet } from '#lib/server/modules/fleet/record-decision';
 import { RateLimitedError } from '#lib/server/modules/fleet/step-throttle';
 import { parseSubmission, submitDecision } from '#lib/server/modules/fleet/submit-decision';
 
@@ -29,3 +30,22 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return fleetErrorResponse(error, `decision of agent ${params.id}`);
 	}
 };
+
+const DEFAULT_FEED_LIMIT = 10;
+const MAX_FEED_LIMIT = 50;
+
+/** The agent's newest log entries, newest first, for the page's decision feed. */
+export const GET: RequestHandler = async ({ params, url }) => {
+	try {
+		const runtime = await getFleetRuntime();
+		assertInFleet(runtime, params.id!);
+		return json({ entries: runtime.fleet.recentDecisions(params.id!, feedLimit(url.searchParams.get('limit'))) });
+	} catch (error) {
+		return fleetErrorResponse(error, `decisions of agent ${params.id}`);
+	}
+};
+
+function feedLimit(raw: string | null): number {
+	const limit = Number(raw);
+	return Number.isInteger(limit) && limit > 0 ? Math.min(limit, MAX_FEED_LIMIT) : DEFAULT_FEED_LIMIT;
+}

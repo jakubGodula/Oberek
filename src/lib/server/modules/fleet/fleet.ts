@@ -67,6 +67,11 @@ export class Fleet {
 		return this.readLog(agentId).at(-1);
 	}
 
+	/** The newest `limit` log entries, newest first, `unconfirmed` marks included. */
+	recentDecisions(agentId: string, limit: number): DecisionLogEntry[] {
+		return this.readLog(agentId).slice(-limit).reverse();
+	}
+
 	/** The newest log entry with that hash; for the hash the guard holds, the record of the last recorded step. */
 	findDecision(agentId: string, decisionHash: string): DecisionLogEntry | undefined {
 		return this.readLog(agentId)
