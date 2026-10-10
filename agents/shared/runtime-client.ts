@@ -33,7 +33,7 @@ export interface RuntimeClient {
 /** The server answers 409 when the guard refuses the step because the owner killed the agent. */
 const HTTP_CONFLICT = 409;
 
-type Answer = { kind: 'answered'; response: Response; body: any } | { kind: 'unreachable'; reason: string };
+type Answer = { kind: 'answered'; response: Response; body: Record<string, any> } | { kind: 'unreachable'; reason: string };
 
 export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: typeof fetch = fetch): RuntimeClient {
 	const decisionsUrl = `${apiUrl}/api/agents/${encodeURIComponent(agentId)}/decisions`;
@@ -41,7 +41,7 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 	async function request(url: string, init?: RequestInit): Promise<Answer> {
 		try {
 			const response = await fetchFn(url, init);
-			return { kind: 'answered', response, body: await response.json().catch(() => ({})) };
+			return { kind: 'answered', response, body: asObject(await response.json().catch(() => null)) };
 		} catch (error) {
 			return { kind: 'unreachable', reason: `server unreachable: ${error instanceof Error ? error.message : error}` };
 		}
@@ -55,7 +55,11 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				body: JSON.stringify(submission)
 			});
 			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
-			if (answer.response.ok) return { kind: 'recorded', counter: answer.body.counter };
+			if (answer.response.ok) {
+				const { counter } = answer.body;
+				if (typeof counter !== 'number') return { kind: 'failed', reason: 'unexpected answer: no counter in it' };
+				return { kind: 'recorded', counter };
+			}
 			if (answer.response.status === HTTP_CONFLICT) return { kind: 'paused' };
 			return { kind: 'failed', reason: httpFailure(answer) };
 		},
@@ -72,6 +76,11 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 			return { kind: 'found', record: answer.body.latest.record };
 		}
 	};
+}
+
+/** Any answer that is not a JSON object (a proxy page, a bare `null`) is read as an empty one. */
+function asObject(body: unknown): Record<string, any> {
+	return typeof body === 'object' && body !== null && !Array.isArray(body) ? body : {};
 }
 
 function httpFailure({ response, body }: Extract<Answer, { kind: 'answered' }>): string {

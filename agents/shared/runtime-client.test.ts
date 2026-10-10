@@ -56,6 +56,11 @@ describe('submit', () => {
 		});
 	});
 
+	test('reports a recorded answer with a JSON null body as failed instead of throwing', async () => {
+		const { fetchFn } = answering(200, null);
+		expect((await createRuntimeClient('http://server', 'tick-01', fetchFn).submit(SUBMISSION)).kind).toBe('failed');
+	});
+
 	test('reports an unreachable server as failed instead of throwing', async () => {
 		expect(await createRuntimeClient('http://server', 'tick-01', unreachable).submit(SUBMISSION)).toEqual({
 			kind: 'failed',
@@ -94,6 +99,16 @@ describe('latest', () => {
 
 	test('reports a 200 answer without a latest field as failed, never as none', async () => {
 		const { fetchFn } = answering(200, '<html>proxy page</html>');
+		expect((await createRuntimeClient('http://server', 'sentinel-01', fetchFn).latest()).kind).toBe('failed');
+	});
+
+	test('reports a JSON null body as failed instead of throwing', async () => {
+		const { fetchFn } = answering(200, null);
+		expect((await createRuntimeClient('http://server', 'sentinel-01', fetchFn).latest()).kind).toBe('failed');
+	});
+
+	test('reports an error answer with a JSON null body as failed instead of throwing', async () => {
+		const { fetchFn } = answering(500, null);
 		expect((await createRuntimeClient('http://server', 'sentinel-01', fetchFn).latest()).kind).toBe('failed');
 	});
 
