@@ -28,5 +28,5 @@ recorded, 409 killed by the owner, 404 not in the fleet, 400 malformed, 429 too 
 ## Test
 
 ```sh
-bun test agents/tick
+bun test agents/shared
 ```
