@@ -59,9 +59,21 @@ is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. D
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 
+### The whole demo in one command
+
+With both agents set up as above:
+
+```sh
+bun scripts/demo.ts              # server, then Sentinel at demo pace and Tick, in one terminal
+```
+
+Each output line is prefixed with `[server]`, `[sentinel]` or `[tick]`. Ctrl+C stops it gracefully: the agents finish
+the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
+same way. Port 5173 must be free.
+
 ## Test
 
 ```sh
-bun test src agents              # server, fleet and agents, no network
+bun test src agents scripts      # server, fleet, agents and scripts, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
