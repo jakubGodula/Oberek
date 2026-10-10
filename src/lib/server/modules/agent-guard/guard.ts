@@ -1,5 +1,5 @@
 // The guard as the server sees it: the agent's account that onchain_agent_guard keeps on Solana, and the four things
-// the program lets anyone do with it. FakeGuard implements it on local files; the on-chain program will replace it.
+// the program lets anyone do with it. OnchainGuard implements it; tests use an in-memory stand-in.
 
 export type GuardStatus = 'Active' | 'Killed';
 

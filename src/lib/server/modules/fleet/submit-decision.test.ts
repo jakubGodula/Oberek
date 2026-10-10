@@ -3,8 +3,7 @@ import { createHash } from 'crypto';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { FakeGuard } from '../agent-guard/fake-guard';
-import { GuardError, type AgentGuard } from '../agent-guard/guard';
+import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
 import { Fleet } from './fleet';
 import { RateLimitedError, StepThrottle } from './step-throttle';
 import { parseSubmission, submitDecision, type FleetRuntime } from './submit-decision';
@@ -12,16 +11,41 @@ import { parseSubmission, submitDecision, type FleetRuntime } from './submit-dec
 const OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const AGENT = 'test-agent';
 const NOW = new Date('2026-10-10T12:00:00.000Z');
-const SUBMISSION = { kind: 'market-scout', decision: { action: 'SELL', amountSol: 0.5 }, summary: 'SELL 0.5 SOL' };
+const SUBMISSION = { kind: 'tick', decision: { action: 'SELL', amountSol: 0.5 }, summary: 'SELL 0.5 SOL' };
 
 let rootDir: string;
 let runtime: FleetRuntime;
 
+/** Stands in for the program: one account in memory, with the step and kill rules submitDecision depends on. */
+class MemoryGuard implements AgentGuard {
+	private account: GuardAccount = { owner: OWNER, status: 'Active', counter: 0, lastDecision: NO_DECISION };
+
+	async readAgent(agentId: string): Promise<GuardAccount> {
+		if (agentId !== AGENT) throw new GuardError('AgentNotFound', `no ${agentId}`);
+		return this.account;
+	}
+
+	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
+		const account = await this.readAgent(agentId);
+		if (account.status === 'Killed') throw new GuardError('AgentKilled', 'killed');
+		if (counter !== account.counter + 1) throw new GuardError('CounterMismatch', 'stale counter');
+		return (this.account = { ...account, counter, lastDecision: decisionHash });
+	}
+
+	async kill(agentId: string): Promise<GuardAccount> {
+		return (this.account = { ...(await this.readAgent(agentId)), status: 'Killed' });
+	}
+
+	async resume(agentId: string): Promise<GuardAccount> {
+		const account = await this.readAgent(agentId);
+		return (this.account = { ...account, status: 'Active', counter: account.counter + 1 });
+	}
+}
+
 beforeEach(async () => {
 	rootDir = mkdtempSync(join(tmpdir(), 'fleet-'));
-	const guard = new FakeGuard(join(rootDir, 'chain'));
+	const guard = new MemoryGuard();
 	const fleet = new Fleet(join(rootDir, 'fleet'));
-	await guard.register(AGENT, OWNER);
 	fleet.register({ id: AGENT, name: 'Test Agent', riskLevel: 'LOW', registeredAt: NOW.getTime() });
 	runtime = { guard, fleet, throttle: new StepThrottle(0), now: () => NOW };
 });

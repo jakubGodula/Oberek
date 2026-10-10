@@ -15,7 +15,7 @@ import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { getFleetRuntime } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
-import type { AppRuntime } from '../fleet/runtime';
+import type { FleetRuntime } from '../fleet/submit-decision';
 
 export interface AgentStatusRecord {
   id: string;
@@ -109,7 +109,7 @@ const NO_PQC_KEY = '00'.repeat(32);
 const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
 
 /** One unreadable agent shows as UNAVAILABLE instead of failing the whole list. */
-async function toAgentStatusRecord(runtime: AppRuntime, entry: FleetEntry): Promise<AgentStatusRecord> {
+async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Promise<AgentStatusRecord> {
   const last = runtime.fleet.lastDecision(entry.id);
   const card = {
     id: entry.id,
@@ -293,7 +293,7 @@ export class BlinkService {
 
   /** Fleet agents: the guard decides; a refusal (not the owner, wrong state) reaches the caller as a GuardError. */
   private async applyGuardedDecision(
-    runtime: AppRuntime,
+    runtime: FleetRuntime,
     userAccount: string,
     agentId: string,
     decision: 'approve' | 'pause'

@@ -1,17 +1,16 @@
 # Tick
 
 The simplest agent: every tick it submits the same decision, `TICK`, to the server over HTTP. It runs as its own
-process, imports nothing from the server's code, holds no keys and keeps no status of its own. With `CHAIN=devnet` the
-server signs each TICK with the agent's ML-DSA-44 key and records it with the `onchain_agent_guard` program; after the
-owner's kill-switch the server answers 409 and Tick keeps trying on the next tick.
+process, imports nothing from the server's code, holds no keys and keeps no status of its own. The server signs each
+TICK with the agent's ML-DSA-44 key and records it with the `onchain_agent_guard` program; after the owner's
+kill-switch the server answers 409 and Tick keeps trying on the next tick.
 
 ## Run
 
-Put the agent in the devnet fleet once (from the repo root), run the server in devnet mode (`CHAIN=devnet` in `.env`,
-or in `.env.devnet` with `bun run dev -- --mode devnet`), then start the agent:
+Put the agent in the fleet once (from the repo root), then start it next to the server (`bun run dev`):
 
 ```sh
-CHAIN=devnet bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One — on-chain heartbeat"
+bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One — on-chain heartbeat"
 bun agents/tick
 ```
 

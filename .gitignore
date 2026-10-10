@@ -25,9 +25,6 @@ vite.config.ts.timestamp-*
 # Devnet keypairs, agent secret key and decision log
 .devnet/
 
-# Fake chain: fake guard accounts and the fake fleet with its decision logs (scripts/fleet.ts)
-.fake-chain/
-
 # Anchor workspace build output and generated test fixtures
 /onchain/target/
 /onchain/.anchor/
