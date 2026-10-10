@@ -53,22 +53,8 @@ function genRoot(payload: Record<string, unknown>): string {
   return pqcCrypto.computeStateCommitment(payload).hexRoot;
 }
 
-// In-memory store z 3 wstępnie zdefiniowanymi agentami
+// In-memory store: the two mock agents not yet replaced by fleet agents
 const agentsStore: Map<string, AgentStatusRecord> = new Map([
-  [
-    'sentinel-01',
-    {
-      id: 'sentinel-01',
-      name: 'Aegis Sentinel Alpha',
-      status: 'ACTIVE',
-      currentTask: 'Rebalansowanie skarbca SOL/USDC — próg płynności 94.2%',
-      pqcPubkeyHash: genPqcHash(),
-      lastCommitmentRoot: genRoot({ agentId: 'sentinel-01', task: 'INITIAL_STATE', timestamp: Date.now() }),
-      lastUpdated: Date.now(),
-      riskLevel: 'MEDIUM',
-      actionsExecuted: 47
-    }
-  ],
   [
     'arbiter-02',
     {
@@ -155,26 +141,6 @@ const _seedHistory = () => {
       newStatus: 'ACTIVE',
       timestamp: Date.now() - 600_000,
       memoHash: 'AEGIS_PQC_DMS:arbiter-02:APPROVE:' + 'a1b2c3d4'.padEnd(16, '0')
-    },
-    {
-      agentId: 'sentinel-01',
-      agentName: 'Aegis Sentinel Alpha',
-      decision: 'pause',
-      operator: '3mNQ...Pxz',
-      newRoot: genRoot({ seed: 'h2' }),
-      newStatus: 'PAUSED',
-      timestamp: Date.now() - 300_000,
-      memoHash: 'AEGIS_PQC_DMS:sentinel-01:PAUSE:' + 'e5f6a7b8'.padEnd(16, '0')
-    },
-    {
-      agentId: 'sentinel-01',
-      agentName: 'Aegis Sentinel Alpha',
-      decision: 'approve',
-      operator: '3mNQ...Pxz',
-      newRoot: genRoot({ seed: 'h3' }),
-      newStatus: 'ACTIVE',
-      timestamp: Date.now() - 120_000,
-      memoHash: 'AEGIS_PQC_DMS:sentinel-01:APPROVE:' + 'c9d0e1f2'.padEnd(16, '0')
     }
   ];
   entries.forEach((e, i) => {
