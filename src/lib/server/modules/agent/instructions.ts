@@ -25,7 +25,7 @@ export const SYSTEM_PROGRAM_ADDRESS = address('11111111111111111111111111111111'
 const AGENT_SEED = new TextEncoder().encode('agent');
 const DISCRIMINATOR_LENGTH = 8;
 
-export function anchorDiscriminator(namespace: 'global' | 'account', name: string): Uint8Array {
+export function anchorDiscriminator(namespace: 'global' | 'account' | 'event', name: string): Uint8Array {
 	return new Uint8Array(createHash('sha256').update(`${namespace}:${name}`).digest().subarray(0, DISCRIMINATOR_LENGTH));
 }
 
@@ -34,7 +34,10 @@ export const DISCRIMINATORS = {
 	recordStep: anchorDiscriminator('global', 'record_step'),
 	kill: anchorDiscriminator('global', 'kill'),
 	resume: anchorDiscriminator('global', 'resume'),
-	agent: anchorDiscriminator('account', 'Agent')
+	agent: anchorDiscriminator('account', 'Agent'),
+	stepRecorded: anchorDiscriminator('event', 'StepRecorded'),
+	agentKilled: anchorDiscriminator('event', 'AgentKilled'),
+	agentResumed: anchorDiscriminator('event', 'AgentResumed')
 };
 
 const AGENT_STATUSES = ['Active', 'Killed'] as const;
@@ -151,6 +154,6 @@ function concatBytes(...parts: ArrayLike<number>[]): Uint8Array {
 	return Uint8Array.from(parts.flatMap((part) => Array.from(part)));
 }
 
-function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
 	return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }

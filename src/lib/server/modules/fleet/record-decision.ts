@@ -7,6 +7,11 @@ export function assertInFleet(runtime: FleetRuntime, agentId: string): void {
 	if (!runtime.fleet.get(agentId)) throw new GuardError('AgentNotFound', `agent ${agentId} is not in the fleet`);
 }
 
+/** SHA-256 (hex) of the record as JSON, keys in the order the log keeps them. */
+export function hashDecisionRecord(record: DecisionRecord): string {
+	return createHash('sha256').update(JSON.stringify(record)).digest('hex');
+}
+
 /**
  * Hashes the decision as the agent's next step after `account`, records it with the guard and logs it. The log keeps
  * the full record, so anyone can recompute the hash the guard holds.
@@ -23,7 +28,7 @@ export async function recordDecision(
 		...submission,
 		observedAt: runtime.now().toISOString()
 	};
-	const decisionHash = createHash('sha256').update(JSON.stringify(record)).digest('hex');
+	const decisionHash = hashDecisionRecord(record);
 	try {
 		await runtime.guard.recordStep(agentId, record.counter, decisionHash);
 	} catch (error) {
