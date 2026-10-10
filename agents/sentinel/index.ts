@@ -1,5 +1,6 @@
-// Sentinel: rebalances a virtual SOL/USDC treasury from the live Jupiter SOL price. It runs as its own process, holds
-// no keys and keeps no state: each cycle it continues from its last decision recorded on chain.
+// Sentinel: rebalances a virtual SOL/USDC treasury from the live Jupiter SOL price and asks the owner to approve large
+// trades. It runs as its own process, holds no keys and keeps no state: each cycle it continues from its last decision
+// recorded on chain.
 import { createRuntimeClient } from '../shared/runtime-client';
 import { loadSentinelConfig, type SentinelConfig } from './config';
 import { runCycle } from './cycle';
@@ -18,10 +19,11 @@ function configFromEnv(): SentinelConfig {
 	}
 }
 
-const { targetSolShare, driftThreshold, scheduleMinutes } = config.policy;
+const { targetSolShare, driftThreshold, scheduleMinutes, approvalShare } = config.policy;
 console.log(
 	`Sentinel (${config.agentId}) → ${config.apiUrl}, every ${config.intervalMs} ms; target SOL ${targetSolShare}, ` +
-		`band ±${driftThreshold}, schedule ${scheduleMinutes} min; Ctrl+C stops`
+		`band ±${driftThreshold}, schedule ${scheduleMinutes} min, approval above ${approvalShare * 100}% of the ` +
+		`treasury; Ctrl+C stops`
 );
 while (true) {
 	const line = await runCycle({ client, fetchPrice: () => fetchSolPrice(), policy: config.policy });

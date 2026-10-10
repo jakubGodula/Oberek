@@ -17,6 +17,11 @@ const TARGET_SOL_SHARE = 0.5;
 const DEFAULT_DRIFT_PP = 0.02;
 const DEFAULT_SCHEDULE_MINUTES = 15;
 const PERCENTAGE_POINTS_PER_SHARE = 100;
+/**
+ * A rebalance worth more than 0.25% of the treasury (~$520 today) waits for the owner; quiet-day trades stay ≤ 0.03%.
+ */
+const DEFAULT_APPROVAL_PCT = 0.25;
+const PERCENT = 100;
 
 export function loadSentinelConfig(env: Env): SentinelConfig {
 	const driftPp = positiveNumber(env, 'SENTINEL_DRIFT_PP', DEFAULT_DRIFT_PP);
@@ -27,7 +32,8 @@ export function loadSentinelConfig(env: Env): SentinelConfig {
 		policy: {
 			targetSolShare: TARGET_SOL_SHARE,
 			driftThreshold: driftPp / PERCENTAGE_POINTS_PER_SHARE,
-			scheduleMinutes: positiveNumber(env, 'SENTINEL_SCHEDULE_MIN', DEFAULT_SCHEDULE_MINUTES)
+			scheduleMinutes: positiveNumber(env, 'SENTINEL_SCHEDULE_MIN', DEFAULT_SCHEDULE_MINUTES),
+			approvalShare: positiveNumber(env, 'SENTINEL_APPROVAL_PCT', DEFAULT_APPROVAL_PCT) / PERCENT
 		}
 	};
 }
