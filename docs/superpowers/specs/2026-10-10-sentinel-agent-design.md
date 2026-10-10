@@ -6,9 +6,10 @@ Date: 2026-10-10. Branch: `first_agent`. Status: approved in brainstorming, awai
 
 Replace the mock `sentinel-01` card with a real on-chain agent that decides from real data. Sentinel holds a virtual
 SOL/USDC treasury, reads the live SOL price from Jupiter every cycle and decides `REBALANCE` or `HOLD`. It trades
-nothing and holds no tokens: the treasury is virtual, numbers inside its decisions. Each decision, with its inputs and the resulting portfolio, is hashed, signed with the agent's ML-DSA-44 key
-and recorded by `onchain_agent_guard` like Tick's steps. Demo: the card shows rebalances and holds as the price moves;
-the owner kills the agent and the treasury freezes; after resume it continues from the last recorded portfolio.
+nothing and holds no tokens: the treasury is virtual, numbers inside its decisions. Each decision, with its inputs and
+the resulting portfolio, is hashed, signed with the agent's ML-DSA-44 key and recorded by `onchain_agent_guard` like
+Tick's steps. Demo: the card shows rebalances and holds as the price moves; the owner kills the agent and the treasury
+freezes; after resume it continues from the last recorded portfolio.
 
 Builds on the fleet runtime (`src/lib/server/modules/fleet/`) and the Tick agent (`agents/tick/`): agents are separate
 processes that talk to the server only over HTTP and hold no keys.
