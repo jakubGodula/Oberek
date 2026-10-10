@@ -31,8 +31,8 @@ branch and compile against the skeletons without touching shared files.
 6. `apps/docs/docs/framework/modules/building-gateway-provider.mdx`.
 7. `apps/mercato/.env.example`, `docker-compose.yml`, `Dockerfile`, `starters/docker/*`, `.github/workflows/*` (whatever exists).
 8. `README.md` "Quick start" (corepack enable → `yarn infra:up` → `.env` → `yarn dev:greenfield`).
-9. `/Users/macbook/work/sandbox/solana-2026/output/01-intake/qa/api-contract-q_and_a.md` (Q-API-01…05) and `01-intake/qa/typescript-q_and_a.md` Q-TS-04/05 — the contracts to copy into `docs/CONTRACTS.md`.
-10. `/Users/macbook/work/sandbox/solana-2026/output/research/02-solana-stack-2026.md` §0, §3, §4 — the version pins.
+9. `docs/output/01-intake/qa/api-contract-q_and_a.md` (Q-API-01…05) and `01-intake/qa/typescript-q_and_a.md` Q-TS-04/05 — the contracts to copy into `docs/CONTRACTS.md`.
+10. `docs/output/research/02-solana-stack-2026.md` §0, §3, §4 — the version pins.
 
 ## 4. Files owned (create/modify only these)
 - Repo-level: `package.json` (root: `resolutions`, `engines`), `.nvmrc` (24), `.yarnrc.yml` (unchanged unless needed), `rust-toolchain.toml` (`channel = "1.89.0"`), `.gitleaks.toml`, `.husky/pre-commit` or `lefthook.yml` (whichever the repo already uses; otherwise a plain `scripts/pre-commit.sh` wired via `core.hooksPath`), `.github/workflows/ci.yml`, `.github/workflows/anchor.yml`, `docs/CONTRACTS.md`, `docs/SETUP.md`, `docs/research/solana-stack-2026.md`, `docs/research/open-mercato-seams.md`, `deploy/docker-compose.vps.yml`, `deploy/Caddyfile`, `deploy/README.md`.

@@ -3,7 +3,7 @@
 Two layouts are defined here: (A) the build output that the stage prompts produce once, and
 (B) the run folder that the produced skills create for every real task.
 
-## A. Build output: `<output>` = `~/work/output/two-phase-work-<model>-<harness>-<stamp>`
+## A. Build output: `<output>` = `<work-dir>/output/two-phase-work-<model>-<harness>-<stamp>`
 
 ```
 <output>/
@@ -59,7 +59,7 @@ Two layouts are defined here: (A) the build output that the stage prompts produc
 
 ## B. Run folder, created per task by the skills: `<run>`
 Git mode (default): `<repo>/ai-output/tpw/<task>-<title>/` on branch `ai/tpw-<task>-<title>`.
-Folder mode: `~/work/temp/tpw/<task>-<title>/`.
+Folder mode: `<work-dir>/temp/tpw/<task>-<title>/`.
 
 ```
 <run>/
