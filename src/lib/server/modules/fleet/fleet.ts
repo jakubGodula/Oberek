@@ -21,6 +21,8 @@ export interface DecisionRecord {
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
+	/** The agent stops after this decision until the owner accepts or rejects it. */
+	requiresApproval?: true;
 	observedAt: string;
 }
 
@@ -62,14 +64,42 @@ export class Fleet {
 	}
 
 	lastDecision(agentId: string): DecisionLogEntry | undefined {
+		return this.readLog(agentId).at(-1);
+	}
+
+	/** The newest `limit` log entries, newest first, `unconfirmed` marks included. */
+	recentDecisions(agentId: string, limit: number): DecisionLogEntry[] {
+		return this.readLog(agentId).slice(-limit).reverse();
+	}
+
+	/** The newest log entry with that hash; for the hash the guard holds, the record of the last recorded step. */
+	findDecision(agentId: string, decisionHash: string): DecisionLogEntry | undefined {
+		return this.readLog(agentId)
+			.reverse()
+			.find((entry) => entry.decisionHash === decisionHash);
+	}
+
+	private readLog(agentId: string): DecisionLogEntry[] {
 		const path = join(this.agentDir(agentId), DECISION_LOG_FILE);
-		if (!existsSync(path)) return undefined;
-		const lines = readFileSync(path, 'utf8').trimEnd().split('\n');
-		return JSON.parse(lines[lines.length - 1]);
+		if (!existsSync(path)) return [];
+		return readFileSync(path, 'utf8')
+			.split('\n')
+			.filter((line) => line !== '')
+			.flatMap((line) => parseLogLine(agentId, line));
 	}
 
 	private agentDir(agentId: string): string {
 		assertAgentId(agentId);
 		return join(this.fleetDir, agentId);
+	}
+}
+
+/** A line that is not JSON (e.g. cut short by a crash mid-append) is reported and passed over, not fatal to the log. */
+function parseLogLine(agentId: string, line: string): DecisionLogEntry[] {
+	try {
+		return [JSON.parse(line)];
+	} catch {
+		console.warn(`decision log of agent ${agentId}: skipping a line that is not JSON: ${line.slice(0, 80)}`);
+		return [];
 	}
 }

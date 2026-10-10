@@ -6,15 +6,15 @@ owner kill and resume the agent.
 
 - `onchain/`: the program (Anchor), deployed on devnet at `BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`.
 - `src/`: the SvelteKit server and operator page. It runs the fleet: signs each agent's steps with its key and sends
-  them to the program, and shows the agents with Kill-Switch and resume.
-- `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys
-  (`agents/tick`, the simplest one).
+  them to the program, and shows the agents with their decisions, approval of large steps, Kill-Switch and resume.
+- `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys:
+  `agents/tick` (the simplest one) and `agents/sentinel` (rebalances a virtual SOL/USDC treasury from the live price).
 
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
 ## Run
 
-Needs [Bun](https://bun.sh). Without `.env` the page shows only the three built-in mock agents.
+Needs [Bun](https://bun.sh). Without `.env` the page shows only the two built-in mock agents, labelled MOCK.
 
 ```sh
 bun install
@@ -28,9 +28,9 @@ cp .env.example .env
 bun scripts/new-keypair.ts .devnet/payer.json   # prints the wallet address; or solana-keygen new --outfile …
 ```
 
-Fund that address with ~0.2 SOL on devnet (https://faucet.solana.com, a few requests per 8 hours; or a transfer from
-any devnet wallet): registration locks ~0.15 SOL of rent, each step costs 15,000 lamports. In `.env` this wallet both
-pays the steps and is the owner the server signs kill and resume with.
+Fund that address with ~0.2 SOL per agent on devnet, ~0.35 SOL for Tick and Sentinel (https://faucet.solana.com, a few
+requests per 8 hours; or a transfer from any devnet wallet): each registration locks ~0.15 SOL of rent, each step costs
+15,000 lamports. In `.env` this wallet both pays the steps and is the owner the server signs kill and resume with.
 
 ```sh
 bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json
@@ -38,6 +38,24 @@ bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One"
 bun run dev                      # tick-01 appears on the page, read from devnet
 bun agents/tick                  # one step every 30 s; see agents/tick/README.md
 ```
+
+### Second agent: Sentinel
+
+Sentinel rebalances a virtual SOL/USDC treasury from the live Jupiter SOL price. A rebalance worth more than 0.25% of
+the treasury is a proposal: Sentinel stops until you approve or reject it on the page. It needs the setup above
+(`.env` and a funded wallet) and the server running (`bun run dev` in another terminal), but not Tick. It gets its own
+agent file, next to Tick's:
+
+```sh
+AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register
+bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM
+bun agents/sentinel              # one decision every 30 s
+```
+
+For a demo, start it with `SENTINEL_SCHEDULE_MIN=2 SENTINEL_INTERVAL_MS=10000 bun agents/sentinel` (a rebalance about
+every 2 minutes) and press **Symuluj szok ceny (−3%)** on its card: the next decision is made at the price moved by −3%,
+is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. Details:
+[agents/sentinel/README.md](agents/sentinel/README.md).
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 

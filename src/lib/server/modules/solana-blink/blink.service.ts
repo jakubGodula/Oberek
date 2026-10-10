@@ -13,37 +13,41 @@ import {
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
-import { findFleetRuntime } from '../fleet/app-runtime';
+import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
+import { findFleetRuntime, getFleetRuntime, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
 import type { FleetRuntime } from '../fleet/submit-decision';
+import { ActionHistory, memoText, type ActionHistoryEntry } from './action-history';
 
 export interface AgentStatusRecord {
   id: string;
   name: string;
-  /** UNAVAILABLE: a fleet agent whose guard account could not be read (e.g. the Solana RPC failed). */
-  status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE';
+  /**
+   * UNAVAILABLE: a fleet agent whose guard account could not be read (e.g. the Solana RPC failed).
+   * AWAITING_APPROVAL: a fleet agent stopped on its own proposal until the owner's verdict.
+   */
+  status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
   currentTask: string;
   pqcPubkeyHash: string;
   lastCommitmentRoot: string;
   lastUpdated: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   actionsExecuted: number;
+  /** Only on fleet agents. */
+  fleet?: FleetDetails;
 }
 
-export interface ActionHistoryEntry {
-  id: string;
-  agentId: string;
-  agentName: string;
-  decision: 'approve' | 'pause' | 'system';
-  operator: string;
-  newRoot: string;
-  newStatus: string;
-  timestamp: number;
-  memoHash: string;
+export interface FleetDetails {
+  pendingProposal: { counter: number; summary: string; decision: Record<string, unknown> } | null;
+  shockArmed: boolean;
+  /** The kind of the agent's newest logged decision (e.g. "sentinel"); null before its first. */
+  lastDecisionKind: string | null;
 }
+
+export type { ActionHistoryEntry };
 
 // Globalna historia akcji (observability log)
-const actionHistory: ActionHistoryEntry[] = [];
+const actionHistory = new ActionHistory();
 
 function genPqcHash(): string {
   return Buffer.from(pqcCrypto.computePubkeyHash(pqcCrypto.generateDsaKeys().publicKey)).toString('hex');
@@ -53,22 +57,8 @@ function genRoot(payload: Record<string, unknown>): string {
   return pqcCrypto.computeStateCommitment(payload).hexRoot;
 }
 
-// In-memory store z 3 wstępnie zdefiniowanymi agentami
+// In-memory store: the two mock agents not yet replaced by fleet agents
 const agentsStore: Map<string, AgentStatusRecord> = new Map([
-  [
-    'sentinel-01',
-    {
-      id: 'sentinel-01',
-      name: 'Aegis Sentinel Alpha',
-      status: 'ACTIVE',
-      currentTask: 'Rebalansowanie skarbca SOL/USDC — próg płynności 94.2%',
-      pqcPubkeyHash: genPqcHash(),
-      lastCommitmentRoot: genRoot({ agentId: 'sentinel-01', task: 'INITIAL_STATE', timestamp: Date.now() }),
-      lastUpdated: Date.now(),
-      riskLevel: 'MEDIUM',
-      actionsExecuted: 47
-    }
-  ],
   [
     'arbiter-02',
     {
@@ -100,10 +90,11 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
 ]);
 
 // Agents registered in the fleet (scripts/fleet.ts) run as their own processes; their state comes from the guard.
-const CARD_STATUS_BY_GUARD_STATUS: Record<GuardStatus, AgentStatusRecord['status']> = {
-  Active: 'ACTIVE',
-  Killed: 'PAUSED'
-};
+/** A killed agent shows as PAUSED even with a proposal waiting; the proposal shows again after resume. */
+function cardStatus(guardStatus: GuardStatus, awaitingApproval: boolean): AgentStatusRecord['status'] {
+  if (guardStatus === 'Killed') return 'PAUSED';
+  return awaitingApproval ? 'AWAITING_APPROVAL' : 'ACTIVE';
+}
 /** Fleet cards do not show the agent's PQ key yet. */
 const NO_PQC_KEY = '00'.repeat(32);
 const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
@@ -119,13 +110,21 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
     lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
     riskLevel: entry.riskLevel
   };
+  const fleet = { shockArmed: shockStore.isArmed(entry.id), lastDecisionKind: last?.record.kind ?? null };
   try {
     const account = await runtime.guard.readAgent(entry.id);
+    const proposal = proposalAwaiting(runtime.fleet, entry.id, account);
+    const pendingProposal = proposal && {
+      counter: proposal.record.counter,
+      summary: proposal.record.summary,
+      decision: proposal.record.decision
+    };
     return {
       ...card,
-      status: CARD_STATUS_BY_GUARD_STATUS[account.status],
+      status: cardStatus(account.status, proposal !== null),
       lastCommitmentRoot: account.lastDecision,
-      actionsExecuted: account.counter
+      actionsExecuted: account.counter,
+      fleet: { ...fleet, pendingProposal }
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -134,51 +133,22 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
       status: 'UNAVAILABLE',
       currentTask: `Niedostępny: ${reason}`,
       lastCommitmentRoot: NO_DECISION,
-      actionsExecuted: 0
+      actionsExecuted: 0,
+      fleet: { ...fleet, pendingProposal: null }
     };
   }
 }
 
-function memoText(agentId: string, decision: 'approve' | 'pause', newRoot: string): string {
-  return `AEGIS_PQC_DMS:${agentId}:${decision.toUpperCase()}:${newRoot.slice(0, 16)}`;
-}
-
 // Seed historii demonstracyjnej
 const _seedHistory = () => {
-  const entries: Omit<ActionHistoryEntry, 'id'>[] = [
-    {
-      agentId: 'arbiter-02',
-      agentName: 'Arbiter Beta — DeFi Optimizer',
-      decision: 'approve',
-      operator: '7xKX...AsU',
-      newRoot: genRoot({ seed: 'h1' }),
-      newStatus: 'ACTIVE',
-      timestamp: Date.now() - 600_000,
-      memoHash: 'AEGIS_PQC_DMS:arbiter-02:APPROVE:' + 'a1b2c3d4'.padEnd(16, '0')
-    },
-    {
-      agentId: 'sentinel-01',
-      agentName: 'Aegis Sentinel Alpha',
-      decision: 'pause',
-      operator: '3mNQ...Pxz',
-      newRoot: genRoot({ seed: 'h2' }),
-      newStatus: 'PAUSED',
-      timestamp: Date.now() - 300_000,
-      memoHash: 'AEGIS_PQC_DMS:sentinel-01:PAUSE:' + 'e5f6a7b8'.padEnd(16, '0')
-    },
-    {
-      agentId: 'sentinel-01',
-      agentName: 'Aegis Sentinel Alpha',
-      decision: 'approve',
-      operator: '3mNQ...Pxz',
-      newRoot: genRoot({ seed: 'h3' }),
-      newStatus: 'ACTIVE',
-      timestamp: Date.now() - 120_000,
-      memoHash: 'AEGIS_PQC_DMS:sentinel-01:APPROVE:' + 'c9d0e1f2'.padEnd(16, '0')
-    }
-  ];
-  entries.forEach((e, i) => {
-    actionHistory.push({ ...e, id: `hist-${i + 1}` });
+  actionHistory.record({
+    agentId: 'arbiter-02',
+    agentName: 'Arbiter Beta — DeFi Optimizer',
+    decision: 'approve',
+    userAccount: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+    newRoot: genRoot({ seed: 'h1' }),
+    newStatus: 'ACTIVE',
+    timestamp: Date.now() - 600_000
   });
 };
 _seedHistory();
@@ -205,14 +175,12 @@ export class BlinkService {
     const runtime = await findFleetRuntime();
     if (!runtime) return [...agentsStore.values()];
     const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
-    return [...agentsStore.values(), ...fleetAgents];
+    // Real agents first; the mocks follow until Arbiter and Guardian replace them.
+    return [...fleetAgents, ...agentsStore.values()];
   }
 
   getActionHistory(limit = 20, agentId?: string): ActionHistoryEntry[] {
-    const filtered = agentId
-      ? actionHistory.filter((e) => e.agentId === agentId)
-      : actionHistory;
-    return filtered.slice(-limit).reverse();
+    return actionHistory.recent(limit, agentId);
   }
 
   async getActionMetadata(agentId: string, origin: string): Promise<ActionGetResponse> {
@@ -292,6 +260,22 @@ export class BlinkService {
     });
   }
 
+  /** The owner's verdict on a fleet agent's proposal: recorded on chain as the agent's next step and in the log. */
+  async decideProposal(agentId: string, verdict: Verdict): Promise<{ counter: number }> {
+    const runtime = await getFleetRuntime();
+    const { record, decisionHash } = await recordVerdict(runtime, agentId, verdict);
+    actionHistory.record({
+      agentId,
+      agentName: runtime.fleet.get(agentId)!.name,
+      decision: verdict,
+      userAccount: String(record.decision.decidedBy),
+      newRoot: decisionHash,
+      newStatus: 'ACTIVE',
+      timestamp: Date.parse(record.observedAt)
+    });
+    return { counter: record.counter };
+  }
+
   /** Fleet agents: the guard decides; a refusal (not the owner, wrong state) reaches the caller as a GuardError. */
   private async applyGuardedDecision(
     runtime: FleetRuntime,
@@ -302,13 +286,13 @@ export class BlinkService {
     const { guard, fleet } = runtime;
     const account =
       decision === 'pause' ? await guard.kill(agentId, userAccount) : await guard.resume(agentId, userAccount);
-    recordHistory({
+    actionHistory.record({
       agentId,
       agentName: fleet.get(agentId)!.name,
-      decision,
+      decision: decision === 'pause' ? 'pause' : 'resume',
       userAccount,
       newRoot: account.lastDecision,
-      newStatus: CARD_STATUS_BY_GUARD_STATUS[account.status],
+      newStatus: cardStatus(account.status, proposalAwaiting(fleet, agentId, account) !== null),
       timestamp: Date.now()
     });
     return account.lastDecision;
@@ -331,7 +315,7 @@ export class BlinkService {
       status: agent.status,
       timestamp: agent.lastUpdated
     }).hexRoot;
-    recordHistory({
+    actionHistory.record({
       agentId,
       agentName: agent.name,
       decision,
@@ -342,30 +326,6 @@ export class BlinkService {
     });
     return agent.lastCommitmentRoot;
   }
-}
-
-// Zapisz do historii observability
-function recordHistory(entry: {
-  agentId: string;
-  agentName: string;
-  decision: 'approve' | 'pause';
-  userAccount: string;
-  newRoot: string;
-  newStatus: string;
-  timestamp: number;
-}): void {
-  const { agentId, agentName, decision, userAccount, newRoot, newStatus, timestamp } = entry;
-  actionHistory.push({
-    id: `hist-${timestamp}`,
-    agentId,
-    agentName,
-    decision,
-    operator: `${userAccount.slice(0, 4)}...${userAccount.slice(-3)}`,
-    newRoot,
-    newStatus,
-    timestamp,
-    memoHash: memoText(agentId, decision, newRoot)
-  });
 }
 
 export const blinkService = new BlinkService();

@@ -1,25 +1,23 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { GuardError, HTTP_STATUS_BY_GUARD_ERROR } from '#lib/server/modules/agent-guard/guard';
 import { getFleetRuntime } from '#lib/server/modules/fleet/app-runtime';
-import { FleetNotConfiguredError } from '#lib/server/modules/fleet/runtime';
+import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
+import { assertInFleet } from '#lib/server/modules/fleet/record-decision';
 import { RateLimitedError } from '#lib/server/modules/fleet/step-throttle';
 import { parseSubmission, submitDecision } from '#lib/server/modules/fleet/submit-decision';
 
 const BAD_REQUEST = 400;
 const TOO_MANY_REQUESTS = 429;
 const MS_PER_SECOND = 1000;
-/** The guard could not give a verdict (e.g. the Solana RPC failed); the agent may retry on its next tick. */
-const BAD_GATEWAY = 502;
-const SERVICE_UNAVAILABLE = 503;
 
 /**
- * An agent process submits its next decision; 409 while the agent is killed, 429 when it submits too often, 503 while
- * the fleet is not configured or the fee payer has no funds.
+ * An agent process submits its next decision; 409 while the agent is killed or its proposal waits for a verdict, 429
+ * when it submits too often, 503 while the fleet is not configured or the fee payer has no funds.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	const submission = parseSubmission(await request.json().catch(() => null));
 	if (!submission) {
-		return json({ error: 'BadRequest', message: 'expected { kind, decision, summary }' }, { status: BAD_REQUEST });
+		const message = 'expected { kind, decision, summary, requiresApproval? }';
+		return json({ error: 'BadRequest', message }, { status: BAD_REQUEST });
 	}
 	try {
 		return json(await submitDecision(await getFleetRuntime(), params.id!, submission));
@@ -29,14 +27,25 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			const body = { error: 'RateLimited', message: error.message };
 			return json(body, { status: TOO_MANY_REQUESTS, headers: { 'retry-after': retryAfterSeconds } });
 		}
-		if (error instanceof FleetNotConfiguredError) {
-			return json({ error: 'FleetNotConfigured', message: error.message }, { status: SERVICE_UNAVAILABLE });
-		}
-		if (error instanceof GuardError) {
-			return json({ error: error.code, message: error.message }, { status: HTTP_STATUS_BY_GUARD_ERROR[error.code] });
-		}
-		console.error(`decision of agent ${params.id} failed:`, error);
-		const message = error instanceof Error ? error.message : String(error);
-		return json({ error: 'GuardUnavailable', message }, { status: BAD_GATEWAY });
+		return fleetErrorResponse(error, `decision of agent ${params.id}`);
 	}
 };
+
+const DEFAULT_FEED_LIMIT = 10;
+const MAX_FEED_LIMIT = 50;
+
+/** The agent's newest log entries, newest first, for the page's decision feed. */
+export const GET: RequestHandler = async ({ params, url }) => {
+	try {
+		const runtime = await getFleetRuntime();
+		assertInFleet(runtime, params.id!);
+		return json({ entries: runtime.fleet.recentDecisions(params.id!, feedLimit(url.searchParams.get('limit'))) });
+	} catch (error) {
+		return fleetErrorResponse(error, `decisions of agent ${params.id}`);
+	}
+};
+
+function feedLimit(raw: string | null): number {
+	const limit = Number(raw);
+	return Number.isInteger(limit) && limit > 0 ? Math.min(limit, MAX_FEED_LIMIT) : DEFAULT_FEED_LIMIT;
+}
