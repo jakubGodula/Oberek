@@ -9,13 +9,14 @@ const TOO_MANY_REQUESTS = 429;
 const MS_PER_SECOND = 1000;
 
 /**
- * An agent process submits its next decision; 409 while the agent is killed, 429 when it submits too often, 503 while
- * the fleet is not configured or the fee payer has no funds.
+ * An agent process submits its next decision; 409 while the agent is killed or its proposal waits for a verdict, 429
+ * when it submits too often, 503 while the fleet is not configured or the fee payer has no funds.
  */
 export const POST: RequestHandler = async ({ params, request }) => {
 	const submission = parseSubmission(await request.json().catch(() => null));
 	if (!submission) {
-		return json({ error: 'BadRequest', message: 'expected { kind, decision, summary }' }, { status: BAD_REQUEST });
+		const message = 'expected { kind, decision, summary, requiresApproval? }';
+		return json({ error: 'BadRequest', message }, { status: BAD_REQUEST });
 	}
 	try {
 		return json(await submitDecision(await getFleetRuntime(), params.id!, submission));

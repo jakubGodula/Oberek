@@ -21,6 +21,8 @@ export interface DecisionRecord {
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
+	/** The agent stops after this decision until the owner accepts or rejects it. */
+	requiresApproval?: true;
 	observedAt: string;
 }
 

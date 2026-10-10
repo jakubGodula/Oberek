@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { GuardError } from '../agent-guard/guard';
+import { AwaitingApprovalError } from './approval';
 import { fleetErrorResponse } from './http-errors';
 import { DecisionNotInLogError } from './latest-decision';
 import { FleetNotConfiguredError } from './runtime';
@@ -34,5 +35,12 @@ test('answers anything else as a guard without a verdict', async () => {
 	expect(await answer(new Error('RPC timeout'))).toEqual({
 		status: 502,
 		body: { error: 'GuardUnavailable', message: 'RPC timeout' }
+	});
+});
+
+test('answers a decision submitted while a proposal waits with 409 AwaitingApproval', async () => {
+	expect(await answer(new AwaitingApprovalError('waiting'))).toEqual({
+		status: 409,
+		body: { error: 'AwaitingApproval', message: 'waiting' }
 	});
 });

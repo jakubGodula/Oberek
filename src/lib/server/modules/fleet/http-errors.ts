@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { GuardError, HTTP_STATUS_BY_GUARD_ERROR } from '../agent-guard/guard';
+import { AwaitingApprovalError } from './approval';
 import { DecisionNotInLogError } from './latest-decision';
 import { FleetNotConfiguredError } from './runtime';
 
@@ -13,6 +14,7 @@ const GUARD_UNAVAILABLE = 'GuardUnavailable';
 export function fleetErrorResponse(error: unknown, context: string): Response {
 	if (error instanceof FleetNotConfiguredError) return answer(SERVICE_UNAVAILABLE, 'FleetNotConfigured', error.message);
 	if (error instanceof DecisionNotInLogError) return answer(CONFLICT, 'DecisionNotInLog', error.message);
+	if (error instanceof AwaitingApprovalError) return answer(CONFLICT, 'AwaitingApproval', error.message);
 	if (error instanceof GuardError) return answer(HTTP_STATUS_BY_GUARD_ERROR[error.code], error.code, error.message);
 	console.error(`${context} failed:`, error);
 	return answer(BAD_GATEWAY, GUARD_UNAVAILABLE, error instanceof Error ? error.message : String(error));
