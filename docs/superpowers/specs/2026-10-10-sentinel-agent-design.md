@@ -6,7 +6,8 @@ Date: 2026-10-10. Branch: `first_agent`. Status: approved in brainstorming, awai
 
 Replace the mock `sentinel-01` card with a real on-chain agent that decides from real data. Sentinel holds a virtual
 SOL/USDC treasury, reads the live SOL price from Jupiter every cycle and decides `REBALANCE` or `HOLD`. It trades
-nothing: each decision, with its inputs and the resulting portfolio, is hashed, signed with the agent's ML-DSA-44 key
+nothing and holds no tokens: the treasury is virtual, numbers inside its decisions, and the agent's name on the card
+says so. Each decision, with its inputs and the resulting portfolio, is hashed, signed with the agent's ML-DSA-44 key
 and recorded by `onchain_agent_guard` like Tick's steps. Demo: the card shows rebalances and holds as the price moves;
 the owner kills the agent and the treasury freezes; after resume it continues from the last recorded portfolio.
 
@@ -128,7 +129,7 @@ An invalid value stops the agent at start, as Tick does for its interval.
 
 - Register a new agent from the main repo, paid and owned by the server's wallet `ftbM…` (~0.15 SOL of rent):
   `AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register`, then
-  `bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM`.
+  `bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer (virtual)" --risk MEDIUM`.
 - Remove the `sentinel-01` mock and its seeded history entries from `blink.service.ts`, so the page lists the agent
   once, from the fleet. `arbiter-02` and `guardian-03` stay mocks until their own specs.
 
