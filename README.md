@@ -30,8 +30,7 @@ bun scripts/new-keypair.ts .devnet/payer.json   # prints the wallet address; or 
 
 Fund that address with ~0.2 SOL per agent on devnet, ~0.35 SOL for Tick and Sentinel (https://faucet.solana.com, a few
 requests per 8 hours; or a transfer from any devnet wallet): each registration locks ~0.15 SOL of rent, each step costs
-15,000 lamports. In `.env` this wallet both
-pays the steps and is the owner the server signs kill and resume with.
+15,000 lamports. In `.env` this wallet both pays the steps and is the owner the server signs kill and resume with.
 
 ```sh
 bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json
