@@ -62,10 +62,23 @@ export class Fleet {
 	}
 
 	lastDecision(agentId: string): DecisionLogEntry | undefined {
+		return this.readLog(agentId).at(-1);
+	}
+
+	/** The newest log entry with that hash; for the hash the guard holds, the record of the last recorded step. */
+	findDecision(agentId: string, decisionHash: string): DecisionLogEntry | undefined {
+		return this.readLog(agentId)
+			.reverse()
+			.find((entry) => entry.decisionHash === decisionHash);
+	}
+
+	private readLog(agentId: string): DecisionLogEntry[] {
 		const path = join(this.agentDir(agentId), DECISION_LOG_FILE);
-		if (!existsSync(path)) return undefined;
-		const lines = readFileSync(path, 'utf8').trimEnd().split('\n');
-		return JSON.parse(lines[lines.length - 1]);
+		if (!existsSync(path)) return [];
+		return readFileSync(path, 'utf8')
+			.split('\n')
+			.filter((line) => line !== '')
+			.map((line) => JSON.parse(line));
 	}
 
 	private agentDir(agentId: string): string {
