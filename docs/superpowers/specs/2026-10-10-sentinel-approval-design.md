@@ -19,11 +19,10 @@ Builds on the Sentinel spec (`2026-10-10-sentinel-agent-design.md`) and the flee
 ## Scope
 
 In: the approval rule and shock in Sentinel; approval state, verdicts and the shock store on the server; a decision
-feed, an approval panel, the shock button and split HITL buttons on the page.
+feed, an approval panel, the shock button, split HITL buttons and verdicts in the observability log on the page.
 
 Out: enforcing approvals in the guard program (a later `AwaitingApproval` status; the page and agent would not
-change); approvals for Tick, Arbiter or Guardian; listing verdicts in the right-hand observability log; the GUI
-honesty pass; real trades.
+change); approvals for Tick, Arbiter or Guardian; the GUI honesty pass; real trades.
 
 ## 1. The approval protocol
 
@@ -67,7 +66,8 @@ summary>`.
 **Units:** `fleet/approval.ts` with `pendingProposal(runtime, agentId)` (the latest entry or `null`) and
 `recordVerdict(runtime, agentId, verdict)`; `submitDecision` and `parseSubmission` gain the flag and the refusal;
 `http-errors.ts` maps `AwaitingApprovalError` and `NoPendingProposalError` to 409; route
-`src/routes/api/agents/[id]/approval/+server.ts`.
+`src/routes/api/agents/[id]/approval/+server.ts`, which goes through `blinkService.decideProposal(agentId, verdict)`
+so the verdict also lands in the observability log (section 4).
 
 ## 2. The simulated price shock
 
@@ -150,6 +150,13 @@ and price, and **Zatwierdź** / **Odrzuć**, which call the verdict route.
 - **Autoryzuj krok** and **Odrzuć**: enabled only while awaiting approval; they send the verdict.
 - **Kill-switch** while active or awaiting; **Wznów** while killed (the existing resume).
 
+**Observability log** (right column). Every verdict is an entry, next to kill and resume:
+
+- `accept` → chip **APPROVED** (emerald), `reject` → chip **REJECTED** (amber); operator `decidedBy`, new status
+  `ACTIVE`, root = the verdict's decision hash, memo `AEGIS_PQC_DMS:<agent>:ACCEPT|REJECT:<root prefix>`.
+- A fleet agent's resume is recorded as `resume` with chip **RESUME**, so it is no longer shown as APPROVE; the
+  mocks keep `approve`.
+
 **Shock button** at the bottom of the agent card, Sentinel only: **Symuluj szok ceny (−3%)**; after arming it reads
 *Szok uzbrojony — w następnym cyklu* until the agent claims it.
 
@@ -166,6 +173,7 @@ TDD with `bun test`, no network:
 - Client: `AwaitingApproval` 409 → `awaiting`; other 409 → `paused`; `claimShock` answers and failures.
 - Server: `parseSubmission` with and without the flag, a non-`true` flag rejected; `submitDecision` refuses while
   pending and records otherwise; `recordVerdict` accept and reject records, `NoPendingProposal`, killed agent; shock
-  store arm, replace, claim once, bad `pct`; the decisions list route returns the newest entries first and keeps the `unconfirmed` mark.
-- Live on devnet: shock → proposal on chain → card AWAITING APPROVAL → accept → Sentinel continues from the traded
-  portfolio; again with reject → portfolio unchanged; kill while pending → resume → still pending.
+  store arm, replace, claim once, bad `pct`; `decideProposal` adds an APPROVED / REJECTED history entry and a fleet
+  resume adds RESUME; the decisions list route returns the newest entries first and keeps the `unconfirmed` mark.
+- Live on devnet: shock → proposal on chain → card AWAITING APPROVAL → accept → APPROVED in the observability log →
+  Sentinel continues from the traded portfolio; again with reject → portfolio unchanged; kill while pending → resume → still pending.
