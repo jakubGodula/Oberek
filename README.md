@@ -42,8 +42,9 @@ bun agents/tick                  # one step every 30 s; see agents/tick/README.m
 ### Second agent: Sentinel
 
 Sentinel rebalances a virtual SOL/USDC treasury from the live Jupiter SOL price. A rebalance worth more than 0.25% of
-the treasury is a proposal: Sentinel stops until you approve or reject it on the page. It needs its own agent file,
-next to Tick's:
+the treasury is a proposal: Sentinel stops until you approve or reject it on the page. It needs the setup above
+(`.env` and a funded wallet) and the server running (`bun run dev` in another terminal), but not Tick. It gets its own
+agent file, next to Tick's:
 
 ```sh
 AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register
