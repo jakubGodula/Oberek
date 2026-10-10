@@ -2,8 +2,10 @@
   import {
     Shield, ShieldAlert, ShieldCheck, Cpu, Terminal, Key, Copy, Check,
     ExternalLink, RefreshCw, Zap, Clock, Activity, AlertTriangle,
-    ChevronRight, Lock, Unlock, BarChart3
+    ChevronRight, Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
+  import DecisionFeed from '#lib/components/DecisionFeed.svelte';
+  import { acceptsShock, type FeedEntry } from '#lib/fleet-feed';
 
   let { data } = $props();
 
@@ -15,6 +17,10 @@
   let simulationSuccess = $state<boolean | null>(null);
   let history = $state<any[]>(data.history || []);
   let isLoadingHistory = $state(false);
+  let feedEntries = $state<FeedEntry[]>([]);
+  const FEED_LIMIT = 10;
+  /** The demo shock the card's button arms, in percent of the price. */
+  const SHOCK_PCT = -3;
 
   const blinkUrl = $derived(
     selectedAgent ? `${data.origin}/api/actions/agent-action?agentId=${selectedAgent.id}` : ''
@@ -35,7 +41,8 @@
     ACTIVE: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
     PAUSED: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
     IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
-    UNAVAILABLE: 'text-amber-400 bg-amber-500/15 border-amber-500/30'
+    UNAVAILABLE: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
+    AWAITING_APPROVAL: 'text-amber-300 bg-amber-500/15 border-amber-500/40'
   };
 
   function timeAgo(ts: number): string {
@@ -73,6 +80,60 @@
     const timer = setInterval(refreshAll, REFRESH_INTERVAL_MS);
     return () => clearInterval(timer);
   });
+
+  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s.
+  $effect(() => {
+    if (selectedAgent?.fleet) loadFeed(selectedAgent.id);
+    else feedEntries = [];
+  });
+
+  async function loadFeed(agentId: string) {
+    try {
+      const res = await fetch(`/api/agents/${agentId}/decisions?limit=${FEED_LIMIT}`);
+      if (res.ok && selectedAgent?.id === agentId) feedEntries = (await res.json()).entries;
+    } catch (e) {
+      console.error('Błąd odczytu decyzji:', e);
+    }
+  }
+
+  async function sendVerdict(verdict: 'accept' | 'reject') {
+    if (!selectedAgent) return;
+    const done = verdict === 'accept'
+      ? 'Propozycja zatwierdzona: werdykt zapisany on-chain, agent wykona transakcję w następnym cyklu.'
+      : 'Propozycja odrzucona: werdykt zapisany on-chain, portfel bez zmian.';
+    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict }, done);
+  }
+
+  async function armShock() {
+    if (!selectedAgent) return;
+    await postAndReport(
+      `/api/agents/${selectedAgent.id}/shock`,
+      { pct: SHOCK_PCT },
+      'Szok ceny uzbrojony: agent użyje go w następnym cyklu.'
+    );
+  }
+
+  async function postAndReport(url: string, body: object, successMessage: string) {
+    isSimulating = true;
+    simulationMessage = null;
+    simulationSuccess = null;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const result = await res.json().catch(() => ({}));
+      simulationSuccess = res.ok;
+      simulationMessage = res.ok ? successMessage : `Odmowa (${res.status}): ${result.message ?? res.statusText}`;
+      await refreshAll();
+    } catch (err: any) {
+      simulationSuccess = false;
+      simulationMessage = `Błąd: ${err.message}`;
+    } finally {
+      isSimulating = false;
+    }
+  }
 
   async function copyText(text: string, id: string) {
     await navigator.clipboard.writeText(text);
@@ -316,8 +377,27 @@
                 One-Time Attestation · Klucz powiązany z adresem konta Solana przez DMS (RFC 8032)
               </p>
             </div>
+            {#if selectedAgent.fleet && acceptsShock(selectedAgent.fleet.lastDecisionKind)}
+              <button
+                onclick={armShock}
+                disabled={isSimulating || selectedAgent.fleet.shockArmed}
+                class="mt-3 w-full px-4 py-2.5 rounded-xl border border-fuchsia-500/40 bg-fuchsia-950/30 hover:bg-fuchsia-900/40 text-fuchsia-200 text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <Play class="w-4 h-4" />
+                {selectedAgent.fleet.shockArmed ? 'Szok uzbrojony — w następnym cyklu' : 'Symuluj szok ceny (−3%)'}
+              </button>
+            {/if}
           </div>
         </div>
+
+        {#if selectedAgent.fleet}
+          <DecisionFeed
+            entries={feedEntries}
+            pending={selectedAgent.fleet.pendingProposal}
+            busy={isSimulating}
+            onVerdict={sendVerdict}
+          />
+        {/if}
 
         <!-- HITL Decision Console -->
         <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-5 backdrop-blur-sm">
@@ -326,35 +406,74 @@
             Human-In-The-Loop · Konsola Decyzyjna
           </h3>
 
-          <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
-            Zatwierdź kolejny krok agenta lub aktywuj awaryjny Kill-Switch.
-            Każda decyzja jest podpisana transakcją Solana z zaktualizowanym PQC State Rootem.
-          </p>
-
-          <div class="grid grid-cols-2 gap-3 mb-4">
-            <button
-              onclick={() => simulateAction('approve')}
-              disabled={isSimulating}
-              class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold shadow-lg shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-            >
-              <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
-              {#if isSimulating}
-                <RefreshCw class="w-4 h-4 animate-spin" />
+          {#if selectedAgent.fleet}
+            <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
+              Przy dużej transakcji agent sam się zatrzymuje i czeka na Twoją decyzję: zatwierdź lub odrzuć krok.
+              Kill-Switch zatrzymuje go awaryjnie w każdej chwili. Każda decyzja trafia na Solana devnet.
+            </p>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <button
+                onclick={() => sendVerdict('accept')}
+                disabled={isSimulating || selectedAgent.status !== 'AWAITING_APPROVAL'}
+                class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ShieldCheck class="w-4 h-4" /> Autoryzuj Krok
+              </button>
+              <button
+                onclick={() => sendVerdict('reject')}
+                disabled={isSimulating || selectedAgent.status !== 'AWAITING_APPROVAL'}
+                class="px-4 py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-amber-500/40 text-amber-200 text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Odrzuć
+              </button>
+              {#if selectedAgent.status === 'PAUSED'}
+                <button
+                  onclick={() => simulateAction('approve')}
+                  disabled={isSimulating}
+                  class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <Unlock class="w-4 h-4" /> Wznów agenta
+                </button>
               {:else}
-                <ShieldCheck class="w-4 h-4" />
+                <button
+                  onclick={() => simulateAction('pause')}
+                  disabled={isSimulating}
+                  class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <ShieldAlert class="w-4 h-4" /> Kill-Switch 🛑
+                </button>
               {/if}
-              Autoryzuj Krok
-            </button>
-            <button
-              onclick={() => simulateAction('pause')}
-              disabled={isSimulating}
-              class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold shadow-lg shadow-rose-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-            >
-              <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
-              <ShieldAlert class="w-4 h-4" />
-              Kill-Switch 🛑
-            </button>
-          </div>
+            </div>
+          {:else}
+            <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
+              Zatwierdź kolejny krok agenta lub aktywuj awaryjny Kill-Switch.
+              Każda decyzja jest podpisana transakcją Solana z zaktualizowanym PQC State Rootem.
+            </p>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <button
+                onclick={() => simulateAction('approve')}
+                disabled={isSimulating}
+                class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold shadow-lg shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
+              >
+                <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
+                {#if isSimulating}
+                  <RefreshCw class="w-4 h-4 animate-spin" />
+                {:else}
+                  <ShieldCheck class="w-4 h-4" />
+                {/if}
+                Autoryzuj Krok
+              </button>
+              <button
+                onclick={() => simulateAction('pause')}
+                disabled={isSimulating}
+                class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold shadow-lg shadow-rose-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
+              >
+                <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
+                <ShieldAlert class="w-4 h-4" />
+                Kill-Switch 🛑
+              </button>
+            </div>
+          {/if}
 
           {#if simulationMessage}
             <div class="p-3.5 rounded-xl border text-[11px] font-mono leading-relaxed
@@ -438,6 +557,15 @@
                   {:else if entry.decision === 'pause'}
                     <span class="w-2 h-2 rounded-full bg-rose-400 shadow-sm shadow-rose-400/50"></span>
                     <span class="text-[10px] font-bold text-rose-400 uppercase">KILL-SWITCH</span>
+                  {:else if entry.decision === 'resume'}
+                    <span class="w-2 h-2 rounded-full bg-sky-400 shadow-sm shadow-sky-400/50"></span>
+                    <span class="text-[10px] font-bold text-sky-400 uppercase">RESUME</span>
+                  {:else if entry.decision === 'accept'}
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
+                    <span class="text-[10px] font-bold text-emerald-400 uppercase">APPROVED</span>
+                  {:else if entry.decision === 'reject'}
+                    <span class="w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50"></span>
+                    <span class="text-[10px] font-bold text-amber-400 uppercase">REJECTED</span>
                   {:else}
                     <span class="w-2 h-2 rounded-full bg-slate-400"></span>
                     <span class="text-[10px] font-bold text-slate-400 uppercase">SYSTEM</span>
@@ -455,7 +583,7 @@
                 <span class="text-[9px] text-slate-500">Operator:</span>
                 <span class="text-[10px] font-mono text-violet-300">{entry.operator}</span>
                 <ChevronRight class="w-2.5 h-2.5 text-slate-600" />
-                <span class="px-1 py-0.5 rounded text-[9px] font-mono uppercase {entry.newStatus === 'ACTIVE' ? 'text-emerald-400' : 'text-rose-400'}">
+                <span class="px-1 py-0.5 rounded text-[9px] font-mono uppercase {entry.newStatus === 'ACTIVE' ? 'text-emerald-400' : entry.newStatus === 'AWAITING_APPROVAL' ? 'text-amber-400' : 'text-rose-400'}">
                   {entry.newStatus}
                 </span>
               </div>
