@@ -1,6 +1,6 @@
 //! The signed message bytes must match the TypeScript client (message.test.ts checks the same vector).
 use anchor_lang::prelude::Pubkey;
-use onchain_agent_guard::message::{batch_message, resume_message, step_message, CONTEXT};
+use onchain_agent_guard::message::{activate_message, batch_message, resume_message, step_message, CONTEXT};
 
 const VECTOR: &str = include_str!("../../../fixtures/message-vector.json");
 
@@ -25,4 +25,5 @@ fn messages_match_the_shared_vector() {
     let root: [u8; 32] = hex(field(&vector, "batchRoot")).try_into().unwrap();
     let size = vector["batchSize"].as_u64().unwrap() as u32;
     assert_eq!(batch_message(&agent, counter, &root, size), hex(field(&vector, "batchMessage")));
+    assert_eq!(activate_message(&agent), hex(field(&vector, "activateMessage")));
 }
