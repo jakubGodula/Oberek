@@ -86,6 +86,7 @@ describe('readAgent', () => {
 		const chain = fakeChain({ status: 'Killed', lastDecision: DECISION_HASH_BYTES });
 		expect(await guardOver(chain).readAgent(AGENT_ID)).toEqual({
 			owner: OWNER,
+			agentKey: AGENT_KEY,
 			status: 'Killed',
 			counter: 11,
 			lastDecision: DECISION_HASH

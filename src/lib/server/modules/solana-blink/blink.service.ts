@@ -28,7 +28,8 @@ export interface AgentStatusRecord {
    */
   status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
   currentTask: string;
-  pqcPubkeyHash: string;
+  /** Address of the account holding the agent's ML-DSA-44 public key; null when the guard could not be read. */
+  pqcKeyAccount: string | null;
   lastCommitmentRoot: string;
   lastUpdated: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -61,7 +62,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       name: 'Arbiter Beta — DeFi Optimizer',
       status: 'ACTIVE',
       currentTask: 'Arbitraż cross-DEX: Raydium ↔ Orca, spread 0.34%',
-      pqcPubkeyHash: genPqcHash(),
+      pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'arbiter-02', task: 'ARB_SCAN', timestamp: Date.now() }),
       lastUpdated: Date.now() - 30_000,
       riskLevel: 'HIGH',
@@ -75,7 +76,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       name: 'Guardian Gamma — Risk Monitor',
       status: 'IDLE',
       currentTask: 'Monitoring ekspozycji portfela — brak aktywnych alertów',
-      pqcPubkeyHash: genPqcHash(),
+      pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'guardian-03', task: 'MONITOR', timestamp: Date.now() }),
       lastUpdated: Date.now() - 120_000,
       riskLevel: 'LOW',
@@ -90,8 +91,6 @@ function cardStatus(guardStatus: GuardStatus, awaitingApproval: boolean): AgentS
   if (guardStatus === 'Killed') return 'PAUSED';
   return awaitingApproval ? 'AWAITING_APPROVAL' : 'ACTIVE';
 }
-/** Fleet cards do not show the agent's PQ key yet. */
-const NO_PQC_KEY = '00'.repeat(32);
 const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
 
 /** One unreadable agent shows as UNAVAILABLE instead of failing the whole list. */
@@ -101,7 +100,6 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
     id: entry.id,
     name: entry.name,
     currentTask: last?.record.summary ?? NO_DECISION_YET,
-    pqcPubkeyHash: NO_PQC_KEY,
     lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
     riskLevel: entry.riskLevel
   };
@@ -117,6 +115,7 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
     return {
       ...card,
       status: cardStatus(account.status, proposal !== null),
+      pqcKeyAccount: account.agentKey,
       lastCommitmentRoot: account.lastDecision,
       actionsExecuted: account.counter,
       fleet: { ...fleet, pendingProposal }
@@ -127,6 +126,7 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
       ...card,
       status: 'UNAVAILABLE',
       currentTask: `Niedostępny: ${reason}`,
+      pqcKeyAccount: null,
       lastCommitmentRoot: NO_DECISION,
       actionsExecuted: 0,
       fleet: { ...fleet, pendingProposal: null }
@@ -166,7 +166,7 @@ export class BlinkService {
       name: `Agent #${agentId}`,
       status: 'ACTIVE' as const,
       currentTask: 'Oczekiwanie na dyspozycję operatora',
-      pqcPubkeyHash: '00'.repeat(32),
+      pqcKeyAccount: null,
       lastCommitmentRoot: '00'.repeat(32),
       lastUpdated: Date.now(),
       riskLevel: 'LOW' as const,
@@ -179,7 +179,7 @@ export class BlinkService {
       title: `🛡️ Aegis Sentinel: ${agent.name}`,
       description:
         `Status: [${agent.status}] | Zadanie: ${agent.currentTask}\n` +
-        `PQC Key Hash (ML-DSA-44): ${agent.pqcPubkeyHash.slice(0, 10)}...${agent.pqcPubkeyHash.slice(-6)}\n` +
+        `Konto klucza ML-DSA-44: ${agent.pqcKeyAccount ?? 'nieznane'}\n` +
         `Quantum-Safe State Root: ${agent.lastCommitmentRoot.slice(0, 16)}...`,
       label: 'Autoryzacja Agenta',
       links: {

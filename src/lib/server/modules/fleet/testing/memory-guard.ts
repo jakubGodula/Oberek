@@ -1,5 +1,7 @@
 import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../../agent-guard/guard';
 
+const MEMORY_AGENT_KEY = 'memory-agent-key';
+
 /** Stands in for the program in tests: one agent's account in memory, with the step, kill and resume rules. */
 export class MemoryGuard implements AgentGuard {
 	private account: GuardAccount;
@@ -8,7 +10,7 @@ export class MemoryGuard implements AgentGuard {
 		private readonly agentId: string,
 		owner: string
 	) {
-		this.account = { owner, status: 'Active', counter: 0, lastDecision: NO_DECISION };
+		this.account = { owner, agentKey: MEMORY_AGENT_KEY, status: 'Active', counter: 0, lastDecision: NO_DECISION };
 	}
 
 	async readAgent(agentId: string): Promise<GuardAccount> {

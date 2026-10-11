@@ -18,7 +18,7 @@ let fleet: Fleet;
 
 /** Only readAgent matters here: it returns an account whose lastDecision the test sets. */
 function guardHolding(lastDecision: string): AgentGuard {
-	const account: GuardAccount = { owner: 'owner', status: 'Active', counter: 2, lastDecision };
+	const account: GuardAccount = { owner: 'owner', agentKey: 'agent-key', status: 'Active', counter: 2, lastDecision };
 	const unused = async (): Promise<GuardAccount> => {
 		throw new Error('not used');
 	};

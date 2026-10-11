@@ -5,6 +5,8 @@ export type GuardStatus = 'Active' | 'Killed';
 
 export interface GuardAccount {
 	owner: string;
+	/** Address of the account holding the agent's ML-DSA-44 public key. */
+	agentKey: string;
 	status: GuardStatus;
 	/** Steps and resumes so far. */
 	counter: number;

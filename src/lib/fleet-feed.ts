@@ -61,6 +61,10 @@ export function explorerTxUrl(signature: string): string {
 	return `https://explorer.solana.com/tx/${signature}?cluster=${EXPLORER_CLUSTER}`;
 }
 
+export function explorerAddressUrl(address: string): string {
+	return `https://explorer.solana.com/address/${address}?cluster=${EXPLORER_CLUSTER}`;
+}
+
 /** The decisions (newest first) and the owner's actions, merged newest first by counter. */
 export function toTimeline(entries: FeedEntry[], actions: OperatorAction[], pendingCounter: number | null): TimelineRow[] {
 	const rows: TimelineRow[] = [
