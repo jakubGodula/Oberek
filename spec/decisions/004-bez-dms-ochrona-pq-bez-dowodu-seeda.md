@@ -12,7 +12,8 @@ DMS opiera się na tym, że klucz prywatny Ed25519 powstaje z 32-bajtowego seeda
 
 - **Nie implementujemy DMS.** Na Solanie nie istnieje weryfikator jego dowodu. Klucz ML-DSA-44 agenta wiąże z właścicielem zwykły podpis Ed25519 transakcji `register_agent`.
 - Strona i dokumentacja pokazują tylko to, co istnieje: podpisy ML-DSA-44 weryfikowane on-chain przez `onchain_agent_guard`, klucz agenta w koncie `agent_key`, hash SHA-256 ostatniej decyzji w polu `last_decision` konta agenta.
-- `aegis-registry`, `pqc_pubkey_hash`, commitmenty SHA3-256, korzeń Merkle i ML-KEM-768 nie istnieją i nie są pokazywane.
+- `aegis-registry`, `pqc_pubkey_hash`, commitmenty SHA3-256 i korzeń Merkle nie istnieją i nie są pokazywane.
+- ML-KEM-768 nie szyfruje niczego on-chain. Służy tylko do zapieczętowania logu decyzji na serwerze kluczem właściciela ([decyzja 006](006-zapieczetowany-log-decyzji-ml-kem.md)) i tak jest opisany na stronie.
 
 ## Uzasadnienie
 
@@ -23,6 +24,10 @@ DMS opiera się na tym, że klucz prywatny Ed25519 powstaje z 32-bajtowego seeda
 - Transakcja Solany ma najwyżej 4096 B i 1,4 mln CU. Nawet gdyby taki weryfikator powstał, szacunkowo samo wgranie dowodu to około 1500 transakcji, a weryfikacja tysiące kolejnych.
 - Opakowanie dowodu w mały dowód Groth16, który Solana weryfikuje tanio, opiera się na krzywych eliptycznych, więc komputer kwantowy łamie je dokładnie wtedy, gdy DMS jest potrzebny.
 - Weryfikacja dowodu na serwerze oznacza zaufanie do serwera, a nie do dowodu; takie rozwiązanie odrzuca decyzja 002.
+
+### Dlaczego nie ma korzenia Merkle
+
+Korzeń Merkle streszcza wiele rekordów jedną wartością; ma sens, gdy on-chain trafia jedna kotwica dla paczki decyzji zapisanych poza łańcuchem. Tu każda decyzja jest osobną transakcją `record_step` z własnym hashem SHA-256 i podpisem ML-DSA-44, a licznik konta nadaje im kolejność. Historią jest więc sam ciąg transakcji: audyt (`scripts/audit.ts`) odtwarza go z łańcucha i porównuje z logiem rekord po rekordzie. Pole `last_decision` to hash ostatniego kroku, nadpisywany przy każdym kroku; nie jest korzeniem ani łańcuchem hashy. Korzeń nad całym logiem nie dodałby nic, czego nie ma już w transakcjach, a wymagałby drzewa po stronie serwera jako drugiego źródła prawdy dla dowodów włączenia. Wróci dopiero, gdyby wiele decyzji trafiało do jednej transakcji.
 
 ### DMS jest potrzebny dopiero po Q-day
 
@@ -35,6 +40,7 @@ Podpisy nie podlegają zasadzie „zbierz teraz, odszyfruj później”. Przysz�
 - **Kroki agenta.** `record_step` przyjmuje tylko podpis ML-DSA-44 agenta, weryfikowany on-chain; licznik nie pozwala użyć podpisu drugi raz. Historii decyzji nie da się podrobić nawet po złamaniu wszystkich kluczy Ed25519.
 - **Wznowienie.** `resume` wymaga podpisu ML-DSA-44 agenta oraz podpisu właściciela; sam podrobiony podpis Ed25519 nie wznowi agenta.
 - **Hash decyzji.** SHA-256 zachowuje wobec algorytmu Grovera około 128 bitów bezpieczeństwa; SHA3-256 nie dałby tu nic więcej.
+- **Log decyzji na serwerze.** Zapieczętowany AES-256-GCM pod kluczem opakowanym ML-KEM-768 do właściciela (decyzja 006); sama kopia pliku jest nieczytelna także po Q-day.
 
 ### Co nie jest odporne kwantowo
 
@@ -51,6 +57,6 @@ Podpisy nie podlegają zasadzie „zbierz teraz, odszyfruj później”. Przysz�
 
 ## Konsekwencje
 
-- Ta decyzja zastępuje w `spec/ARCHITECTURE.md` §4.3 opis DMS, `aegis-registry`, commitmentów SHA3-256, korzenia Merkle i ML-KEM-768. Zdanie z decyzji 002 o ML-KEM używanym do szyfrowania jest nieaktualne: projekt nie szyfruje niczego ML-KEM.
+- Ta decyzja zastępuje w `spec/ARCHITECTURE.md` §4.3 opis DMS, `aegis-registry`, commitmentów SHA3-256, korzenia Merkle i szyfrowania ML-KEM-768 danych agenta. Zdanie z decyzji 002 o ML-KEM używanym do szyfrowania odnosi się dziś tylko do pieczęci logu decyzji (decyzja 006); on-chain nic nie jest szyfrowane.
 - Strona operatora pokazuje adres konta `agent_key` z linkiem do Solana Explorer zamiast hasha klucza i opisuje `last_decision` jako SHA-256.
 - Dalsze kroki, każdy z osobną decyzją: klucz ML-DSA-44 właściciela dla `register_agent` i `kill`; program wdrożony jako immutable.

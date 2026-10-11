@@ -31,7 +31,8 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
   ML-DSA-44 key), and the devnet program is still upgradeable by an Ed25519 key (fixable by deploying it immutable).
 - **No DMS:** the Dual-Mode Signature scheme from `spec/ARCHITECTURE.md` §4.3 is not implemented. No verifier for its
   proof exists on Solana, the 5.4 MB proof does not fit a Solana program, and it is only needed after Q-day. The page shows only what exists: the agent's key account
-  and the SHA-256 of its last decision, with no ML-KEM, SHA3 or Merkle root.
+  and the SHA-256 of its last decision, with no SHA3 commitments and no Merkle root. ML-KEM-768 is used only off-chain,
+  to seal each agent's decision log for the owner ([decision 006](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md)).
 
 Why, and what is still open: [spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md](spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 

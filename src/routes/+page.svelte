@@ -194,7 +194,7 @@
         Devnet Live
       </div>
       <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-violet-500/[0.08] border border-violet-500/20 text-violet-300 text-[11px] font-mono">
-        <Lock class="w-3 h-3" /> ML-DSA-44
+        <Lock class="w-3 h-3" /> ML-DSA-44 · ML-KEM-768
       </div>
       <button
         onclick={refreshAll}
@@ -271,8 +271,12 @@
             </span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Algorytm PQC</span>
+            <span class="text-[11px] text-slate-400">Podpis agenta</span>
             <span class="text-[11px] font-mono text-violet-300">ML-DSA-44</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] text-slate-400">Pieczęć logu decyzji</span>
+            <span class="text-[11px] font-mono text-violet-300">ML-KEM-768</span>
           </div>
         </div>
       </div>
@@ -557,6 +561,7 @@
         <div class="space-y-2">
           {#each [
             { label: 'Podpis agenta, weryfikowany on-chain', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
+            { label: 'Pieczęć logu decyzji, klucz właściciela', value: 'ML-KEM-768', note: 'NIST FIPS 203 · AES-256-GCM' },
             { label: 'Hash decyzji', value: 'SHA-256', note: 'pole last_decision' },
             { label: 'Program', value: 'onchain_agent_guard', note: 'Solana Devnet' },
           ] as algo}

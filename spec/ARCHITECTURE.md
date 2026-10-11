@@ -163,7 +163,7 @@ Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
 - Publikuje zdarzenia w **Event Bus** (`AgentActionTriggered`, `AgentActionValidated`, `AgentKilled`).
 
 ### 4.3. Moduł: `zk-pqc` oraz `private-vault` (Post-Quantum ZK Commitments & DMS)
-> Nieaktualne: DMS, `aegis-registry`, commitmenty SHA3-256, korzeń Merkle i ML-KEM-768 nie są zaimplementowane; dla dowodu DMS nie istnieje weryfikator na Solanie. Obowiązuje [decyzja 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
+> Nieaktualne: DMS, `aegis-registry`, commitmenty SHA3-256 i korzeń Merkle nie są zaimplementowane; dla dowodu DMS nie istnieje weryfikator na Solanie. ML-KEM-768 nie szyfruje niczego on-chain; pieczętuje tylko log decyzji na serwerze ([decyzja 006](decisions/006-zapieczetowany-log-decyzji-ml-kem.md)). Obowiązuje [decyzja 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 
 - **Problem kryptograficzny**: Klasyczne algorytmy asymetryczne (RSA, ECC, Ed25519) są podatne na złamanie przez algorytm Shora na komputerach kwantowych. W łańcuchach typu ECDSA (Ethereum, Bitcoin) ujawnienie klucza publicznego trwale kompromituje konto, ponieważ klucze są bezstrukturalnymi skalarami.
 - **Przewaga strukturalna Solany (RFC 8032 & SLIP-0010)**:
