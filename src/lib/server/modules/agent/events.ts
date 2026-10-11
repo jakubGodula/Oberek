@@ -17,7 +17,8 @@ export type GuardEvent =
 	| { name: 'StepRecorded'; agent: Address; counter: bigint; decisionHash: Uint8Array }
 	| { name: 'BatchRecorded'; agent: Address; counter: bigint; root: Uint8Array; size: number }
 	| { name: 'AgentKilled'; agent: Address; counter: bigint }
-	| { name: 'AgentResumed'; agent: Address; counter: bigint };
+	| { name: 'AgentResumed'; agent: Address; counter: bigint }
+	| { name: 'AgentActivated'; agent: Address; counter: bigint };
 
 const DISCRIMINATOR_LENGTH = 8;
 const DATA_PREFIX = 'Program data: ';
@@ -75,6 +76,9 @@ function decodeEvent(data: Uint8Array): GuardEvent | undefined {
 	}
 	if (equalBytes(discriminator, DISCRIMINATORS.agentResumed)) {
 		return { name: 'AgentResumed', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };
+	}
+	if (equalBytes(discriminator, DISCRIMINATORS.agentActivated)) {
+		return { name: 'AgentActivated', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };
 	}
 	return undefined;
 }

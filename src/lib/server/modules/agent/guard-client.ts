@@ -1,19 +1,22 @@
 import { fetchEncodedAccount, type Address, type Signature, type TransactionSigner } from '@solana/kit';
 import { getCreateAccountInstruction } from '@solana-program/system';
 import {
+	activateAgentInstruction,
 	AGENT_KEY_ACCOUNT_SIZE,
 	decodeAgent,
 	killInstruction,
 	recordBatchInstruction,
+	OWNER_KEY_ACCOUNT_SIZE,
 	recordStepInstruction,
 	registerAgentInstruction,
+	registerOwnerInstruction,
 	resumeInstruction,
 	type AgentState
 } from './instructions';
 import { parseGuardEvents, type GuardEvent } from './events';
 import { sendV1, type SendResult, type SolanaConnection } from './transaction';
 
-/** Preparing the 1,312 B key costs ~1.09M CU. */
+/** Preparing a 1,312 B key (agent or owner) costs ~1.09M CU. */
 const REGISTER_COMPUTE_UNIT_LIMIT = 1_400_000;
 /** ML-DSA-44 verification ~260k CU plus Anchor (Mollusk: step 271,861, resume 262,233). */
 const SIGNED_COMPUTE_UNIT_LIMIT = 400_000;
@@ -86,18 +89,43 @@ export async function registerAgent(
 	registration: { owner: TransactionSigner; agentKey: TransactionSigner; agent: Address; publicKey: Uint8Array }
 ): Promise<SendResult> {
 	const { owner, agentKey, agent, publicKey } = registration;
-	const lamports = await client.connection.rpc.getMinimumBalanceForRentExemption(AGENT_KEY_ACCOUNT_SIZE).send();
 	const instructions = [
-		getCreateAccountInstruction({
-			payer: owner,
-			newAccount: agentKey,
-			lamports,
-			space: AGENT_KEY_ACCOUNT_SIZE,
-			programAddress: client.programAddress
-		}),
+		await createKeyAccountInstruction(client, owner, agentKey, AGENT_KEY_ACCOUNT_SIZE),
 		registerAgentInstruction({ programAddress: client.programAddress, owner, agentKey: agentKey.address, agent, publicKey })
 	];
 	return sendV1(client.connection, owner, instructions, REGISTER_COMPUTE_UNIT_LIMIT);
+}
+
+/** Creates the owner's key account and its permanent record in one transaction; once per owner wallet. */
+export async function registerOwner(
+	client: GuardClient,
+	registration: { owner: TransactionSigner; ownerKey: TransactionSigner; ownerRecord: Address; publicKey: Uint8Array }
+): Promise<SendResult> {
+	const { owner, ownerKey, ownerRecord, publicKey } = registration;
+	const instructions = [
+		await createKeyAccountInstruction(client, owner, ownerKey, OWNER_KEY_ACCOUNT_SIZE),
+		registerOwnerInstruction({ programAddress: client.programAddress, owner, ownerKey: ownerKey.address, ownerRecord, publicKey })
+	];
+	return sendV1(client.connection, owner, instructions, REGISTER_COMPUTE_UNIT_LIMIT);
+}
+
+export function activateAgent(
+	client: GuardClient,
+	activation: { feePayer: TransactionSigner; agent: Address; ownerRecord: Address; ownerKey: Address; signature: Uint8Array }
+): Promise<SendResult> {
+	const instruction = activateAgentInstruction({ programAddress: client.programAddress, ...activation });
+	return sendV1(client.connection, activation.feePayer, [instruction], SIGNED_COMPUTE_UNIT_LIMIT);
+}
+
+/** Creates a key account owned by the program; the payer pays its rent. */
+async function createKeyAccountInstruction(
+	client: GuardClient,
+	payer: TransactionSigner,
+	account: TransactionSigner,
+	space: bigint
+) {
+	const lamports = await client.connection.rpc.getMinimumBalanceForRentExemption(space).send();
+	return getCreateAccountInstruction({ payer, newAccount: account, lamports, space, programAddress: client.programAddress });
 }
 
 export function recordStep(
