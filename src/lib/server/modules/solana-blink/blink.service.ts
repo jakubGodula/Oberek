@@ -175,7 +175,7 @@ export class BlinkService {
 
     return {
       type: 'action',
-      icon: `${origin}/shield-logo.svg`,
+      icon: `${origin}/logo.svg`,
       title: `🛡️ Oberek: ${agent.name}`,
       description:
         `Status: [${agent.status}] | Task: ${agent.currentTask}\n` +

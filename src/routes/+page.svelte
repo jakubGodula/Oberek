@@ -176,8 +176,8 @@
   <!-- Top Navigation -->
   <header class="border-b border-white/[0.06] bg-[#0c101e]/80 backdrop-blur-xl sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
     <div class="flex items-center gap-3.5">
-      <div class="relative p-2.5 bg-gradient-to-tr from-violet-600 via-purple-500 to-emerald-500 rounded-xl shadow-lg shadow-purple-500/25">
-        <Shield class="w-5 h-5 text-white" />
+      <div class="relative">
+        <img src="/logo.svg" alt="" class="h-10 w-auto" />
         <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0c101e] animate-pulse"></span>
       </div>
       <div>
