@@ -13,8 +13,10 @@ owner kill and resume the agent.
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
 Decision log: each agent's decisions in `.devnet/fleet/<id>/decisions.jsonl` are sealed with AES-256-GCM under a key
-wrapped with ML-KEM-768 to the owner, so a copy of the log is unreadable now and after Q-day; only the SHA-256 of each
-decision goes on-chain. The server keeps the key to show the decisions, so this does not protect a compromised server.
+wrapped with ML-KEM-768 to the owner, so a copy of the log file alone is unreadable now and after Q-day, and the owner
+opens it with the owner's own key; only the SHA-256 of each decision goes on-chain. The server keeps the key next to the
+log (`seal.json`) to show the decisions, so this protects neither a compromised server nor a copy of the whole agent
+directory.
 Design: [docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md](docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md),
 decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md).
 

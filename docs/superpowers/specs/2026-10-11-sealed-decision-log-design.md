@@ -15,11 +15,12 @@ so the chain does not reveal whether or how the log is encrypted, and a swapped 
 
 ## What it protects, and what it does not
 
-- Protects: a copy of `decisions.jsonl` that leaves the server (backup, shared file, leaked directory) reveals nothing,
-  now or after Q-day (harvest now, decrypt later): AES-256 keeps ~128-bit security against Grover, and the data key is
-  only wrapped with ML-KEM-768.
-- Does not protect: a compromised server. It holds the data key in `seal.json`, because it must read the log back for
-  the GUI and across restarts.
+- Protects: a copy of `decisions.jsonl` on its own that leaves the server (backup, shared file, log shipping) reveals
+  nothing, now or after Q-day: AES-256 keeps ~128-bit security against Grover.
+- ML-KEM-768's part: the owner opens the logs with the owner's own secret key, without the server's copy of the data
+  key, and that wrapping stays secure after Q-day.
+- Does not protect: a compromised server, nor a copy of the whole agent directory. `seal.json` holds the data key next
+  to the capsule, because the server must read the log back for the GUI and across restarts.
 
 ## Scope
 

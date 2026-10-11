@@ -19,11 +19,13 @@ dotąd jawnym tekstem. Kopia tego pliku (backup, udostępniony katalog, wyciek) 
 
 ## Uzasadnienie
 
-- **Odporność na „zbierz teraz, odszyfruj później”.** Klucz danych jest opakowany tylko przez ML-KEM-768, a AES-256
-  zachowuje około 128 bitów bezpieczeństwa wobec algorytmu Grovera.
+- **Odporność na „zbierz teraz, odszyfruj później”.** Sam plik `decisions.jsonl` jest nieczytelny bez klucza danych, a
+  AES-256 zachowuje około 128 bitów bezpieczeństwa wobec algorytmu Grovera.
+- **Rola ML-KEM-768.** Właściciel otwiera log własnym kluczem prywatnym, bez kopii klucza danych z serwera, a to
+  opakowanie pozostaje bezpieczne po Q-day.
 - **Serwer musi czytać własny log.** Strona pokazuje decyzje, Sentinel po restarcie wznawia stan skarbca z ostatniej
   decyzji, a akceptacja propozycji szuka jej w logu. Dlatego serwer trzyma klucz danych w `seal.json`, a szyfrowanie nie
-  chroni przed przejęciem serwera, tylko przed kopią logu, która z niego wyszła.
+  chroni przed przejęciem serwera ani przed kopią całego katalogu agenta (z `seal.json`), tylko przed kopią samego logu.
 - **Łańcuch nic nie zdradza.** Hash z jawnego tekstu nie mówi, czy i jak log jest szyfrowany, a podmieniony wiersz i tak
   nie przejdzie audytu.
 - Ta decyzja urzeczywistnia zdanie z decyzji 002 o ML-KEM używanym do szyfrowania.
