@@ -37,6 +37,8 @@ export interface RuntimeClient {
 	latest(): Promise<LatestOutcome>;
 	/** Claims the shock armed for this agent's next cycle, which disarms it. */
 	claimShock(): Promise<ShockOutcome>;
+	/** The pause between steps the owner picked on the page's speed wheel; null when none is picked or unreadable. */
+	pace(): Promise<number | null>;
 }
 
 /** The server answers 202 when the agent's decisions go on-chain in batches: this one waits for the next. */
@@ -90,6 +92,13 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				return { kind: 'failed', reason: 'unexpected answer: no latest decision in it' };
 			}
 			return { kind: 'found', record: answer.body.latest.record };
+		},
+
+		async pace() {
+			const answer = await request(`${agentUrl}/pace`);
+			if (answer.kind === 'unreachable' || !answer.response.ok) return null;
+			const { intervalMs } = answer.body;
+			return typeof intervalMs === 'number' && intervalMs > 0 ? intervalMs : null;
 		},
 
 		async claimShock() {

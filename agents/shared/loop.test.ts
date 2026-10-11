@@ -49,3 +49,21 @@ test('runs no step when stopped before the start', async () => {
 	await runLoop(async () => void (steps += 1), 0, stop.signal);
 	expect(steps).toBe(0);
 });
+
+test('asks for the next pause after each step, so a new pace applies from the next tick', async () => {
+	const stop = new AbortController();
+	const asked: number[] = [];
+	let steps = 0;
+	await runLoop(
+		async () => {
+			steps += 1;
+			if (steps === 3) stop.abort();
+		},
+		async () => {
+			asked.push(steps);
+			return 0;
+		},
+		stop.signal
+	);
+	expect(asked).toEqual([1, 2, 3]);
+});

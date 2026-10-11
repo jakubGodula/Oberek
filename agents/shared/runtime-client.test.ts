@@ -88,6 +88,23 @@ describe('submit', () => {
 	});
 });
 
+describe('pace', () => {
+	test('reads the pause the owner picked on the speed wheel', async () => {
+		const { fetchFn, requests } = answering(200, { intervalMs: 500 });
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).pace()).toBe(500);
+		expect(requests[0].url).toBe('http://server/api/agents/tick-01/pace');
+	});
+
+	test.each([
+		['none is picked', answering(200, { intervalMs: null }).fetchFn],
+		['the answer has no number', answering(200, { intervalMs: 'fast' }).fetchFn],
+		['the server fails', answering(500, { message: 'boom' }).fetchFn],
+		['the server is unreachable', unreachable]
+	])('is null when %s, so the agent keeps its own pace', async (_, fetchFn) => {
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).pace()).toBeNull();
+	});
+});
+
 describe('claimShock', () => {
 	test('posts to the agent shock claim endpoint and reports an armed shock', async () => {
 		const { fetchFn, requests } = answering(200, { shock: { pct: -3 } });
