@@ -20,8 +20,13 @@ describe('loadConfig', () => {
 			decisionLogPath: '.devnet/decisions.jsonl',
 			feePayerPath: 'payer.json',
 			ownerPath: undefined,
-			ownerKemPath: '.devnet/owner-mlkem.json'
+			ownerKemPath: '.devnet/owner-mlkem.json',
+			ownerMldsaPath: '.devnet/owner-mldsa.json'
 		});
+	});
+
+	it('reads the owner ML-DSA key file path', () => {
+		expect(loadConfig({ ...REQUIRED, OWNER_MLDSA_FILE: 'keys/owner.json' }).ownerMldsaPath).toBe('keys/owner.json');
 	});
 
 	it('names a missing required variable', () => {

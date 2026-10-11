@@ -6,10 +6,15 @@ import { getAddressDecoder } from '@solana/kit';
 import {
 	appendJsonLine,
 	assertAgentFileAbsent,
+	assertOwnerKeyFileAbsent,
 	loadAgentFile,
+	loadOwnerKeyFile,
 	saveAgentFile,
+	saveOwnerKeyFile,
 	sendWithAgentFileWriteAhead,
-	type AgentFile
+	sendWithOwnerKeyFileWriteAhead,
+	type AgentFile,
+	type OwnerKeyFile
 } from './files';
 
 const addressOf = (value: number) => getAddressDecoder().decode(new Uint8Array(32).fill(value));
@@ -20,6 +25,45 @@ const AGENT_FILE: AgentFile = {
 	agent: addressOf(3),
 	mldsaSecretKey: new Uint8Array(2560).fill(4)
 };
+
+const OWNER_KEY_FILE: OwnerKeyFile = {
+	owner: addressOf(1),
+	ownerKey: addressOf(6),
+	mldsaSecretKey: new Uint8Array(2560).fill(7)
+};
+
+describe('owner key file', () => {
+	it('round-trips', () => {
+		const path = tempPath('owner-mldsa.json');
+		saveOwnerKeyFile(path, OWNER_KEY_FILE);
+		expect(loadOwnerKeyFile(path)).toEqual(OWNER_KEY_FILE);
+	});
+
+	it('never overwrites an existing owner key file', () => {
+		const path = tempPath('owner-mldsa.json');
+		saveOwnerKeyFile(path, OWNER_KEY_FILE);
+		expect(() => assertOwnerKeyFileAbsent(path)).toThrow("the owner's ML-DSA-44 secret key");
+		expect(() => saveOwnerKeyFile(path, { ...OWNER_KEY_FILE, mldsaSecretKey: new Uint8Array(2560) })).toThrow('already exists');
+		expect(loadOwnerKeyFile(path)).toEqual(OWNER_KEY_FILE);
+	});
+
+	it('is written before the send and kept when the send throws', async () => {
+		const path = tempPath('owner-mldsa.json');
+		const send = async () => {
+			expect(loadOwnerKeyFile(path)).toEqual(OWNER_KEY_FILE);
+			throw new Error('HTTP error (429): Too Many Requests');
+		};
+		await expect(sendWithOwnerKeyFileWriteAhead(path, OWNER_KEY_FILE, send)).rejects.toThrow('429');
+		expect(loadOwnerKeyFile(path)).toEqual(OWNER_KEY_FILE);
+	});
+
+	it('is removed when the registration failed on-chain', async () => {
+		const path = tempPath('owner-mldsa.json');
+		const failed = { err: { InstructionError: [1, { Custom: 6003 }] } };
+		await sendWithOwnerKeyFileWriteAhead(path, OWNER_KEY_FILE, async () => failed);
+		expect(existsSync(path)).toBe(false);
+	});
+});
 
 describe('agent file', () => {
 	it('round-trips', () => {
