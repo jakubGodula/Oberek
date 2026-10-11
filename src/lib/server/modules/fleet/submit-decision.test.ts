@@ -6,6 +6,7 @@ import { join } from 'path';
 import { GuardError, type AgentGuard } from '../agent-guard/guard';
 import { AwaitingApprovalError } from './approval';
 import { Fleet } from './fleet';
+import { TEST_SEAL } from './testing/test-seal';
 import { RateLimitedError, StepThrottle } from './step-throttle';
 import { parseSubmission, submitDecision, type FleetRuntime } from './submit-decision';
 import { MemoryGuard } from './testing/memory-guard';
@@ -23,7 +24,7 @@ beforeEach(async () => {
 	rootDir = mkdtempSync(join(tmpdir(), 'fleet-'));
 	const guard = new MemoryGuard(AGENT, OWNER);
 	const fleet = new Fleet(join(rootDir, 'fleet'));
-	fleet.register({ id: AGENT, name: 'Test Agent', riskLevel: 'LOW', registeredAt: NOW.getTime() });
+	fleet.register({ id: AGENT, name: 'Test Agent', riskLevel: 'LOW', registeredAt: NOW.getTime() }, TEST_SEAL);
 	runtime = { guard, fleet, throttle: new StepThrottle(0), now: () => NOW };
 });
 

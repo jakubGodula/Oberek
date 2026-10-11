@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
 import { Fleet, type DecisionLogEntry } from './fleet';
+import { TEST_SEAL } from './testing/test-seal';
 import { DecisionNotInLogError, latestDecision } from './latest-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
@@ -44,7 +45,7 @@ function entry(counter: number, decisionHash: string, unconfirmed?: true): Decis
 beforeEach(() => {
 	rootDir = mkdtempSync(join(tmpdir(), 'latest-'));
 	fleet = new Fleet(join(rootDir, 'fleet'));
-	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() });
+	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() }, TEST_SEAL);
 });
 
 afterEach(() => rmSync(rootDir, { recursive: true, force: true }));
