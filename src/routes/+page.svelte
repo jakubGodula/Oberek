@@ -171,6 +171,12 @@
   }
 </script>
 
+<svelte:head>
+  <meta property="og:image" content="{data.origin}/brand/social/oberek-og-1200x630.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+</svelte:head>
+
 <div class="min-h-screen bg-[#080b14] text-slate-100 flex flex-col font-sans selection:bg-purple-500/40 selection:text-white">
 
   <!-- Top Navigation -->
