@@ -1,5 +1,5 @@
-// First-time devnet setup: .env, the payer wallet, its SOL, and the two agents (registered on chain, imported into the
-// fleet). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the two agents (registered on
+// chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync } from 'fs';
@@ -7,6 +7,7 @@ import { join } from 'path';
 import { createSolanaRpc, devnet, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
+import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
 import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
@@ -32,6 +33,8 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
 await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf)));
+// Idempotent; must come before any import or seal.
+runBun(['scripts/fleet.ts', 'owner-key']);
 for (const agent of AGENTS) setUpAgent(agent);
 log('ready: bun scripts/demo.ts');
 
@@ -90,11 +93,13 @@ function setUpAgent(agent: SetupAgent): void {
 
 function runStep(agent: SetupAgent, step: AgentStep): void {
 	if (step === 'register') runBun(['scripts/agent.ts', 'register'], { AGENT_FILE: agentFile(agent) });
+	else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
 	else runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
 }
 
 function progressOf(agent: SetupAgent): AgentProgress {
-	return { registered: existsSync(agentFile(agent)), imported: existsSync(join(FLEET_DIR, agent.id)) };
+	const imported = existsSync(join(FLEET_DIR, agent.id));
+	return { registered: existsSync(agentFile(agent)), imported, sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id) };
 }
 
 function agentFile(agent: SetupAgent): string {

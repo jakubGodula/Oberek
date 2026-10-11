@@ -9,16 +9,18 @@ export interface AgentProgress {
 	readonly registered: boolean;
 	/** Its fleet directory exists: the server runs it. */
 	readonly imported: boolean;
+	/** Its decision log has a seal (import seals; agents imported before that need `seal`). */
+	readonly sealed: boolean;
 }
 
-export type AgentStep = 'register' | 'import';
+export type AgentStep = 'register' | 'import' | 'seal';
 
-export function stepsFor({ registered, imported }: AgentProgress): AgentStep[] {
-	if (imported) return [];
+export function stepsFor({ registered, imported, sealed }: AgentProgress): AgentStep[] {
+	if (imported) return sealed ? [] : ['seal'];
 	return registered ? ['import'] : ['register', 'import'];
 }
 
-/** Only registration costs SOL; importing is local. */
+/** Only registration costs SOL; importing and sealing are local. */
 export function lamportsNeeded(agents: readonly AgentProgress[]): bigint {
 	return BigInt(agents.filter((agent) => stepsFor(agent).includes('register')).length) * LAMPORTS_PER_AGENT;
 }
