@@ -10,6 +10,8 @@ export interface AgentConfig {
 	feePayerPath: string;
 	/** Only the owner commands (register, kill, resume) need it. */
 	ownerPath: string | undefined;
+	/** The owner's ML-KEM-768 key pair: its public key seals new agents' logs, its secret key opens them in the audit. */
+	ownerKemPath: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -19,7 +21,8 @@ const DEFAULTS = {
 	rpcSubscriptionsUrl: 'wss://api.devnet.solana.com',
 	tickMs: 30_000,
 	agentFilePath: '.devnet/agent.json',
-	decisionLogPath: '.devnet/decisions.jsonl'
+	decisionLogPath: '.devnet/decisions.jsonl',
+	ownerKemPath: '.devnet/owner-mlkem.json'
 };
 
 export function loadConfig(env: Env = process.env): AgentConfig {
@@ -31,7 +34,8 @@ export function loadConfig(env: Env = process.env): AgentConfig {
 		agentFilePath: env.AGENT_FILE ?? DEFAULTS.agentFilePath,
 		decisionLogPath: env.AGENT_DECISION_LOG ?? DEFAULTS.decisionLogPath,
 		feePayerPath: required(env, 'FEE_PAYER_KEYPAIR'),
-		ownerPath: env.OWNER_KEYPAIR
+		ownerPath: env.OWNER_KEYPAIR,
+		ownerKemPath: env.OWNER_MLKEM_FILE ?? DEFAULTS.ownerKemPath
 	};
 }
 

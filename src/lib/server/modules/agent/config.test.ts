@@ -5,6 +5,10 @@ const PROGRAM_ID = '11111111111111111111111111111111';
 const REQUIRED = { GUARD_PROGRAM_ID: PROGRAM_ID, FEE_PAYER_KEYPAIR: 'payer.json' };
 
 describe('loadConfig', () => {
+	it('reads the owner ML-KEM key file from OWNER_MLKEM_FILE', () => {
+		expect(loadConfig({ ...REQUIRED, OWNER_MLKEM_FILE: '/keys/owner.json' }).ownerKemPath).toBe('/keys/owner.json');
+	});
+
 	it('applies defaults for devnet', () => {
 		expect(loadConfig(REQUIRED)).toEqual({
 			programAddress: PROGRAM_ID,
@@ -14,7 +18,8 @@ describe('loadConfig', () => {
 			agentFilePath: '.devnet/agent.json',
 			decisionLogPath: '.devnet/decisions.jsonl',
 			feePayerPath: 'payer.json',
-			ownerPath: undefined
+			ownerPath: undefined,
+			ownerKemPath: '.devnet/owner-mlkem.json'
 		});
 	});
 
