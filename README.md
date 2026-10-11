@@ -31,10 +31,20 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
   ML-DSA-44 key), and the devnet program is still upgradeable by an Ed25519 key (fixable by deploying it immutable).
 - **No DMS:** the Dual-Mode Signature scheme from `spec/ARCHITECTURE.md` §4.3 is not implemented. No verifier for its
   proof exists on Solana, the 5.4 MB proof does not fit a Solana program, and it is only needed after Q-day. The page shows only what exists: the agent's key account
-  and the SHA-256 of its last decision, with no SHA3 commitments and no Merkle root. ML-KEM-768 is used only off-chain,
-  to seal each agent's decision log for the owner ([decision 006](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md)).
+  and the SHA-256 of its last decision, with no SHA3 commitments; a Merkle root appears only for batched agents (below).
+  ML-KEM-768 is used only off-chain, to seal each agent's decision log for the owner ([decision 006](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md)).
 
 Why, and what is still open: [spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md](spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
+
+## Batched agents: many decisions in one transaction
+
+Agents listed in `BATCHED_AGENT_IDS` (`.env`) get `202` for each decision. The server buffers them and every
+`BATCH_FLUSH_MS` (default 10 s), or at `BATCH_MAX_DECISIONS` (default 16), records the whole buffer with one
+`record_batch`: one ML-DSA-44 signature over the SHA-256 Merkle root of the batch, verified on-chain at the cost of one
+step. Each decision is logged with its Merkle proof, so it can be shown and checked against the root on-chain without
+the rest of the batch; `scripts/audit.ts` checks every proof. A decision that needs approval is never batched. Decisions
+still in the buffer when the server stops are lost; they never reached the chain.
+Decision: [spec/decisions/007-korzen-merkle-dla-paczki-decyzji.md](spec/decisions/007-korzen-merkle-dla-paczki-decyzji.md).
 
 ## Run
 
