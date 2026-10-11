@@ -8,8 +8,10 @@ pub mod message;
 pub mod state;
 
 use error::GuardError;
-use message::{resume_message, step_message, CONTEXT as MLDSA_CONTEXT};
-use state::{Agent, AgentKey, AgentKilled, AgentResumed, AgentStatus, MldsaPreparedKey, StepRecorded, AGENT_SEED};
+use message::{batch_message, resume_message, step_message, CONTEXT as MLDSA_CONTEXT};
+use state::{
+    Agent, AgentKey, AgentKilled, AgentResumed, AgentStatus, BatchRecorded, MldsaPreparedKey, StepRecorded, AGENT_SEED,
+};
 
 declare_id!("BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs");
 
@@ -49,6 +51,21 @@ pub mod onchain_agent_guard {
         agent.counter = counter;
         agent.last_decision = decision_hash;
         emit!(StepRecorded { agent: agent_address, counter, decision_hash });
+        Ok(())
+    }
+
+    /// Records `size` decisions at once: one ML-DSA-44 signature over their Merkle root, built off-chain. The program
+    /// never sees the decisions; the log keeps each one with its proof.
+    pub fn record_batch(ctx: Context<RecordStep>, root: [u8; 32], size: u32, signature: Vec<u8>) -> Result<()> {
+        let agent_address = ctx.accounts.agent.key();
+        let agent = &mut ctx.accounts.agent;
+        require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+        require!(size > 0, GuardError::EmptyBatch);
+        let counter = agent.counter + 1;
+        verify_signature(&ctx.accounts.agent_key, &batch_message(&agent_address, counter, &root, size), &signature)?;
+        agent.counter = counter;
+        agent.last_decision = root;
+        emit!(BatchRecorded { agent: agent_address, counter, root, size });
         Ok(())
     }
 
@@ -102,6 +119,7 @@ pub struct RegisterAgent<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Accounts of record_step and record_batch.
 #[derive(Accounts)]
 pub struct RecordStep<'info> {
     #[account(mut, has_one = agent_key)]

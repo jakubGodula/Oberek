@@ -6,7 +6,8 @@ export const GUARD_ERROR_CODES = {
 	InvalidPublicKey: 6003,
 	InvalidSignature: 6004,
 	InvalidKeyAccount: 6005,
-	VerifyFailed: 6006
+	VerifyFailed: 6006,
+	EmptyBatch: 6007
 } as const;
 
 const GUARD_ERROR_NAMES = new Map<number, string>(

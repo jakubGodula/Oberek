@@ -34,6 +34,54 @@
       "args": []
     },
     {
+      "name": "record_batch",
+      "docs": [
+        "Records `size` decisions at once: one ML-DSA-44 signature over their Merkle root, built off-chain. The program",
+        "never sees the decisions; the log keeps each one with its proof."
+      ],
+      "discriminator": [
+        57,
+        246,
+        210,
+        47,
+        195,
+        112,
+        162,
+        65
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "writable": true
+        },
+        {
+          "name": "agent_key",
+          "relations": [
+            "agent"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "size",
+          "type": "u32"
+        },
+        {
+          "name": "signature",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "record_step",
       "discriminator": [
         73,
@@ -232,6 +280,19 @@
       ]
     },
     {
+      "name": "BatchRecorded",
+      "discriminator": [
+        136,
+        10,
+        10,
+        165,
+        213,
+        5,
+        185,
+        162
+      ]
+    },
+    {
       "name": "StepRecorded",
       "discriminator": [
         250,
@@ -280,6 +341,11 @@
       "code": 6006,
       "name": "VerifyFailed",
       "msg": "ML-DSA-44 signature verification failed"
+    },
+    {
+      "code": 6007,
+      "name": "EmptyBatch",
+      "msg": "A batch holds at least one decision"
     }
   ],
   "types": [
@@ -316,6 +382,9 @@
           },
           {
             "name": "last_decision",
+            "docs": [
+              "The last step's decision hash, or the last batch's Merkle root."
+            ],
             "type": {
               "array": [
                 "u8",
@@ -396,6 +465,35 @@
           },
           {
             "name": "Killed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BatchRecorded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "counter",
+            "type": "u64"
+          },
+          {
+            "name": "root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "size",
+            "type": "u32"
           }
         ]
       }

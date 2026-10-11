@@ -7,6 +7,7 @@ pub const CONTEXT: &[u8] = b"onchain-agent-guard:v1";
 pub const DECISION_HASH_LEN: usize = 32;
 const STEP_TAG: u8 = 1;
 const RESUME_TAG: u8 = 2;
+const BATCH_TAG: u8 = 3;
 const HEADER_LEN: usize = 1 + 32 + 8;
 
 /// Message for the step that moves the agent's counter to `counter`.
@@ -19,6 +20,14 @@ pub fn step_message(agent: &Pubkey, counter: u64, decision_hash: &[u8; DECISION_
 /// Message for the resume that moves the agent's counter to `counter`.
 pub fn resume_message(agent: &Pubkey, counter: u64) -> Vec<u8> {
     header(RESUME_TAG, agent, counter)
+}
+
+/// Message for the batch of `size` decisions with Merkle root `root` that moves the agent's counter to `counter`.
+pub fn batch_message(agent: &Pubkey, counter: u64, root: &[u8; DECISION_HASH_LEN], size: u32) -> Vec<u8> {
+    let mut message = header(BATCH_TAG, agent, counter);
+    message.extend_from_slice(root);
+    message.extend_from_slice(&size.to_le_bytes());
+    message
 }
 
 fn header(tag: u8, agent: &Pubkey, counter: u64) -> Vec<u8> {
