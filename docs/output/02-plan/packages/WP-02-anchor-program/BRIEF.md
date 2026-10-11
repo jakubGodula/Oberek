@@ -26,8 +26,8 @@ app so WP-07 can build the TypeScript client.
 ## 3. Read first
 1. `programs/aegis_registry/Anchor.toml`, `Cargo.toml`, `programs/aegis_registry/src/lib.rs`, `package.json`, `Dockerfile.anchor` (all from WP-01).
 2. `docs/CONTRACTS.md` section "Program instruction set" (Q-API-05) — frozen; do not change names, args or seeds.
-3. `/Users/macbook/work/sandbox/solana-2026/output/01-intake/qa/rust-q_and_a.md` (defaults of Q-RUST-01…09).
-4. `/Users/macbook/work/sandbox/solana-2026/output/research/02-solana-stack-2026.md` §4 (Anchor 1.2.1, `anchor test` defaults to Surfpool, `--validator legacy`, LiteSVM, IDL via Program Metadata Program).
+3. `docs/output/01-intake/qa/rust-q_and_a.md` (defaults of Q-RUST-01…09).
+4. `docs/output/research/02-solana-stack-2026.md` §4 (Anchor 1.2.1, `anchor test` defaults to Surfpool, `--validator legacy`, LiteSVM, IDL via Program Metadata Program).
 5. Anchor 1.x docs: https://www.anchor-lang.com/docs (accounts, `InitSpace`, `#[max_len]`, events, errors, `anchor idl`), release notes for 1.0.0.
 6. LiteSVM TypeScript README: https://github.com/LiteSVM/litesvm (npm `litesvm` 1.5.x).
 

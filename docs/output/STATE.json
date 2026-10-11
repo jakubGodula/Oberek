@@ -3,7 +3,7 @@
   "title": "open-mercato-solana-hackathon",
   "stamp": "20261007-115212",
   "sharing_mode": "folder",
-  "run_folder": "/Users/macbook/work/sandbox/solana-2026/output",
+  "run_folder": "docs/output",
   "step": 2,
   "steps": {
     "0_task": { "status": "done", "file": "00-task/TASK.md" },

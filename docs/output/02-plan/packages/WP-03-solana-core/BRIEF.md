@@ -29,8 +29,8 @@ instantiates `Connection` itself.
 3. `apps/mercato/src/modules/solana_core/` (WP-01 skeleton) and `docs/CONTRACTS.md` ("SolanaCoreService", routes, events, env keys).
 4. `packages/core/src/modules/auth/api/login.ts` and `@open-mercato/shared/lib/auth/jwt` — how the current user is read in a route (`ctx.auth`).
 5. `packages/core/src/modules/customers/api/people/route.ts` — the CRUD route pattern (for the wallet-links list).
-6. `/Users/macbook/work/sandbox/solana-2026/output/research/02-solana-stack-2026.md` §3 (web3.js 1.99.x, wallet-adapter 0.15.40, Wallet Standard), §5 (Helius DAS `getAssetsByOwner`, `searchAssets`, 2 RPS free tier), §8 (blockhash, `getSignatureStatuses`, priority fees, `maxSupportedTransactionVersion: 1`, SIWS).
-7. `/Users/macbook/work/sandbox/solana-2026/output/01-intake/qa/typescript-q_and_a.md` (Q-TS-01…03, 07), `solana-q_and_a.md` Q-SOL-09, `security-q_and_a.md` Q-SEC-01/03.
+6. `docs/output/research/02-solana-stack-2026.md` §3 (web3.js 1.99.x, wallet-adapter 0.15.40, Wallet Standard), §5 (Helius DAS `getAssetsByOwner`, `searchAssets`, 2 RPS free tier), §8 (blockhash, `getSignatureStatuses`, priority fees, `maxSupportedTransactionVersion: 1`, SIWS).
+7. `docs/output/01-intake/qa/typescript-q_and_a.md` (Q-TS-01…03, 07), `solana-q_and_a.md` Q-SOL-09, `security-q_and_a.md` Q-SEC-01/03.
 8. Phantom SIWS guide https://phantom.com/learn/developers/sign-in-with-solana and `@solana/wallet-standard-util` `verifySignIn` / `createSignInMessage` docs.
 
 ## 4. Files owned

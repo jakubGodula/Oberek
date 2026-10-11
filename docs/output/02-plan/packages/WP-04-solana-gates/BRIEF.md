@@ -29,8 +29,8 @@ and the CLI, and exposes a read-only AI tool.
 3. `apps/mercato/src/modules/solana_core/services/solana-core.service.ts` and `fake-solana-core.service.ts` (WP-03) — consume only through DI (`solanaCoreService`).
 4. `packages/core/src/modules/customers/` — `data/entities.ts` (customer ids) and `widgets/injection-table.ts` to find the customer-detail injection spot id (`admin.page:<path>:before` or a `crud-form:<entityId>:fields` spot — record which one you used).
 5. `docs/CONTRACTS.md` (routes `/api/solana_gates/*`, event `solana_gates.result.changed`, tool `solana.get_gate_status`, table names).
-6. `/Users/macbook/work/sandbox/solana-2026/output/research/02-solana-stack-2026.md` §5 (DAS `searchAssets` with `grouping: ['collection', C]`, `interface: 'MplCoreAsset'`, 2 RPS), §6 (Metaplex Core, Umi 1.6, `mpl-core@1.10.0`, soulbound `PermanentFreezeDelegate`, `Attributes` plugin, `fetchAssetsByOwner`).
-7. `/Users/macbook/work/sandbox/solana-2026/output/01-intake/qa/solana-q_and_a.md` Q-SOL-03/04, `design-q_and_a.md` Q-DESIGN-06, `fe-q_and_a.md` Q-FE-03.
+6. `docs/output/research/02-solana-stack-2026.md` §5 (DAS `searchAssets` with `grouping: ['collection', C]`, `interface: 'MplCoreAsset'`, 2 RPS), §6 (Metaplex Core, Umi 1.6, `mpl-core@1.10.0`, soulbound `PermanentFreezeDelegate`, `Attributes` plugin, `fetchAssetsByOwner`).
+7. `docs/output/01-intake/qa/solana-q_and_a.md` Q-SOL-03/04, `design-q_and_a.md` Q-DESIGN-06, `fe-q_and_a.md` Q-FE-03.
 8. Metaplex Core JS docs: https://www.metaplex.com/docs/smart-contracts/core/sdk/javascript, soulbound guide https://www.metaplex.com/docs/smart-contracts/core/guides/create-soulbound-nft-asset.
 
 ## 4. Files owned

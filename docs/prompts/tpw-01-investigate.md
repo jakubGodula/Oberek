@@ -1,17 +1,17 @@
 # tpw-01-investigate.md — Stage 01: investigate the sources of truth
 
-Read `/home/alex/work/temp/prompts/tpw-00-common.md` and `tpw-DESIRED-OUTPUT.md` first. Follow them.
+Read `<prompts-dir>/tpw-00-common.md` and `tpw-DESIRED-OUTPUT.md` first. Follow them.
 
 ## Goal
 Create `<output>`, then write the four research files. No skills are written in this stage.
 
 ## Steps
 1. Resolve and create `<output>` (common §2). Write its path to
-   `/home/alex/work/temp/prompts/.tpw-current-output`. Start `BUILD_STATE.md` and `ASSUMPTIONS.md`.
+   `<prompts-dir>/.tpw-current-output`. Start `BUILD_STATE.md` and `ASSUMPTIONS.md`.
 2. **Cezar** → `research/01-cezar.md`.
    - Get a read-only view of `wip/aw-cezar-runner-03-10-2026` @ `4a8344bc` (common §3). Confirm the commit
      with `git rev-parse`. Record `git log --oneline 1b13522d..HEAD` and `git diff --stat 1b13522d...HEAD`.
-   - List `~/work/cezar*` and note what each project is and whether it matters here.
+   - List `<work-dir>/cezar*` and note what each project is and whether it matters here.
    - Read: `README.md`, `docs/`, `AGENTS.md`, `AGENT_PROTOCOL.md`, `SDLC.md`, `CODE_REVIEW.md`, `.env.example`,
      `.ai/specs/*`, `.ai/skills/*`, `.ai/cezar/*`, the runner contract (`packages/contract/src/runners.ts` or
      its equivalent), and the code for workflows, dispatch, config and the CLI.
@@ -37,7 +37,7 @@ Create `<output>`, then write the four research files. No skills are written in 
      review ← om-code-review + om-auto-review-pr; tests ← om-integration-tests.
      Confirm or correct this mapping from what you read.
 4. **User skills** → `research/03-user-skills.md`.
-   - Read everything under `/home/alex/work/temp/skills` (and `~/work/skills` if present), recursively.
+   - Read everything under `<user-skills-dir>` (and `<work-dir>/skills` if present), recursively.
    - Extract the two-steps structure, wording, folder and naming habits, and model and harness habits.
      List conflicts with common §4 and resolve them by the precedence rule.
 5. **Decisions** → `research/04-design-decisions.md`: packaging (set of skills + templates + Cezar

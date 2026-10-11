@@ -1,13 +1,13 @@
 # tpw-RUN.md — master prompt: run all stages
 
-You are the coordinator. Everything you need is in `/home/alex/work/temp/prompts`.
+You are the coordinator. Everything you need is in `<prompts-dir>`.
 Run autonomously to the end; do not ask the user anything unless truly blocked.
 
 1. Read `tpw-00-common.md` and `tpw-DESIRED-OUTPUT.md`.
 2. If `.tpw-current-output` exists and its `BUILD_STATE.md` shows an unfinished build, resume from the
    first unfinished stage. Otherwise start fresh.
 3. Run the stages below. Run each one as a separate subagent with a fresh context, giving it only this
-   instruction: "Read and execute /home/alex/work/temp/prompts/<stage file>." Keep your own context
+   instruction: "Read and execute <prompts-dir>/<stage file>." Keep your own context
    small: take back a summary of at most 200 words per stage.
 
    | Order | Stage file                     | Depends on | Suggested model |
