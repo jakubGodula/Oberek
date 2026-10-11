@@ -24,11 +24,15 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
 
 - **Quantum-resistant:** an agent's steps and resumes. The program accepts them only with the agent's ML-DSA-44
   signature, verified on-chain, so the decision history can't be forged even with every Ed25519 key broken.
+- **Quantum-resistant:** a new agent's start. `register_agent` creates the agent `Pending`, and only the owner's
+  ML-DSA-44 signature, verified on-chain against the owner's key registered once per wallet, makes it `Active`
+  ([decision 005](spec/decisions/005-klucz-pq-wlasciciela-aktywuje-agenta.md)).
 - **Not quantum-resistant, on purpose:** `kill` takes only the owner's Ed25519 signature, so the owner can stop an
   agent from an ordinary wallet even when its server is down. A quantum attacker could only stop an agent, not resume
   it.
-- **Not quantum-resistant yet (WIP):** `register_agent` takes only the owner's Ed25519 signature (fixable with an owner
-  ML-DSA-44 key), and the devnet program is still upgradeable by an Ed25519 key (fixable by deploying it immutable).
+- **Not quantum-resistant yet (WIP):** the devnet program is still upgradeable by an Ed25519 key (fixable by deploying
+  it immutable). Two agents registered before owner activation existed stay `Active` on chain without it; the server
+  no longer runs them (decision 005 lists their addresses).
 - **No DMS:** the Dual-Mode Signature scheme from `spec/ARCHITECTURE.md` §4.3 is not implemented. No verifier for its
   proof exists on Solana, the 5.4 MB proof does not fit a Solana program, and it is only needed after Q-day. The page shows only what exists: the agent's key account
   and the SHA-256 of its last decision, with no SHA3 commitments; a Merkle root appears only for batched agents (below).
