@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { AccountRole, generateKeyPairSigner, getAddressDecoder, getU64Encoder } from '@solana/kit';
 import {
+	anchorDiscriminator,
 	DISCRIMINATORS,
 	decodeAgent,
 	findAgentAddress,
 	killInstruction,
+	recordBatchInstruction,
 	recordStepInstruction,
 	registerAgentInstruction
 } from './instructions';
@@ -24,6 +26,24 @@ describe('discriminators', () => {
 		expect(Array.from(DISCRIMINATORS.kill)).toEqual([46, 229, 132, 89, 87, 194, 20, 217]);
 		expect(Array.from(DISCRIMINATORS.resume)).toEqual([1, 166, 51, 170, 127, 32, 141, 206]);
 		expect(Array.from(DISCRIMINATORS.agent)).toEqual([47, 166, 112, 147, 155, 197, 86, 7]);
+	});
+});
+
+describe('record_batch discriminators', () => {
+	it('name record_batch and BatchRecorded like Anchor', () => {
+		expect(DISCRIMINATORS.recordBatch).toEqual(anchorDiscriminator('global', 'record_batch'));
+		expect(DISCRIMINATORS.batchRecorded).toEqual(anchorDiscriminator('event', 'BatchRecorded'));
+	});
+});
+
+describe('recordBatchInstruction', () => {
+	it('encodes root, u32 LE size and the Borsh signature after the discriminator', () => {
+		const signature = filled(ML_DSA_44_SIGNATURE_LENGTH, 6);
+		const root = filled(32, 0xb7);
+		const instruction = recordBatchInstruction({ programAddress: PROGRAM, agent: AGENT, agentKey: AGENT_KEY, root, size: 5, signature });
+		expect(instruction.accounts.map((account) => account.role)).toEqual([AccountRole.WRITABLE, AccountRole.READONLY]);
+		const signatureLength = [0x74, 0x09, 0, 0];
+		expect(instruction.data).toEqual(Uint8Array.from([...DISCRIMINATORS.recordBatch, ...root, 5, 0, 0, 0, ...signatureLength, ...signature]));
 	});
 });
 

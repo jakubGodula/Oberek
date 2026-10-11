@@ -23,7 +23,7 @@ function guardHolding(lastDecision: string): AgentGuard {
 	const unused = async (): Promise<GuardAccount> => {
 		throw new Error('not used');
 	};
-	return { readAgent: async () => account, recordStep: unused, kill: unused, resume: unused };
+	return { readAgent: async () => account, recordStep: unused, recordBatch: unused, kill: unused, resume: unused };
 }
 
 function runtimeWith(guard: AgentGuard): FleetRuntime {

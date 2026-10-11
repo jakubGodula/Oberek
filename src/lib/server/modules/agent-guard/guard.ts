@@ -17,7 +17,7 @@ export interface GuardAccount {
 export const NO_DECISION = '00'.repeat(32);
 
 /** The events the program emits, one per successful transaction. */
-export type GuardEvent = 'StepRecorded' | 'AgentKilled' | 'AgentResumed';
+export type GuardEvent = 'StepRecorded' | 'BatchRecorded' | 'AgentKilled' | 'AgentResumed';
 
 /** A guard transaction that landed and succeeded, named by the event it emitted on chain. */
 export interface LandedTransaction {
@@ -28,6 +28,9 @@ export interface LandedTransaction {
 	signature: string;
 	/** Steps only. */
 	decisionHash?: string;
+	/** Batches only: the Merkle root and the number of decisions under it. */
+	root?: string;
+	size?: number;
 }
 
 /**
@@ -70,6 +73,11 @@ export interface AgentGuard {
 	 * agent is killed and with CounterMismatch when another step took that counter first.
 	 */
 	recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount>;
+	/**
+	 * Records `size` decisions under Merkle root `root` as step `counter`, with one signature. Same refusals as
+	 * recordStep.
+	 */
+	recordBatch(agentId: string, counter: number, root: string, size: number): Promise<GuardAccount>;
 	/** Owner only; the agent must be active. */
 	kill(agentId: string, owner: string): Promise<GuardAccount>;
 	/** Owner only; the agent must be killed. Uses up one counter value, like the program. */

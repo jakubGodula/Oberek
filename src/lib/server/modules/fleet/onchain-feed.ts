@@ -24,7 +24,9 @@ export function withTransactions(
 			return signature ? { ...entry, signature } : entry;
 		}),
 		operatorActions: transactions.flatMap(({ event, counter, signature, landedAt }) =>
-			event !== 'StepRecorded' && counter >= oldestCounter ? [{ event, counter, signature, landedAt }] : []
+			(event === 'AgentKilled' || event === 'AgentResumed') && counter >= oldestCounter
+				? [{ event, counter, signature, landedAt }]
+				: []
 		)
 	};
 }

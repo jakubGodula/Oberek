@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { address, getAddressEncoder, getU64Encoder } from '@solana/kit';
+import { address, getAddressEncoder, getU32Encoder, getU64Encoder } from '@solana/kit';
 import { parseGuardEvents } from './events';
 import { DISCRIMINATORS } from './instructions';
 
@@ -34,6 +34,12 @@ describe('parseGuardEvents', () => {
 			{ name: 'AgentKilled', agent: AGENT, counter: 3n },
 			{ name: 'AgentResumed', agent: AGENT, counter: 4n }
 		]);
+	});
+
+	it('decodes BatchRecorded with its root and size', () => {
+		const root = new Uint8Array(32).fill(0xb7);
+		const logs = invoked(PROGRAM, dataLine(DISCRIMINATORS.batchRecorded, ...agentAndCounter(5n), root, getU32Encoder().encode(16)));
+		expect(parseGuardEvents(logs, PROGRAM)).toEqual([{ name: 'BatchRecorded', agent: AGENT, counter: 5n, root, size: 16 }]);
 	});
 
 	it('ignores data logged by another program, even with a guard event discriminator', () => {
