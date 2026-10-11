@@ -5,6 +5,7 @@ import { join } from 'path';
 import type { GuardError } from '../agent-guard/guard';
 import { NoPendingProposalError, parseVerdict, proposalAwaiting, recordVerdict } from './approval';
 import { Fleet } from './fleet';
+import { TEST_SEAL } from './testing/test-seal';
 import { StepThrottle } from './step-throttle';
 import { submitDecision, type FleetRuntime } from './submit-decision';
 import { MemoryGuard } from './testing/memory-guard';
@@ -29,7 +30,7 @@ const failure = (promise: Promise<unknown>) => promise.then(() => undefined, (ca
 beforeEach(() => {
 	rootDir = mkdtempSync(join(tmpdir(), 'approval-'));
 	const fleet = new Fleet(join(rootDir, 'fleet'));
-	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() });
+	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() }, TEST_SEAL);
 	runtime = { guard: new MemoryGuard(AGENT, OWNER), fleet, throttle: new StepThrottle(0), now: () => NOW };
 });
 

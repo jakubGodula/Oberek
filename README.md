@@ -12,6 +12,14 @@ owner kill and resume the agent.
 
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
+Decision log: each agent's decisions in `.devnet/fleet/<id>/decisions.jsonl` are sealed with AES-256-GCM under a key
+wrapped with ML-KEM-768 to the owner, so a copy of the log file alone is unreadable now and after Q-day, and the owner
+opens it with the owner's own key; only the SHA-256 of each decision goes on-chain. The server keeps the key next to the
+log (`seal.json`) to show the decisions, so this protects neither a compromised server nor a copy of the whole agent
+directory.
+Design: [docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md](docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md),
+decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md).
+
 ## Run
 
 Needs [Bun](https://bun.sh). Without `.env` the page shows only the two built-in mock agents, labelled MOCK.
@@ -32,8 +40,9 @@ bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo
 `setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
 payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
 first; that is often rate-limited, so it may print the address and wait until you send SOL from
-https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it registers `sentinel-01` and
-`tick-01` (agent files in `.devnet/agents/`) and imports them into the fleet.
+https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it creates the owner's ML-KEM-768
+key (`OWNER_MLKEM_FILE`), registers `sentinel-01` and `tick-01` (agent files in `.devnet/agents/`), imports them into
+the fleet and seals their decision logs.
 
 ### A real agent on devnet, by hand
 
@@ -48,10 +57,13 @@ requests per 8 hours; or a transfer from any devnet wallet): each registration l
 
 ```sh
 bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json
+bun scripts/fleet.ts owner-key   # once: the owner's ML-KEM-768 key, .devnet/owner-mlkem.json
 bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One"
 bun run dev                      # tick-01 appears on the page, read from devnet
 bun agents/tick                  # one step every 30 s; see agents/tick/README.md
 ```
+
+An agent imported before logs were sealed: `bun scripts/fleet.ts seal <id>`; its earlier plaintext lines stay readable.
 
 ### Second agent: Sentinel
 
@@ -94,7 +106,14 @@ bun scripts/audit.ts sentinel-01  # decision log vs. on-chain history; exit code
 Reads the agent account and every transaction in its history (read-only, no fees). It checks that each counter
 1..N has exactly one step or resume on-chain, that the account's last decision is the last step's hash, that the log
 holds a record for every on-chain hash that still hashes to it, and that every log entry not marked `unconfirmed` is
-on-chain with the same hash. The free-tier devnet RPC allows only a few `getTransaction` calls per window, so it takes
+on-chain with the same hash.
+
+Sealed lines are opened with the owner's ML-KEM secret key from `OWNER_MLKEM_FILE` (`.devnet/owner-mlkem.json`), not
+the server's copy, so the audit needs that file. The output says how many lines are sealed and how many are plaintext
+from before sealing. A wrong owner key opens no sealed line: each is skipped with a warning and its step is reported as
+`on-chain, but not in the log`, which looks like tampering but is the key. Keep a backup of that file.
+
+The free-tier devnet RPC allows only a few `getTransaction` calls per window, so it takes
 about 3 s per transaction: ~20 minutes for 400. Steps run with `bun scripts/agent.ts run` before the import into the
 fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as missing. How it works:
 [spec/history-audit.md](spec/history-audit.md).
