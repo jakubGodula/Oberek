@@ -1,14 +1,16 @@
-// End-to-end check of onchain_agent_guard on devnet with a fresh agent: register → 3 steps → kill (steps rejected)
-// → resume → step. Needs the program deployed (onchain/deploy-devnet.sh) and .env set; the fee payer is also the
-// owner. Costs ~0.15 SOL (key account rent). Usage: bun scripts/devnet-e2e.ts
+// End-to-end check of onchain_agent_guard on devnet with a fresh agent: register → activate → 3 steps → kill (steps
+// rejected) → resume → step. Needs the program deployed (onchain/deploy-devnet.sh), .env set and the owner key file
+// (bun scripts/setup.ts); the fee payer is also the owner. Costs ~0.15 SOL (key account rent).
+// Usage: bun scripts/devnet-e2e.ts
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { generateKeyPairSigner, getBase16Decoder } from '@solana/kit';
 import { runCycle, type DecisionLogEntry } from '../src/lib/server/modules/agent/agent-loop';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { createCyclePorts } from '../src/lib/server/modules/agent/cycle-ports';
-import { loadKeypairSigner, type AgentFile } from '../src/lib/server/modules/agent/files';
+import { loadKeypairSigner, loadOwnerKeyFile, type AgentFile } from '../src/lib/server/modules/agent/files';
 import { customErrorCode, GUARD_ERROR_CODES } from '../src/lib/server/modules/agent/guard-errors';
 import {
+	activateAgent,
 	fetchAgent,
 	killAgent,
 	recordStep,
@@ -16,8 +18,8 @@ import {
 	resumeAgent,
 	type GuardClient
 } from '../src/lib/server/modules/agent/guard-client';
-import { signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
-import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
+import { activateMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { findAgentAddress, findOwnerRecordAddress } from '../src/lib/server/modules/agent/instructions';
 import { signResume } from '../src/lib/server/modules/agent/resume';
 import { connect } from '../src/lib/server/modules/agent/transaction';
 import { reportSend } from './report';
@@ -50,6 +52,20 @@ if (!reportSend('register', registered)) {
 	console.log('FAIL: register');
 	process.exit(1);
 }
+const ownerKeyFile = loadOwnerKeyFile(config.ownerMldsaPath);
+let state = await fetchAgent(client, registeredAgent);
+check('registered agent is Pending with counter 0', state.status === 'Pending' && state.counter === 0n);
+const activated = await activateAgent(client, {
+	feePayer: payer,
+	agent: registeredAgent,
+	ownerRecord: await findOwnerRecordAddress(config.programAddress, payer.address),
+	ownerKey: ownerKeyFile.ownerKey,
+	signature: signGuardMessage(activateMessage(registeredAgent), ownerKeyFile.mldsaSecretKey)
+});
+if (!reportSend('activate', activated)) {
+	console.log('FAIL: activate');
+	process.exit(1);
+}
 const agentFile: AgentFile = {
 	owner: payer.address,
 	agentKey: agentKeySigner.address,
@@ -70,8 +86,8 @@ const ports = {
 };
 console.log(`agent ${agent}`);
 
-let state = await readAgent();
-check('registered agent is Active with counter 0', state.status === 'Active' && state.counter === 0n);
+state = await readAgent();
+check('activated agent is Active with counter 0', state.status === 'Active' && state.counter === 0n);
 
 for (let step = 1; step <= STEPS_BEFORE_KILL; step++) {
 	check(`cycle ${step} recorded`, (await runCycle(ports)) === 'recorded');

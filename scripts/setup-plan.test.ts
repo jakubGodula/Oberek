@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { LAMPORTS_PER_AGENT, lamportsNeeded, stepsFor, type AgentProgress } from './setup-plan';
+import { LAMPORTS_FOR_OWNER_KEY, LAMPORTS_PER_AGENT, lamportsNeeded, stepsFor, type AgentProgress } from './setup-plan';
 
 const fresh: AgentProgress = { registered: false, imported: false, sealed: false };
 const registered: AgentProgress = { registered: true, imported: false, sealed: false };
@@ -31,13 +31,18 @@ test('a sealed agent is never sealed again', () => {
 });
 
 test('sealing costs no SOL', () => {
-	expect(lamportsNeeded([importedBeforeSealing])).toBe(0n);
+	expect(lamportsNeeded([importedBeforeSealing], true)).toBe(0n);
 });
 
 test('funding covers each agent still to register', () => {
-	expect(lamportsNeeded([fresh, registered, fresh])).toBe(2n * LAMPORTS_PER_AGENT);
+	expect(lamportsNeeded([fresh, registered, fresh], true)).toBe(2n * LAMPORTS_PER_AGENT);
 });
 
 test('a set-up machine needs no funding', () => {
-	expect(lamportsNeeded([done, registered])).toBe(0n);
+	expect(lamportsNeeded([done, registered], true)).toBe(0n);
+});
+
+test('funding also covers the owner key until it is registered', () => {
+	expect(lamportsNeeded([fresh], false)).toBe(LAMPORTS_PER_AGENT + LAMPORTS_FOR_OWNER_KEY);
+	expect(lamportsNeeded([done], false)).toBe(LAMPORTS_FOR_OWNER_KEY);
 });

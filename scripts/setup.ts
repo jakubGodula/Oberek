@@ -1,5 +1,6 @@
-// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the two agents (registered on
-// chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM-768 and ML-DSA-44 keys and the two
+// agents (registered and activated on chain, imported into the fleet, their logs sealed). Every step is skipped when
+// already done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
 import { spawnSync } from 'child_process';
@@ -35,9 +36,10 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 /** A plain RPC, without the server's rate-limit retries: a refused airdrop should go to the faucet hint at once. */
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
-await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf)));
+await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf), existsSync(config.ownerMldsaPath)));
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
+ensureOwnerKey();
 for (const agent of AGENTS) setUpAgent(agent);
 log('ready: bun scripts/demo.ts');
 log(telegramHint());
@@ -101,6 +103,12 @@ async function requestAirdrop(rpc: Rpc, payer: Address, amount: bigint): Promise
 
 async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 	return (await rpc.getBalance(account).send()).value;
+}
+
+/** Once per owner wallet, before any agent: every agent needs the owner's ML-DSA-44 activation. */
+function ensureOwnerKey(): void {
+	if (existsSync(config.ownerMldsaPath)) return log(`owner key ${config.ownerMldsaPath} exists`);
+	runBun(['scripts/agent.ts', 'register-owner']);
 }
 
 function setUpAgent(agent: SetupAgent): void {
