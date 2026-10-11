@@ -47,6 +47,9 @@ const DECISION_LOG_FILE = 'decisions.jsonl';
 const TRANSACTION_LOG_FILE = 'transactions.jsonl';
 const SEAL_FILE = 'seal.json';
 
+/** The agent has no seal.json: nothing may be sent on-chain, since its record could not be logged. */
+export class LogNotSealedError extends Error {}
+
 /** Where the decision log's AES key comes from: the server reads seal.json, the owner's audit recovers it. */
 export type DataKeyOf = (agentId: string) => Uint8Array;
 
@@ -76,6 +79,12 @@ export class Fleet {
 
 	isSealed(agentId: string): boolean {
 		return existsSync(this.sealPath(agentId));
+	}
+
+	assertSealed(agentId: string): void {
+		if (!this.isSealed(agentId)) {
+			throw new LogNotSealedError(`agent ${agentId} has no sealed decision log; run: bun scripts/fleet.ts seal ${agentId}`);
+		}
 	}
 
 	seal(agentId: string): LogSeal {

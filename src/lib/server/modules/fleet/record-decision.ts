@@ -29,6 +29,8 @@ export async function recordDecision(
 		observedAt: runtime.now().toISOString()
 	};
 	const decisionHash = hashDecisionRecord(record);
+	// Before anything goes on-chain: a step whose record cannot be logged could never be backed.
+	runtime.fleet.assertSealed(agentId);
 	try {
 		await runtime.guard.recordStep(agentId, record.counter, decisionHash);
 	} catch (error) {
