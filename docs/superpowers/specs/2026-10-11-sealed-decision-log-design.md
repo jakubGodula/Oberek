@@ -85,7 +85,7 @@ Strict TDD, red first, `bun test`.
 ## Docs
 
 - `spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md`: the sealed log, what it protects and what not, why the
-  server keeps `dataKey`; replaces the ML-KEM sentence in decision 002 (line 21). Number 005 is taken by the owner key
-  work on `owner_pq_key`.
+  server keeps `dataKey`. It makes decision 002's line 21 ("ML-KEM, którego projekt używa do szyfrowania") true, so
+  002 stays as it is. Number 005 is taken by the owner key work on `owner_pq_key`.
 - `README.md`: a short note on what ML-KEM-768 protects. The GUI labels on `gui_labels` that remove ML-KEM get fixed
   when that branch is rebased.
