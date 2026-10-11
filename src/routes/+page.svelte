@@ -26,10 +26,6 @@
     selectedAgent ? `${data.origin}/api/actions/agent-action?agentId=${selectedAgent.id}` : ''
   );
 
-  const dialToUrl = $derived(
-    blinkUrl ? `https://dial.to/?action=solana-action:${encodeURIComponent(blinkUrl)}&cluster=devnet` : ''
-  );
-
   /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
   const fleetAgents = $derived(agents.filter((a: any) => a.fleet));
 
@@ -503,7 +499,7 @@
         <!-- Blinks Hub -->
         <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-5 backdrop-blur-sm">
           <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-            <Terminal class="w-3.5 h-3.5 text-sky-400" /> Solana Actions & Dialect Blinks
+            <Terminal class="w-3.5 h-3.5 text-sky-400" /> Solana Actions
           </h3>
 
           <div class="space-y-3">
@@ -533,18 +529,6 @@
               </div>
             </div>
 
-            <a
-              href={dialToUrl}
-              target="_blank"
-              rel="noreferrer"
-              class="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-sky-950/40 to-violet-950/40 border border-sky-500/[0.2] hover:border-sky-500/40 transition-all group"
-            >
-              <div>
-                <p class="text-[13px] font-semibold text-white">Przetestuj w Dialect Inspector</p>
-                <p class="text-[11px] text-slate-400">Otwórz akcję na dial.to · Solana Devnet</p>
-              </div>
-              <ExternalLink class="w-4 h-4 text-sky-400 group-hover:text-sky-300 transition" />
-            </a>
           </div>
         </div>
       {/if}
