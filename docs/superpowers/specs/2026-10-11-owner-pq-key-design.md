@@ -58,7 +58,8 @@ owner key. `OwnerRecord` is not named `Owner` (that name is an Anchor trait).
 context `onchain-agent-guard:v1`). The agent address binds both owner and agent key; activation cannot repeat because
 nothing returns an agent to `Pending`. The counter stays 0, so step 1 still moves it to 1.
 
-New errors (appended): `AgentNotPending`, `AgentPending`, `InvalidOwnerKey`.
+New errors (appended): `AgentNotPending`, `AgentPending`. A malformed owner key fails with the existing
+`InvalidPublicKey`; a wrong owner record or key account fails Anchor's own seeds, `has_one` and discriminator checks.
 
 ### Remaining Ed25519 trust
 
@@ -72,7 +73,7 @@ before Q-day; after that a forged Ed25519 signature can neither replace the owne
 | `message.ts` + `message.rs` | `activateMessage(agent)` / `activate_message`; new `activateMessage` case in `onchain/fixtures/message-vector.json`, checked on both sides |
 | `instructions.ts` | `'Pending'` in `AGENT_STATUSES`; `OWNER_KEY_ACCOUNT_SIZE = 20_552n`; `findOwnerRecordAddress(program, owner)`; `registerOwnerInstruction`, `activateAgentInstruction`; discriminators checked by `idl.test.ts` |
 | `events.ts` | parses `AgentActivated` |
-| `guard-errors.ts` | the three new codes |
+| `guard-errors.ts` | the two new codes |
 | `guard-client.ts` | `registerOwner` (create_account + register_owner, 1,400,000 CU), `activateAgent` (400,000 CU) |
 | `files.ts` | owner key file `{ owner, ownerKey, mldsaSecretKey }`, mode 0600, saved write-ahead like the agent file (it holds the only copy of the key) |
 | `config.ts` | `OWNER_MLDSA_FILE`, default `.devnet/owner-mldsa.json` |
