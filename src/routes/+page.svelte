@@ -337,11 +337,11 @@
               </div>
             </div>
 
-            <!-- PQC State Root -->
+            <!-- Last decision hash -->
             <div class="bg-black/30 rounded-xl p-3.5 border border-violet-500/[0.15] mb-3">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Key class="w-3 h-3" /> Quantum-Safe Merkle State Root (SHA3-256)
+                  <Key class="w-3 h-3" /> Ostatnia decyzja (SHA-256)
                 </span>
                 <button
                   onclick={() => copyText(selectedAgent.lastCommitmentRoot, 'root')}
@@ -358,7 +358,7 @@
                 {selectedAgent.lastCommitmentRoot}
               </p>
               <p class="text-[10px] text-slate-500 mt-1.5">
-                Kotwiczone na Solana Devnet · Program PDA <code class="text-violet-400">aegis-registry</code>
+                Pole <code class="text-violet-400">last_decision</code> konta agenta w programie <code class="text-violet-400">onchain_agent_guard</code> (Solana Devnet)
               </p>
             </div>
 

@@ -180,7 +180,7 @@ export class BlinkService {
       description:
         `Status: [${agent.status}] | Zadanie: ${agent.currentTask}\n` +
         `Konto klucza ML-DSA-44: ${agent.pqcKeyAccount ?? 'nieznane'}\n` +
-        `Quantum-Safe State Root: ${agent.lastCommitmentRoot.slice(0, 16)}...`,
+        `Ostatnia decyzja (SHA-256): ${agent.lastCommitmentRoot.slice(0, 16)}...`,
       label: 'Autoryzacja Agenta',
       links: {
         actions: [
