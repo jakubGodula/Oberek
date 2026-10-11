@@ -16,6 +16,11 @@ export function paceStepsFor(batched: boolean): number[] {
 	return batched ? PACE_STEPS_MS : PACE_STEPS_MS.filter((ms) => ms >= UNBATCHED_MIN_PACE_MS);
 }
 
+/** A notch of the wheel: the pause in seconds. */
+export function paceLabel(intervalMs: number): string {
+	return `${intervalMs / MS_PER_SECOND} s`;
+}
+
 export function describePace(intervalMs: number): string {
-	return `1 tick / ${intervalMs / MS_PER_SECOND} s`;
+	return `1 tick / ${paceLabel(intervalMs)}`;
 }

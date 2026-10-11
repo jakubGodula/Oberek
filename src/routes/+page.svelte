@@ -6,7 +6,7 @@
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import { acceptsPace, describePace, paceStepsFor } from '#lib/tick-pace';
+  import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
   import { acceptsShock, decisionHashLabel, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
@@ -442,9 +442,16 @@
                   onchange={(event) => setPace(steps[Number(event.currentTarget.value)])}
                   class="w-full accent-violet-400 cursor-pointer disabled:cursor-not-allowed"
                 />
-                <div class="flex justify-between text-[9px] font-mono text-slate-500 mt-1">
-                  <span>{describePace(steps[0])}</span>
-                  <span>{describePace(steps[steps.length - 1])}</span>
+                <!-- One notch per step the slider snaps to; px-1.5 lines them up with the thumb's travel. -->
+                <div class="flex justify-between px-1.5 mt-0.5">
+                  {#each steps as step (step)}
+                    <div class="flex flex-col items-center w-0">
+                      <span class="w-px h-1.5 {step === paceMs ? 'bg-violet-300' : 'bg-slate-500'}"></span>
+                      <span class="mt-0.5 text-[9px] font-mono whitespace-nowrap {step === paceMs ? 'text-violet-200 font-bold' : 'text-slate-500'}">
+                        {paceLabel(step)}
+                      </span>
+                    </div>
+                  {/each}
                 </div>
                 {#if !selectedAgent.fleet.batched}
                   <p class="text-[10px] text-slate-500 mt-1.5">

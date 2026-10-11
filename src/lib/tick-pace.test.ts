@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { acceptsPace, describePace, paceStepsFor } from './tick-pace';
+import { acceptsPace, describePace, paceLabel, paceStepsFor } from './tick-pace';
 
 describe('paceStepsFor', () => {
 	test('a batched agent may tick from every 0.5 s to every 30 s', () => {
@@ -26,5 +26,11 @@ describe('acceptsPace', () => {
 		expect(acceptsPace('tick')).toBe(true);
 		expect(acceptsPace('sentinel')).toBe(false);
 		expect(acceptsPace(null)).toBe(false);
+	});
+});
+
+describe('paceLabel', () => {
+	test('names a notch of the wheel in seconds', () => {
+		expect(paceStepsFor(true).map(paceLabel)).toEqual(['0.5 s', '1 s', '2 s', '5 s', '10 s', '30 s']);
 	});
 });
