@@ -12,27 +12,29 @@ This file is not run on its own. Every stage prompt (`tpw-01` … `tpw-05`) star
 - Never print, copy or commit secrets (API keys, tokens, `.env` contents, `~/.cezar` credentials).
   Reference paths only.
 - English only. Shell must work on both Linux and macOS (no GNU-only or BSD-only flags without a fallback).
-- Do not modify Cezar source code, the Open Mercato skills checkout, or `/home/alex/work/temp/skills`.
+- Do not modify Cezar source code, the Open Mercato skills checkout, or `<user-skills-dir>`.
   They are read-only references. All writing goes to `<output>`.
 
 ## 2. Paths
-- Prompts (this folder): `/home/alex/work/temp/prompts`
-- `<output>` = `~/work/output/two-phase-work-<model-name>-<harness>-<stamp>`
+- Prompts (this folder): `<prompts-dir>`; in this repository it is `docs/prompts`.
+- `<work-dir>` = the user's working directory that holds the Cezar checkout, outputs and scratch space.
+- `<user-skills-dir>` = the directory with the user's own skills.
+- `<output>` = `<work-dir>/output/two-phase-work-<model-name>-<harness>-<stamp>`
   (`<stamp>` = `date -u +%Y%m%d-%H%M%S`). Stage 01 creates it and writes the resolved path to
-  `/home/alex/work/temp/prompts/.tpw-current-output`; later stages read that file.
-- Cezar checkout: `~/work/cezar`. Other Cezar-related projects: `~/work/cezar*` (list them, read what is relevant).
-- The user's existing skills: `/home/alex/work/temp/skills` (also check `~/work/skills` if it exists).
-- Scratch for clones: `~/work/temp/src`.
+  `<prompts-dir>/.tpw-current-output`; later stages read that file.
+- Cezar checkout: `<work-dir>/cezar`. Other Cezar-related projects: `<work-dir>/cezar*` (list them, read what is relevant).
+- The user's existing skills: `<user-skills-dir>` (also check `<work-dir>/skills` if it exists).
+- Scratch for clones: `<work-dir>/temp/src`.
 
 ## 3. Sources of truth and precedence
 1. **Cezar**, branch `wip/aw-cezar-runner-03-10-2026` @ `4a8344bc` (fork `Tomeckyyyy/rubikon.exe-cezar`,
-   pinned main `1b13522d`). Inspect it in `~/work/cezar`. If that checkout is on another branch, do not
-   switch it: use `git -C ~/work/cezar worktree add ~/work/temp/src/cezar-tpw-ref wip/aw-cezar-runner-03-10-2026`
+   pinned main `1b13522d`). Inspect it in `<work-dir>/cezar`. If that checkout is on another branch, do not
+   switch it: use `git -C <work-dir>/cezar worktree add <work-dir>/temp/src/cezar-tpw-ref wip/aw-cezar-runner-03-10-2026`
    (fetch from the fork remote first if the branch is missing locally).
 2. **Open Mercato skills** (`open-mercato/skills`) — the base and core. Reuse their structure, wording
-   and safety rules before inventing anything. Look for an existing local checkout under `~/work`; otherwise
-   clone to `~/work/temp/src/om-skills`. Keep MIT attribution on borrowed text.
-3. **The user's local skills** in `/home/alex/work/temp/skills` — they define what "two-steps work" means
+   and safety rules before inventing anything. Look for an existing local checkout under `<work-dir>`; otherwise
+   clone to `<work-dir>/temp/src/om-skills`. Keep MIT attribution on borrowed text.
+3. **The user's local skills** in `<user-skills-dir>` — they define what "two-steps work" means
    to the user.
 4. The earlier `prompt.md` (the solo two-phase design), if present in the prompts folder. Its rules on
    worktrees, branches, review gates, key leakage and tokenomics still apply; this spec extends it to teams.
@@ -92,7 +94,7 @@ The Flow 1 plan format must already carry the fields Flow 2 needs (`placement: l
 - **Default: git.** The run folder lives in the task repo at `ai-output/tpw/<task>-<title>/` on branch
   `ai/tpw-<task>-<title>`. Answers arrive as commits or a PR on that branch. This branch is never merged
   to main; the skills must say so. Offer a variant: a separate private "AI notes" repository with the same layout.
-- **Alternative: folder.** The run folder lives at `~/work/temp/tpw/<task>-<title>/`. Step 1 also writes
+- **Alternative: folder.** The run folder lives at `<work-dir>/temp/tpw/<task>-<title>/`. Step 1 also writes
   a `share/` bundle (the Q&A files plus `HOWTO-ANSWER.md`) to send by chat or shared drive; Step 2
   imports returned files from `inbox/`.
 - Mode is chosen by a flag or config value; default is git. Both modes use the identical layout.
