@@ -48,7 +48,9 @@ export async function submitDecision(
 
 /**
  * Queues the decision, unless it is a proposal: the owner must see it on-chain before the agent goes on, so the buffer
- * is flushed first and the proposal follows as a single step.
+ * is flushed first and the proposal follows as a single step, with nothing queued behind it meanwhile. A failed
+ * background flush (e.g. an unfunded fee payer) refuses the next decision, so the agent learns its queued ones were
+ * lost.
  */
 async function submitBatched(
 	runtime: FleetRuntime,
@@ -58,12 +60,16 @@ async function submitBatched(
 	submission: DecisionSubmission
 ): Promise<SubmitResult> {
 	if (account.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
+	if (batcher.isProposing(agentId)) {
+		throw new AwaitingApprovalError(`agent ${agentId}'s proposal is on its way to the chain`);
+	}
+	const failure = batcher.takeFailure(agentId);
+	if (failure instanceof GuardError && failure.code !== 'AgentKilled') throw failure;
 	if (!submission.requiresApproval) {
 		batcher.enqueue(agentId, { submission, observedAt: runtime.now().toISOString() });
 		return { queued: true };
 	}
-	await batcher.flushNow(agentId);
-	return batcher.serially(agentId, async () => {
+	return batcher.propose(agentId, async () => {
 		const { record } = await recordDecision(runtime, agentId, await runtime.guard.readAgent(agentId), submission);
 		return { counter: record.counter };
 	});

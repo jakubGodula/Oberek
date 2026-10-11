@@ -68,6 +68,12 @@ describe('latestDecision', () => {
 		expect((await latestDecision(runtimeWith(guardHolding(root)), AGENT))?.decisionHash).toBe(HASH_B);
 	});
 
+	test("a batch entry claiming a step's hash as its root does not pass for that step", async () => {
+		fleet.appendDecision(AGENT, entry(1, HASH_A));
+		fleet.appendDecision(AGENT, { ...entry(2, HASH_B), batch: { root: HASH_A, size: 1, proof: [] } });
+		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
+	});
+
 	test('counts an unconfirmed entry that did land', async () => {
 		fleet.appendDecision(AGENT, entry(1, HASH_A));
 		fleet.appendDecision(AGENT, entry(2, HASH_B, true));

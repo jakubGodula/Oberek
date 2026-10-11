@@ -5,7 +5,8 @@ import { join } from 'path';
 import { GuardError, type AgentGuard } from '../agent-guard/guard';
 import { Fleet } from './fleet';
 import { merkleRoot, verifyProof } from './merkle';
-import { flushBatch, hashDecisionRecord, type QueuedDecision } from './record-decision';
+import { AwaitingApprovalError } from './approval';
+import { flushBatch, hashDecisionRecord, recordDecision, type QueuedDecision } from './record-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
 import { MemoryGuard } from './testing/memory-guard';
@@ -45,6 +46,15 @@ describe('flushBatch', () => {
 			expect(entry.batch).toMatchObject({ root, size: 3 });
 			expect(verifyProof(entry.decisionHash, entry.batch!.proof, root)).toBe(true);
 		});
+	});
+
+	test('refuses to flush while a proposal waits for the verdict, and logs nothing', async () => {
+		const proposal = { kind: 'tick', decision: {}, summary: 'PROPOSE', requiresApproval: true as const };
+		await recordDecision(runtime, AGENT, await runtime.guard.readAgent(AGENT), proposal);
+		const error = await flushBatch(runtime, AGENT, [queued(0)]).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(AwaitingApprovalError);
+		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(1);
+		expect(runtime.fleet.decisions(AGENT)).toHaveLength(1);
 	});
 
 	test('does nothing for an empty buffer', async () => {

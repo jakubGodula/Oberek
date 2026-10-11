@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { GuardError, type GuardAccount } from '../agent-guard/guard';
 import type { DecisionLogEntry, DecisionRecord } from './fleet';
+import { AwaitingApprovalError, proposalAwaiting } from './approval';
 import { merkleProof, merkleRoot } from './merkle';
 import type { DecisionSubmission, FleetRuntime } from './submit-decision';
 
@@ -62,6 +63,10 @@ export async function flushBatch(
 ): Promise<DecisionLogEntry[]> {
 	if (queued.length === 0) return [];
 	const account = await runtime.guard.readAgent(agentId);
+	// A batch landing after a proposal would bury it: the agent would go on without the owner's verdict.
+	if (proposalAwaiting(runtime.fleet, agentId, account)) {
+		throw new AwaitingApprovalError(`agent ${agentId} is waiting for the owner's verdict; batch of ${queued.length} dropped`);
+	}
 	runtime.fleet.assertSealed(agentId);
 	const counter = account.counter + 1;
 	const records: DecisionRecord[] = queued.map(({ submission, observedAt }, index) => ({

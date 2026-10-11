@@ -35,6 +35,10 @@ export class DecisionBatcher {
 	private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
 	/** Per agent, the tail of its chain of flushes and steps; never rejects. */
 	private readonly tails = new Map<string, Promise<unknown>>();
+	/** Agents whose proposal is on its way to the chain: nothing may be queued behind it. */
+	private readonly proposing = new Set<string>();
+	/** Per agent, why its last background flush failed; no caller was waiting for it. */
+	private readonly failures = new Map<string, unknown>();
 
 	constructor(
 		private readonly policy: BatchPolicy,
@@ -64,6 +68,28 @@ export class DecisionBatcher {
 		return this.serially(agentId, () => this.flushBuffer(agentId));
 	}
 
+	isProposing(agentId: string): boolean {
+		return this.proposing.has(agentId);
+	}
+
+	/** Flushes the buffer, then runs `task` (recording the proposal); meanwhile isProposing is true. */
+	async propose<T>(agentId: string, task: () => Promise<T>): Promise<T> {
+		this.proposing.add(agentId);
+		try {
+			await this.flushNow(agentId);
+			return await this.serially(agentId, task);
+		} finally {
+			this.proposing.delete(agentId);
+		}
+	}
+
+	/** Why the agent's last background flush failed, once; undefined when it did not. */
+	takeFailure(agentId: string): unknown {
+		const failure = this.failures.get(agentId);
+		this.failures.delete(agentId);
+		return failure;
+	}
+
 	serially<T>(agentId: string, task: () => Promise<T>): Promise<T> {
 		const run = (this.tails.get(agentId) ?? Promise.resolve()).then(task);
 		this.tails.set(agentId, run.catch(() => undefined));
@@ -81,9 +107,10 @@ export class DecisionBatcher {
 
 	/** No caller waits for a timer or full-buffer flush, so its failure is reported here. */
 	private flushInBackground(agentId: string): void {
-		this.flushNow(agentId).catch((error: unknown) =>
-			console.warn(`agent ${agentId}: batch not recorded: ${error instanceof Error ? error.message : error}`)
-		);
+		this.flushNow(agentId).catch((error: unknown) => {
+			this.failures.set(agentId, error);
+			console.warn(`agent ${agentId}: batch not recorded: ${error instanceof Error ? error.message : error}`);
+		});
 	}
 }
 

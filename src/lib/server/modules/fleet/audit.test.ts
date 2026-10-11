@@ -209,4 +209,11 @@ describe('batches', () => {
 		const report = auditHistory({ agent: AGENT, state: stateAfter(2, one), events: [step(one), batch.event], log: [one, ...batch.entries] });
 		expect(report.problems).toContain(`account: last decision is ${one.decisionHash}, the last step recorded ${batch.root}`);
 	});
+
+	it("reports a batch entry filed under a step's hash", () => {
+		const record = { ...one.record, summary: 'FORGED' };
+		const forged: DecisionLogEntry = { record, decisionHash: hashDecisionRecord(record), batch: { root: one.decisionHash, size: 1, proof: [] } };
+		const report = auditHistory({ agent: AGENT, state: stateAfter(1, one), events: [step(one)], log: [one, forged] });
+		expect(report.problems).toContain('log step 1: not recorded on-chain with this hash');
+	});
 });

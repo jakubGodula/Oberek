@@ -108,10 +108,10 @@ describe('proposals', () => {
 });
 
 describe('batched agents', () => {
-	function batched(): FleetRuntime {
-		const withBatcher: FleetRuntime = { ...runtime };
+	function batched(base: FleetRuntime = runtime, flushMs = 60_000): FleetRuntime {
+		const withBatcher: FleetRuntime = { ...base };
 		withBatcher.batcher = new DecisionBatcher(
-			{ agentIds: new Set([AGENT]), flushMs: 60_000, maxDecisions: 16 },
+			{ agentIds: new Set([AGENT]), flushMs, maxDecisions: 16 },
 			(agentId, queued) => flushBatch(withBatcher, agentId, queued)
 		);
 		return withBatcher;
@@ -131,6 +131,43 @@ describe('batched agents', () => {
 		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
 		expect((error as GuardError).code).toBe('AgentKilled');
 		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
+	test('refuses a decision sent while its proposal is still on its way to the chain', async () => {
+		const memory = runtime.guard;
+		const slow: AgentGuard = {
+			...memory,
+			readAgent: (agentId) => memory.readAgent(agentId),
+			recordStep: async (agentId, counter, hash) => {
+				await Bun.sleep(20);
+				return memory.recordStep(agentId, counter, hash);
+			},
+			recordBatch: (agentId, counter, root, size) => memory.recordBatch(agentId, counter, root, size)
+		};
+		const fast = batched({ ...runtime, guard: slow });
+		const proposing = submitDecision(fast, AGENT, PROPOSAL);
+		await Bun.sleep(5);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect(await proposing).toEqual({ counter: 1 });
+		expect(error).toBeInstanceOf(AwaitingApprovalError);
+		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
+	test('passes the failure of the last batch to the next decision, so the agent learns its decisions were lost', async () => {
+		const unfunded: AgentGuard = {
+			...runtime.guard,
+			readAgent: (agentId) => runtime.guard.readAgent(agentId),
+			recordBatch: async () => {
+				throw new GuardError('PayerUnfunded', 'fee payer has no SOL');
+			}
+		};
+		const timerFlushMs = 10;
+		const fast = batched({ ...runtime, guard: unfunded }, timerFlushMs);
+		await submitDecision(fast, AGENT, SUBMISSION);
+		await Bun.sleep(timerFlushMs * 4);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect((error as GuardError).code).toBe('PayerUnfunded');
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
 	});
 
 	test('a proposal flushes the buffer first and lands after it as a single step', async () => {

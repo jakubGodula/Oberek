@@ -159,15 +159,20 @@ function batchEntryProblems(batch: BatchEvent, root: string, entries: readonly D
 
 /**
  * A log entry claims its step or batch was recorded on-chain, unless it is marked unconfirmed (the send may not have
- * landed). A batch entry is matched by its root.
+ * landed). A batch entry is matched only against batches, by its root, so it cannot pass for a step with that hash.
  */
 function unrecordedLogProblems(
 	log: readonly DecisionLogEntry[],
 	steps: readonly StepEvent[],
 	batches: readonly BatchEvent[]
 ): string[] {
-	const recorded = new Set(recordedHashes(steps, batches).map((item) => stepKey(item.counter, toHex(item.hash))));
+	const stepKeys = new Set(steps.map((step) => stepKey(step.counter, toHex(step.decisionHash))));
+	const batchKeys = new Set(batches.map((batch) => stepKey(batch.counter, toHex(batch.root))));
+	const isRecorded = (entry: DecisionLogEntry) =>
+		entry.batch
+			? batchKeys.has(stepKey(entry.record.counter, entry.batch.root))
+			: stepKeys.has(stepKey(entry.record.counter, entry.decisionHash));
 	return log
-		.filter((entry) => !entry.unconfirmed && !recorded.has(stepKey(entry.record.counter, entry.batch?.root ?? entry.decisionHash)))
+		.filter((entry) => !entry.unconfirmed && !isRecorded(entry))
 		.map((entry) => `log step ${entry.record.counter}: not recorded on-chain with this hash`);
 }

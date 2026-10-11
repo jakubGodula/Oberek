@@ -21,6 +21,8 @@ akapicie „Dlaczego nie ma korzenia Merkle” odłożyła korzeń do chwili, gd
 - Każda decyzja paczki trafia do zapieczętowanego logu (decyzja 006) z licznikiem paczki, swoim indeksem i dowodem
   włączenia.
 - Propozycja do zatwierdzenia nie trafia do paczki: serwer najpierw zapisuje bufor, potem propozycję osobnym krokiem.
+  Dopóki propozycja jest w drodze na łańcuch albo czeka na werdykt, serwer nie przyjmuje kolejnych decyzji agenta, a
+  zapis paczki jest odrzucany, więc żadna paczka nie przykryje propozycji.
 - Audyt sprawdza dla każdej paczki komplet wpisów w logu, indeksy 0..size-1, każdy dowód i korzeń całego drzewa.
 
 ## Uzasadnienie
@@ -39,6 +41,10 @@ akapicie „Dlaczego nie ma korzenia Merkle” odłożyła korzeń do chwili, gd
 - Decyzje w buforze nie są na łańcuchu aż do zapisu paczki. Agent dostał `202`, ale restart serwera gubi niezapisany
   bufor. Te decyzje nie trafiły ani na łańcuch, ani do logu, więc audyt pozostaje spójny.
 - Zabity agent: zapis paczki zostaje odrzucony, a zbuforowane decyzje przepadają bez wpisu w logu, tak jak odrzucony krok.
+- Inna odmowa (np. płatnik bez środków) też gubi paczkę, ale następna decyzja agenta dostaje tę odmowę (np. 503), więc
+  agent wie, że zakolejkowane decyzje nie trafiły na łańcuch.
+- Zabicie i wznowienie agenta w ciągu `BATCH_FLUSH_MS` zapisze po wznowieniu decyzje sprzed zabicia; ich `observedAt`
+  pokazuje, kiedy zapadły.
 
 ## Odrzucone
 

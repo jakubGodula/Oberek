@@ -39,7 +39,7 @@ Why, and what is still open: [spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-s
 ## Batched agents: many decisions in one transaction
 
 Agents listed in `BATCHED_AGENT_IDS` (`.env`) get `202` for each decision. The server buffers them and every
-`BATCH_FLUSH_MS` (default 10 s), or at `BATCH_MAX_DECISIONS` (default 16), records the whole buffer with one
+`BATCH_FLUSH_MS` (default 10 s) after the first decision in an empty buffer, or at `BATCH_MAX_DECISIONS` (default 16), records the whole buffer with one
 `record_batch`: one ML-DSA-44 signature over the SHA-256 Merkle root of the batch, verified on-chain at the cost of one
 step. Each decision is logged with its Merkle proof, so it can be shown and checked against the root on-chain without
 the rest of the batch; `scripts/audit.ts` checks every proof. A decision that needs approval is never batched. Decisions

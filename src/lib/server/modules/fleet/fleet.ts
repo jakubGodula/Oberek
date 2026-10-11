@@ -145,13 +145,16 @@ export class Fleet {
 	}
 
 	/**
-	 * The newest log entry with that hash, or in the batch with that root (the batch's last decision); for the hash the
-	 * guard holds, the record of the last recorded step.
+	 * The newest single step with that hash, else the newest decision of the batch with that root (the batch's last); for
+	 * the hash the guard holds, the record of the last recorded step. A step wins, so a batch entry claiming a step's hash
+	 * as its root cannot pass for that step.
 	 */
 	findDecision(agentId: string, hash: string): DecisionLogEntry | undefined {
-		return this.readLog(agentId)
-			.reverse()
-			.find((entry) => entry.decisionHash === hash || entry.batch?.root === hash);
+		const newestFirst = this.readLog(agentId).reverse();
+		return (
+			newestFirst.find((entry) => !entry.batch && entry.decisionHash === hash) ??
+			newestFirst.find((entry) => entry.batch?.root === hash)
+		);
 	}
 
 	/** The data key is read only when a sealed line needs it, so an unsealed agent's plaintext log still reads. */
