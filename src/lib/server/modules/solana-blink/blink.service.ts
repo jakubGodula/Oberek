@@ -61,7 +61,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       id: 'arbiter-02',
       name: 'Arbiter Beta — DeFi Optimizer',
       status: 'ACTIVE',
-      currentTask: 'Arbitraż cross-DEX: Raydium ↔ Orca, spread 0.34%',
+      currentTask: 'Cross-DEX arbitrage: Raydium ↔ Orca, spread 0.34%',
       pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'arbiter-02', task: 'ARB_SCAN', timestamp: Date.now() }),
       lastUpdated: Date.now() - 30_000,
@@ -75,7 +75,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       id: 'guardian-03',
       name: 'Guardian Gamma — Risk Monitor',
       status: 'IDLE',
-      currentTask: 'Monitoring ekspozycji portfela — brak aktywnych alertów',
+      currentTask: 'Portfolio exposure monitoring, no active alerts',
       pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'guardian-03', task: 'MONITOR', timestamp: Date.now() }),
       lastUpdated: Date.now() - 120_000,
@@ -91,7 +91,7 @@ function cardStatus(guardStatus: GuardStatus, awaitingApproval: boolean): AgentS
   if (guardStatus === 'Killed') return 'PAUSED';
   return awaitingApproval ? 'AWAITING_APPROVAL' : 'ACTIVE';
 }
-const NO_DECISION_YET = 'Brak decyzji: agent jeszcze nie działał';
+const NO_DECISION_YET = 'No decisions yet: the agent has not run';
 
 /** One unreadable agent shows as UNAVAILABLE instead of failing the whole list. */
 async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Promise<AgentStatusRecord> {
@@ -125,7 +125,7 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
     return {
       ...card,
       status: 'UNAVAILABLE',
-      currentTask: `Niedostępny: ${reason}`,
+      currentTask: `Unavailable: ${reason}`,
       pqcKeyAccount: null,
       lastCommitmentRoot: NO_DECISION,
       actionsExecuted: 0,
@@ -165,7 +165,7 @@ export class BlinkService {
       id: agentId,
       name: `Agent #${agentId}`,
       status: 'ACTIVE' as const,
-      currentTask: 'Oczekiwanie na dyspozycję operatora',
+      currentTask: 'Waiting for the operator',
       pqcKeyAccount: null,
       lastCommitmentRoot: '00'.repeat(32),
       lastUpdated: Date.now(),
@@ -175,17 +175,17 @@ export class BlinkService {
 
     return {
       type: 'action',
-      icon: `${origin}/shield-logo.svg`,
-      title: `🛡️ Aegis Sentinel: ${agent.name}`,
+      icon: `${origin}/logo.svg`,
+      title: `🛡️ Oberek: ${agent.name}`,
       description:
-        `Status: [${agent.status}] | Zadanie: ${agent.currentTask}\n` +
-        `Konto klucza ML-DSA-44: ${agent.pqcKeyAccount ?? 'nieznane'}\n` +
-        `Quantum-Safe State Root: ${agent.lastCommitmentRoot.slice(0, 16)}...`,
-      label: 'Autoryzacja Agenta',
+        `Status: [${agent.status}] | Task: ${agent.currentTask}\n` +
+        `ML-DSA-44 key account: ${agent.pqcKeyAccount ?? 'unknown'}\n` +
+        `Last decision (SHA-256): ${agent.lastCommitmentRoot.slice(0, 16)}...`,
+      label: 'Agent Authorization',
       links: {
         actions: [
           {
-            label: '✅ Autoryzuj kolejny krok',
+            label: '✅ Approve next step',
             href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=approve`
           },
           {
@@ -231,8 +231,8 @@ export class BlinkService {
         transaction: tx,
         message:
           decision === 'approve'
-            ? `✅ Decyzja zatwierdzona! PQC State Root zaktualizowany.`
-            : `🛑 AWARYJNY KILL-SWITCH AKTYWOWANY! Agent ${agentId} został wstrzymany.`
+            ? `✅ Decision approved.`
+            : `🛑 EMERGENCY KILL-SWITCH TRIGGERED. Agent ${agentId} is paused.`
       }
     });
   }

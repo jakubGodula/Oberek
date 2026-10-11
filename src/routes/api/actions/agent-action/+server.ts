@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
     if (!body.account) {
       return json(
-        { message: 'Brak wymaganego pola "account" (adres portfela Solana)' },
+        { message: 'Missing required field "account" (Solana wallet address)' },
         { status: 400, headers: ACTIONS_CORS_HEADERS }
       );
     }
@@ -50,7 +50,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
   } catch (err: any) {
     const status = err instanceof GuardError ? HTTP_STATUS_BY_GUARD_ERROR[err.code] : 500;
     return json(
-      { message: err?.message || 'Błąd przetwarzania akcji Blinka' },
+      { message: err?.message || 'Failed to process the Blink action' },
       { status, headers: ACTIONS_CORS_HEADERS }
     );
   }

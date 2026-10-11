@@ -46,7 +46,7 @@
   const SIGNATURE_EDGE = 4;
 
   const percent = (share: number) => `${(share * PERCENT).toFixed(2)}%`;
-  const clock = (at: string | number) => new Date(at).toLocaleTimeString('pl-PL', { timeZone: 'Europe/Warsaw' });
+  const clock = (at: string | number) => new Date(at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Warsaw' });
   const shortSignature = (signature: string) => `${signature.slice(0, SIGNATURE_EDGE)}…${signature.slice(-SIGNATURE_EDGE)}`;
 </script>
 
@@ -120,7 +120,7 @@
       {/if}
     {:else}
       <p class="text-[12px] text-slate-500 py-6 text-center">
-        {mock ? 'Agent demonstracyjny (mock): nie wysyła transakcji on-chain' : 'Brak decyzji: agent jeszcze nie działał'}
+        {mock ? 'Mock agent: sends no transactions on-chain' : 'No decisions yet: the agent has not run'}
       </p>
     {/each}
   </div>

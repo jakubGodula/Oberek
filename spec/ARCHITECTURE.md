@@ -163,6 +163,8 @@ Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
 - Publikuje zdarzenia w **Event Bus** (`AgentActionTriggered`, `AgentActionValidated`, `AgentKilled`).
 
 ### 4.3. Moduł: `zk-pqc` oraz `private-vault` (Post-Quantum ZK Commitments & DMS)
+> Nieaktualne: DMS, `aegis-registry`, commitmenty SHA3-256 i korzeń Merkle nie są zaimplementowane; dla dowodu DMS nie istnieje weryfikator na Solanie. ML-KEM-768 nie szyfruje niczego on-chain; pieczętuje tylko log decyzji na serwerze ([decyzja 006](decisions/006-zapieczetowany-log-decyzji-ml-kem.md)). Obowiązuje [decyzja 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
+
 - **Problem kryptograficzny**: Klasyczne algorytmy asymetryczne (RSA, ECC, Ed25519) są podatne na złamanie przez algorytm Shora na komputerach kwantowych. W łańcuchach typu ECDSA (Ethereum, Bitcoin) ujawnienie klucza publicznego trwale kompromituje konto, ponieważ klucze są bezstrukturalnymi skalarami.
 - **Przewaga strukturalna Solany (RFC 8032 & SLIP-0010)**:
   - Zgodnie z badaniami *Baldimtsi et al. (FC 2026, Mysten Labs & Soundness Labs)*: łańcuchy oparte na **EdDSA (Solana)** posiadają kluczową cechę – klucz prywatny jest deterministycznie wyprowadzany z **256-bitowego seeda** poprzez funkcję skrótu:
@@ -444,6 +446,7 @@ pub enum AegisError {
 
 1. **Dlaczego Open Mercato?** Pokazuje dojrzałość inżynierską – zamiast prototypu w jednym pliku, stworzono modularną, skalowalną platformę z Dependency Injection (Awilix) i Event-Driven Architecture.
 2. **Dlaczego PQC + Dual-Mode Signature (DMS)?**
+   > Nieaktualne: DMS nie jest zaimplementowany i na Solanie nie istnieje weryfikator jego dowodu. Obowiązuje [decyzja 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
    - Komputery kwantowe (algorytm Shora) nieodwracalnie łamią ECDSA (Ethereum/Bitcoin), niszcząc tożsamość kont.
    - Wskazujemy na **przełomową przewagę Solany (RFC 8032 / SLIP-0010)** udowodnioną w pracy *Baldimtsi et al. (FC 2026)*: klucz Solany to w istocie seed za hashem SHA-512, którego komputer kwantowy nie potrafi odwrócić.
    - Aegis Mercato jako pierwsze rozwiązanie na Solanie wdraża formalny model **Dual-Mode Signatures (DMS)** i jednorazową atestację klucza **ML-DSA-44 (NIST PQC)**, pozwalając agentom na bezpieczną migrację post-kwantową bez konieczności porzucania adresów portfeli.
