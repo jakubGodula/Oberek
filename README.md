@@ -42,7 +42,8 @@ Agents listed in `BATCHED_AGENT_IDS` (`.env`) get `202` for each decision. The s
 `BATCH_FLUSH_MS` (default 10 s) after the first decision in an empty buffer, or at `BATCH_MAX_DECISIONS` (default 16), records the whole buffer with one
 `record_batch`: one ML-DSA-44 signature over the SHA-256 Merkle root of the batch, verified on-chain at the cost of one
 step. Each decision is logged with its Merkle proof, so it can be shown and checked against the root on-chain without
-the rest of the batch; `scripts/audit.ts` checks every proof. A decision that needs approval is never batched. Decisions
+the rest of the batch; `scripts/audit.ts` checks every proof. A buffer holding a single decision goes as an ordinary
+step, and a decision that needs approval is never batched. Decisions
 still in the buffer when the server stops are lost; they never reached the chain.
 Decision: [spec/decisions/007-korzen-merkle-dla-paczki-decyzji.md](spec/decisions/007-korzen-merkle-dla-paczki-decyzji.md).
 

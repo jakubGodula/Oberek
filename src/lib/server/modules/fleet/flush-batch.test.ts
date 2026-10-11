@@ -57,6 +57,15 @@ describe('flushBatch', () => {
 		expect(runtime.fleet.decisions(AGENT)).toHaveLength(1);
 	});
 
+	test('records a lone decision as a single step, as without batching, with the time it was submitted', async () => {
+		const [entry] = await flushBatch(runtime, AGENT, [queued(4)]);
+
+		expect(entry.batch).toBeUndefined();
+		expect(entry.record).toEqual({ agent: AGENT, counter: 1, ...queued(4).submission, observedAt: queued(4).observedAt });
+		expect(await runtime.guard.readAgent(AGENT)).toMatchObject({ counter: 1, lastDecision: entry.decisionHash });
+		expect(runtime.fleet.decisions(AGENT)).toEqual([entry]);
+	});
+
 	test('does nothing for an empty buffer', async () => {
 		expect(await flushBatch(runtime, AGENT, [])).toEqual([]);
 		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(0);
