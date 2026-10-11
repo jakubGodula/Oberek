@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
+import { address } from '@solana/kit';
 import { loadConfig } from './config';
 
-const PROGRAM_ID = '11111111111111111111111111111111';
+const PROGRAM_ID = address('11111111111111111111111111111111');
 const REQUIRED = { GUARD_PROGRAM_ID: PROGRAM_ID, FEE_PAYER_KEYPAIR: 'payer.json' };
 
 describe('loadConfig', () => {

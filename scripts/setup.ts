@@ -54,7 +54,10 @@ function restart(): never {
 }
 
 function ensurePayer(path: string): void {
-	if (existsSync(path)) return log(`payer wallet ${path} exists`);
+	if (existsSync(path)) {
+		log(`payer wallet ${path} exists`);
+		return;
+	}
 	runBun(['scripts/new-keypair.ts', path]);
 }
 
@@ -87,7 +90,10 @@ async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 
 function setUpAgent(agent: SetupAgent): void {
 	const steps = stepsFor(progressOf(agent));
-	if (steps.length === 0) return log(`${agent.id} is in the fleet`);
+	if (steps.length === 0) {
+		log(`${agent.id} is in the fleet`);
+		return;
+	}
 	for (const step of steps) runStep(agent, step);
 }
 
