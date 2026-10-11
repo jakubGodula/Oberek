@@ -61,6 +61,13 @@ describe('latestDecision', () => {
 		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
 	});
 
+	test("after a batch, finds the batch's last decision by the root the chain holds", async () => {
+		const root = 'cc'.repeat(32);
+		fleet.appendDecision(AGENT, { ...entry(3, HASH_A), batch: { root, size: 2, proof: [] } });
+		fleet.appendDecision(AGENT, { ...entry(3, HASH_B), batch: { root, size: 2, proof: [] } });
+		expect((await latestDecision(runtimeWith(guardHolding(root)), AGENT))?.decisionHash).toBe(HASH_B);
+	});
+
 	test('counts an unconfirmed entry that did land', async () => {
 		fleet.appendDecision(AGENT, entry(1, HASH_A));
 		fleet.appendDecision(AGENT, entry(2, HASH_B, true));

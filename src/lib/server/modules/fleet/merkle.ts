@@ -1,11 +1,12 @@
 import { createHash } from 'crypto';
+import { getBase16Encoder } from '@solana/kit';
 
 // The Merkle tree over a batch of decisions recorded with one record_batch. Leaves and nodes are domain-separated, so
 // a leaf never passes for a node; an odd node at the end of a level moves up unchanged (no duplication, so two
 // different lists of decisions never share a root). Hex in, hex out, like the decision log.
 
-const LEAF_PREFIX = Buffer.from([0]);
-const NODE_PREFIX = Buffer.from([1]);
+const LEAF_PREFIX = Uint8Array.of(0);
+const NODE_PREFIX = Uint8Array.of(1);
 
 /** The sibling's hash and on which side of the path it sits. */
 export interface ProofStep {
@@ -13,9 +14,15 @@ export interface ProofStep {
 	side: 'left' | 'right';
 }
 
-const sha256 = (...parts: Buffer[]) => createHash('sha256').update(Buffer.concat(parts)).digest('hex');
-const leafOf = (decisionHash: string) => sha256(LEAF_PREFIX, Buffer.from(decisionHash, 'hex'));
-const nodeOf = (left: string, right: string) => sha256(NODE_PREFIX, Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+const bytes = (hex: string) => new Uint8Array(getBase16Encoder().encode(hex));
+const leafOf = (decisionHash: string) => sha256(LEAF_PREFIX, bytes(decisionHash));
+const nodeOf = (left: string, right: string) => sha256(NODE_PREFIX, bytes(left), bytes(right));
+
+function sha256(...parts: Uint8Array[]): string {
+	const hash = createHash('sha256');
+	for (const part of parts) hash.update(part);
+	return hash.digest('hex');
+}
 
 export function merkleRoot(decisionHashes: readonly string[]): string {
 	return levels(decisionHashes).at(-1)![0];

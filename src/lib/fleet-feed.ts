@@ -7,6 +7,7 @@ export type Chip = 'HOLD' | 'REBALANCE' | 'AWAITING_APPROVAL' | 'PROPOSAL' | 'AP
 export interface FeedEntry {
 	record: {
 		counter: number;
+		index?: number;
 		kind: string;
 		decision: Record<string, unknown>;
 		summary: string;
@@ -15,6 +16,8 @@ export interface FeedEntry {
 	};
 	decisionHash: string;
 	unconfirmed?: true;
+	/** Present when the decision went on-chain in a batch. */
+	batch?: { root: string; size: number };
 	/** The transaction that recorded it on chain; absent when the transaction log does not hold it. */
 	signature?: string;
 }
