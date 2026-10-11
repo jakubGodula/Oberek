@@ -5,9 +5,11 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { GuardError, type AgentGuard } from '../agent-guard/guard';
 import { AwaitingApprovalError } from './approval';
+import { DecisionBatcher } from './decision-batcher';
 import { Fleet, LogNotSealedError } from './fleet';
 import { TEST_SEAL } from './testing/test-seal';
 import { RateLimitedError, StepThrottle } from './step-throttle';
+import { flushBatch } from './record-decision';
 import { parseSubmission, submitDecision, type FleetRuntime } from './submit-decision';
 import { MemoryGuard } from './testing/memory-guard';
 
@@ -102,6 +104,48 @@ describe('proposals', () => {
 	test('accepts the next decision when the latest one is not a proposal', async () => {
 		await submitDecision(runtime, AGENT, SUBMISSION);
 		expect(await submitDecision(runtime, AGENT, SUBMISSION)).toEqual({ counter: 2 });
+	});
+});
+
+describe('batched agents', () => {
+	function batched(): FleetRuntime {
+		const withBatcher: FleetRuntime = { ...runtime };
+		withBatcher.batcher = new DecisionBatcher(
+			{ agentIds: new Set([AGENT]), flushMs: 60_000, maxDecisions: 16 },
+			(agentId, queued) => flushBatch(withBatcher, agentId, queued)
+		);
+		return withBatcher;
+	}
+
+	test('queues the decision and answers at once, without the throttle or the chain', async () => {
+		const fast = { ...batched(), throttle: new StepThrottle(10_000) };
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
+		expect(fast.batcher!.queued(AGENT)).toBe(2);
+		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(0);
+	});
+
+	test('refuses a decision while the agent is killed, before queueing it', async () => {
+		const fast = batched();
+		await runtime.guard.kill(AGENT, OWNER);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect((error as GuardError).code).toBe('AgentKilled');
+		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
+	test('a proposal flushes the buffer first and lands after it as a single step', async () => {
+		const fast = batched();
+		await submitDecision(fast, AGENT, SUBMISSION);
+		await submitDecision(fast, AGENT, SUBMISSION);
+		expect(await submitDecision(fast, AGENT, PROPOSAL)).toEqual({ counter: 2 });
+
+		const log = runtime.fleet.decisions(AGENT);
+		expect(log.map((entry) => [entry.record.counter, entry.batch?.size ?? null])).toEqual([
+			[1, 2],
+			[1, 2],
+			[2, null]
+		]);
+		expect((await runtime.guard.readAgent(AGENT)).lastDecision).toBe(log[2].decisionHash);
 	});
 });
 

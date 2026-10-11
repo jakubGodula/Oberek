@@ -9,5 +9,8 @@ export const variables = defineEnvVars({
 	SOLANA_RPC_URL: { schema: optional, description: 'devnet RPC endpoint' },
 	SOLANA_WS_URL: { schema: optional, description: 'devnet RPC websocket endpoint' },
 	FEE_PAYER_KEYPAIR: { schema: optional, description: 'keypair file that pays the agents\' steps' },
-	OWNER_KEYPAIR: { schema: optional, description: 'keypair file the server signs kill and resume with' }
+	OWNER_KEYPAIR: { schema: optional, description: 'keypair file the server signs kill and resume with' },
+	BATCHED_AGENT_IDS: { schema: optional, description: 'comma-separated agent ids whose decisions go on-chain in batches' },
+	BATCH_FLUSH_MS: { schema: optional, description: "how often a batched agent's buffer is flushed, ms" },
+	BATCH_MAX_DECISIONS: { schema: optional, description: "a batched agent's buffer flushes at once at this many decisions" }
 });
