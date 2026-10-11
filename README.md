@@ -106,8 +106,14 @@ bun scripts/audit.ts sentinel-01  # decision log vs. on-chain history; exit code
 Reads the agent account and every transaction in its history (read-only, no fees). It checks that each counter
 1..N has exactly one step or resume on-chain, that the account's last decision is the last step's hash, that the log
 holds a record for every on-chain hash that still hashes to it, and that every log entry not marked `unconfirmed` is
-on-chain with the same hash. Sealed lines are opened with the owner's ML-KEM secret key, not the server's copy. The
-free-tier devnet RPC allows only a few `getTransaction` calls per window, so it takes
+on-chain with the same hash.
+
+Sealed lines are opened with the owner's ML-KEM secret key from `OWNER_MLKEM_FILE` (`.devnet/owner-mlkem.json`), not
+the server's copy, so the audit needs that file. The output says how many lines are sealed and how many are plaintext
+from before sealing. A wrong owner key opens no sealed line: each is skipped with a warning and its step is reported as
+`on-chain, but not in the log`, which looks like tampering but is the key. Keep a backup of that file.
+
+The free-tier devnet RPC allows only a few `getTransaction` calls per window, so it takes
 about 3 s per transaction: ~20 minutes for 400. Steps run with `bun scripts/agent.ts run` before the import into the
 fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as missing. How it works:
 [spec/history-audit.md](spec/history-audit.md).
