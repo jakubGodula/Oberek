@@ -113,7 +113,21 @@ history OK
 
 383 steps and 5 resumes cover counters 1..388; each kill was followed by a resume; every step has its log record.
 
-`tick-01` reports 10 problems, `step 1–10: on-chain, but not in the log`. These are expected: its first 10 steps
+`bun scripts/audit.ts tick-01` on 2026-10-11, after its log was sealed and the demo ran on the sealed log:
+
+```
+agent tick-01 (BF8MdAhm…), Active, counter 574
+on-chain: 560 steps, 14 resumes, 14 kills; log: 550 entries
+log file: 54 lines sealed (opened with the owner's ML-KEM key), 524 plaintext from before sealing
+28 events and log entries newer than the account read, not audited
+  ✗ step 1: on-chain, but not in the log
+  …
+  ✗ step 10: on-chain, but not in the log
+10 problems
+```
+
+Every sealed line opened with the owner's key, and every step after the first 10 has its record. The 10 problems,
+`step 1–10: on-chain, but not in the log`, are expected: its first 10 steps
 were run with `bun scripts/agent.ts run` before the import into the fleet, so their records are in the CLI log
 `.devnet/decisions.jsonl`, which the audit does not read.
 
