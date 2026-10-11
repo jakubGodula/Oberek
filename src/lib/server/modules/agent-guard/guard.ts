@@ -1,7 +1,7 @@
 // The guard as the server sees it: the agent's account that onchain_agent_guard keeps on Solana, and the four things
 // the program lets anyone do with it. OnchainGuard implements it; tests use an in-memory stand-in.
 
-export type GuardStatus = 'Active' | 'Killed';
+export type GuardStatus = 'Active' | 'Killed' | 'Pending';
 
 export interface GuardAccount {
 	owner: string;
@@ -41,6 +41,7 @@ export interface LandedTransaction {
 export type GuardErrorCode =
 	| 'AgentNotFound'
 	| 'AgentKilled'
+	| 'AgentPending'
 	| 'AgentNotKilled'
 	| 'AgentNotActive'
 	| 'NotOwner'
@@ -60,6 +61,7 @@ export const HTTP_STATUS_BY_GUARD_ERROR: Record<GuardErrorCode, number> = {
 	AgentNotFound: 404,
 	NotOwner: 403,
 	AgentKilled: 409,
+	AgentPending: 409,
 	AgentNotKilled: 409,
 	AgentNotActive: 409,
 	CounterMismatch: 409,
@@ -70,7 +72,7 @@ export interface AgentGuard {
 	readAgent(agentId: string): Promise<GuardAccount>;
 	/**
 	 * Records the decision as step `counter`, which must be the agent's next one. Rejected with AgentKilled while the
-	 * agent is killed and with CounterMismatch when another step took that counter first.
+	 * agent is killed, with AgentPending until the owner activates it, and with CounterMismatch when another step took that counter first.
 	 */
 	recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount>;
 	/**

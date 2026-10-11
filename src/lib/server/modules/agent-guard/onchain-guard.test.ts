@@ -3,6 +3,7 @@ import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getBase16Encoder, type Signature, type TransactionSigner } from '@solana/kit';
 import type { AgentFile } from '../agent/files';
 import type { GuardClient } from '../agent/guard-client';
+import { GUARD_ERROR_CODES } from '../agent/guard-errors';
 import type { AgentState } from '../agent/instructions';
 import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
 import type { SendResult } from '../agent/transaction';
@@ -138,6 +139,30 @@ describe('recordStep', () => {
 		expect(chain.sent).toEqual([]);
 	});
 
+	test('refuses a step without sending while the agent awaits activation', async () => {
+		const chain = fakeChain({ status: 'Pending', counter: 0n });
+		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 1, DECISION_HASH))).toBe('AgentPending');
+		expect(chain.sent).toEqual([]);
+	});
+
+	test('refuses a kill without sending while the agent awaits activation', async () => {
+		const chain = fakeChain({ status: 'Pending', counter: 0n });
+		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID))).toBe('AgentNotActive');
+		expect(chain.sent).toEqual([]);
+	});
+
+	test('refuses a resume without sending while the agent awaits activation', async () => {
+		const chain = fakeChain({ status: 'Pending', counter: 0n });
+		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID))).toBe('AgentNotKilled');
+		expect(chain.sent).toEqual([]);
+	});
+
+	test('reports the program refusing a pending agent as AgentPending', async () => {
+		const chain = fakeChain();
+		chain.failOnChainWith(PROGRAM_ERROR(GUARD_ERROR_CODES.AgentPending));
+		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 12, DECISION_HASH))).toBe('AgentPending');
+	});
+
 	test('refuses without sending a step for any counter but the next one', async () => {
 		const chain = fakeChain();
 		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 11, DECISION_HASH))).toBe('CounterMismatch');
@@ -255,6 +280,12 @@ describe('recordBatch', () => {
 		expect(await guardErrorCode(guardOver(fakeChain({ status: 'Killed' })).recordBatch(AGENT_ID, 12, ROOT, 5))).toBe('AgentKilled');
 		const chain = fakeChain();
 		expect(await guardErrorCode(guardOver(chain).recordBatch(AGENT_ID, 11, ROOT, 5))).toBe('CounterMismatch');
+		expect(chain.sent).toEqual([]);
+	});
+
+	test('refuses a batch without sending while the agent awaits activation', async () => {
+		const chain = fakeChain({ status: 'Pending', counter: 0n });
+		expect(await guardErrorCode(guardOver(chain).recordBatch(AGENT_ID, 1, ROOT, 5))).toBe('AgentPending');
 		expect(chain.sent).toEqual([]);
 	});
 });

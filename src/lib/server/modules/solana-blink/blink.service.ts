@@ -84,9 +84,12 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
 ]);
 
 // Agents registered in the fleet (scripts/fleet.ts) run as their own processes; their state comes from the guard.
-/** A killed agent shows as PAUSED even with a proposal waiting; the proposal shows again after resume. */
+/**
+ * A killed or not yet activated agent shows as PAUSED even with a proposal waiting; the proposal shows again once it
+ * is active.
+ */
 function cardStatus(guardStatus: GuardStatus, awaitingApproval: boolean): AgentStatusRecord['status'] {
-  if (guardStatus === 'Killed') return 'PAUSED';
+  if (guardStatus !== 'Active') return 'PAUSED';
   return awaitingApproval ? 'AWAITING_APPROVAL' : 'ACTIVE';
 }
 const NO_DECISION_YET = 'No decisions yet: the agent has not run';
