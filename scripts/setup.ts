@@ -15,7 +15,7 @@ const ENV_FILE = '.env';
 const ENV_EXAMPLE = '.env.example';
 const AGENTS_DIR = '.devnet/agents';
 const AGENTS = [
-	{ id: 'sentinel-01', name: 'Aegis Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
+	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
 	{ id: 'tick-01', name: 'Tick One', risk: 'LOW' }
 ] as const;
 const FAUCET_URL = 'https://faucet.solana.com';
