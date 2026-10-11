@@ -176,7 +176,7 @@ export class BlinkService {
     return {
       type: 'action',
       icon: `${origin}/shield-logo.svg`,
-      title: `🛡️ Aegis Sentinel: ${agent.name}`,
+      title: `🛡️ Oberek: ${agent.name}`,
       description:
         `Status: [${agent.status}] | Task: ${agent.currentTask}\n` +
         `ML-DSA-44 key account: ${agent.pqcKeyAccount ?? 'unknown'}\n` +

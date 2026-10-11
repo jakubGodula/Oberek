@@ -182,7 +182,7 @@
       </div>
       <div>
         <h1 class="text-[17px] font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent leading-none">
-          Aegis Mercato
+          Oberek
         </h1>
         <p class="text-[11px] text-slate-500 mt-0.5">Post-Quantum Agent Observability Engine · Solana Devnet</p>
       </div>
@@ -581,7 +581,7 @@
 
   <!-- Footer -->
   <footer class="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between text-[10px] text-slate-600">
-    <span>Aegis Mercato · Solana Hackathon 2025 · Open Mercato Standard</span>
+    <span>Oberek · Colosseum Crypto World's Fair 2026</span>
     <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">@solana/actions</span></span>
   </footer>
 </div>
