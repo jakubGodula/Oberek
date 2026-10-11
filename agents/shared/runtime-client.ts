@@ -11,6 +11,7 @@ export interface Submission {
 
 export type SubmitOutcome =
 	| { kind: 'recorded'; counter: number }
+	| { kind: 'queued' }
 	| { kind: 'paused' }
 	| { kind: 'awaiting' }
 	| { kind: 'failed'; reason: string };
@@ -38,6 +39,8 @@ export interface RuntimeClient {
 	claimShock(): Promise<ShockOutcome>;
 }
 
+/** The server answers 202 when the agent's decisions go on-chain in batches: this one waits for the next. */
+const HTTP_ACCEPTED = 202;
 /** The server answers 409 when the owner killed the agent or its proposal waits for the owner's verdict. */
 const HTTP_CONFLICT = 409;
 const AWAITING_APPROVAL = 'AwaitingApproval';
@@ -65,6 +68,7 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				body: JSON.stringify(submission)
 			});
 			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
+			if (answer.response.status === HTTP_ACCEPTED) return { kind: 'queued' };
 			if (answer.response.ok) {
 				const { counter } = answer.body;
 				if (typeof counter !== 'number') return { kind: 'failed', reason: 'unexpected answer: no counter in it' };
@@ -113,6 +117,8 @@ export function describeSubmitOutcome(outcome: SubmitOutcome): string {
 	switch (outcome.kind) {
 		case 'recorded':
 			return `recorded #${outcome.counter}`;
+		case 'queued':
+			return 'queued for the next batch';
 		case 'paused':
 			return 'refused: the owner killed the agent';
 		case 'awaiting':

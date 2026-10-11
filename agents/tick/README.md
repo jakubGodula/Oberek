@@ -30,3 +30,6 @@ recorded, 409 killed by the owner, 404 not in the fleet, 400 malformed, 429 too 
 ```sh
 bun test agents/shared
 ```
+
+With the server's `BATCHED_AGENT_IDS` naming this agent, the server answers `202` and records TICKs in batches, one
+transaction per batch under a Merkle root; the log line then says `queued for the next batch`.
