@@ -6,7 +6,7 @@
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import { acceptsShock, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
+  import { acceptsShock, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
 
@@ -362,14 +362,15 @@
               </p>
             </div>
 
-            <!-- PQC Pubkey Hash -->
+            <!-- ML-DSA-44 public key account -->
             <div class="bg-black/30 rounded-xl p-3.5 border border-emerald-500/[0.12]">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Lock class="w-3 h-3" /> Post-Quantum Public Key Hash (ML-DSA-44)
+                  <Lock class="w-3 h-3" /> Konto klucza publicznego ML-DSA-44
                 </span>
                 <button
-                  onclick={() => copyText(selectedAgent.pqcPubkeyHash, 'pubkey')}
+                  onclick={() => copyText(selectedAgent.pqcKeyAccount ?? '', 'pubkey')}
+                  disabled={!selectedAgent.pqcKeyAccount}
                   class="text-slate-500 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition"
                 >
                   {#if copiedId === 'pubkey'}
@@ -380,11 +381,21 @@
                 </button>
               </div>
               <p class="font-mono text-[11px] text-emerald-200 break-all select-all leading-relaxed bg-black/30 p-2 rounded-lg">
-                {selectedAgent.pqcPubkeyHash}
+                {selectedAgent.pqcKeyAccount ?? '—'}
               </p>
               <p class="text-[10px] text-slate-500 mt-1.5">
-                One-Time Attestation · Klucz powiązany z adresem konta Solana przez DMS (RFC 8032)
+                Zapisane przy rejestracji agenta w programie <code class="text-violet-400">onchain_agent_guard</code>; każdy krok i wznowienie są nim weryfikowane
               </p>
+              {#if selectedAgent.fleet && selectedAgent.pqcKeyAccount}
+                <a
+                  href={explorerAddressUrl(selectedAgent.pqcKeyAccount)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-1 inline-flex items-center gap-1 text-[10px] font-mono text-violet-300 hover:text-violet-200"
+                >
+                  Solana Explorer <ExternalLink class="w-3 h-3" />
+                </a>
+              {/if}
             </div>
             {#if selectedAgent.fleet && acceptsShock(selectedAgent.fleet.lastDecisionKind)}
               <button

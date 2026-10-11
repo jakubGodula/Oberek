@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { acceptsShock, explorerTxUrl, toFeedRow, toTimeline, type FeedEntry, type OperatorAction } from './fleet-feed';
+import { acceptsShock, explorerAddressUrl, explorerTxUrl, toFeedRow, toTimeline, type FeedEntry, type OperatorAction } from './fleet-feed';
 
 const AT = '2026-10-10T15:00:00.000Z';
 const BEFORE = { sol: 956.913095129, usdc: 104715, solShare: 0.492386 };
@@ -102,4 +102,8 @@ describe('toTimeline', () => {
 
 test('links a transaction to the devnet explorer', () => {
 	expect(explorerTxUrl('5Kx3abc')).toBe('https://explorer.solana.com/tx/5Kx3abc?cluster=devnet');
+});
+
+test('links an account to the devnet explorer', () => {
+	expect(explorerAddressUrl('CA61y1mT')).toBe('https://explorer.solana.com/address/CA61y1mT?cluster=devnet');
 });

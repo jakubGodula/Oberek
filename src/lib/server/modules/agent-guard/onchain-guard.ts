@@ -130,6 +130,7 @@ export class OnchainGuard implements AgentGuard {
 function toGuardAccount(state: AgentState): GuardAccount {
 	return {
 		owner: state.owner,
+		agentKey: state.agentKey,
 		status: state.status,
 		counter: Number(state.counter),
 		lastDecision: getBase16Decoder().decode(state.lastDecision)
