@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use solana_ml_dsa::ml_dsa_44::PreparedVerifyingKey;
 
 pub const AGENT_SEED: &[u8] = b"agent";
+pub const OWNER_SEED: &[u8] = b"owner";
 
 /// SHAKE mode (`TURBO = false`): FIPS 204, the mode compatible with noble's `ml_dsa44`.
 pub type MldsaPreparedKey = PreparedVerifyingKey<false>;
@@ -11,6 +12,22 @@ pub const MLDSA_PREPARED_KEY_LEN: usize = MldsaPreparedKey::BYTE_LEN;
 #[account(zero_copy)]
 pub struct AgentKey {
     pub prepared: [u8; MLDSA_PREPARED_KEY_LEN],
+}
+
+/// The owner's prepared ML-DSA-44 public key. Its own type, so an agent's key account cannot stand in for it.
+#[account(zero_copy)]
+pub struct OwnerKey {
+    pub prepared: [u8; MLDSA_PREPARED_KEY_LEN],
+}
+
+/// PDA with seeds `[OWNER_SEED, owner]`: the one ML-DSA-44 key that activates the owner's agents. Created with `init`,
+/// so it cannot be replaced.
+#[account]
+#[derive(InitSpace)]
+pub struct OwnerRecord {
+    pub owner: Pubkey,
+    pub owner_key: Pubkey,
+    pub bump: u8,
 }
 
 /// PDA with seeds `[AGENT_SEED, owner, agent_key]`: the only mutable state of an agent.
@@ -31,6 +48,8 @@ pub struct Agent {
 pub enum AgentStatus {
     Active,
     Killed,
+    /// Registered, waiting for the owner's ML-DSA-44 activation. Appended so older accounts still decode.
+    Pending,
 }
 
 #[event]
@@ -46,6 +65,12 @@ pub struct BatchRecorded {
     pub counter: u64,
     pub root: [u8; 32],
     pub size: u32,
+}
+
+#[event]
+pub struct AgentActivated {
+    pub agent: Pubkey,
+    pub counter: u64,
 }
 
 #[event]
