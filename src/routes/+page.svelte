@@ -198,7 +198,7 @@
         Devnet Live
       </div>
       <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-violet-500/[0.08] border border-violet-500/20 text-violet-300 text-[11px] font-mono">
-        <Lock class="w-3 h-3" /> ML-DSA-44 · KEM-768
+        <Lock class="w-3 h-3" /> ML-DSA-44
       </div>
       <button
         onclick={refreshAll}
@@ -572,11 +572,9 @@
         </h3>
         <div class="space-y-2">
           {#each [
-            { label: 'Podpis (podpisywanie)', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
-            { label: 'Enkapsulacja klucza', value: 'ML-KEM-768', note: 'NIST FIPS 203' },
-            { label: 'State Commitment', value: 'SHA3-256', note: 'Quantum-Safe Hash' },
-            { label: 'Ed25519 seed ochrona', value: 'DMS (RFC 8032)', note: 'Dual-Mode Sig' },
-            { label: 'Blockchain', value: 'Solana Devnet', note: 'sub-400ms finality' },
+            { label: 'Podpis agenta, weryfikowany on-chain', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
+            { label: 'Hash decyzji', value: 'SHA-256', note: 'pole last_decision' },
+            { label: 'Program', value: 'onchain_agent_guard', note: 'Solana Devnet' },
           ] as algo}
             <div class="flex items-start justify-between gap-2">
               <div>
