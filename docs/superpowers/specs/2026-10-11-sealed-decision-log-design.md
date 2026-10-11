@@ -36,8 +36,7 @@ in the GUI; ciphertext on-chain in an SPL Memo; re-encapsulating per restart; en
 | `.devnet/owner-mlkem.json` (`OWNER_MLKEM_FILE`) | 0600, `wx` | `{ publicKey, secretKey }`, base64, ML-KEM-768 | setup, once | `fleet.ts` (public key), `audit.ts` (secret key) |
 | `.devnet/fleet/<id>/seal.json` | 0600, `wx` | `{ kemCiphertext, dataKey }`, base64; capsule 1,088 B, key 32 B | `fleet.ts import` / `fleet.ts seal` | server (`dataKey`), `audit.ts` (`kemCiphertext`) |
 
-`dataKey` is the ML-KEM-768 shared secret itself (32 B, uniformly random per FIPS 203), with no extra derivation: it has
-one use, so a KDF would add nothing.
+`dataKey` = HKDF-SHA256(ikm = ML-KEM shared secret, salt = empty, info = `onchain-agent-guard:decision-log:v1`, 32 B).
 The seal file is separate from `onchain.json` so the `AgentFile` format, shared with `scripts/agent.ts`, stays as it is.
 `wx` on both files: neither can be overwritten, so a key cannot be swapped under an existing log.
 
@@ -57,7 +56,7 @@ A sealed line: `{ "counter": n, "nonce": b64(12 B), "ciphertext": b64, "tag": b6
 
 | Unit | Change |
 |---|---|
-| `fleet/log-seal.ts` (new) | `createLogSeal(ownerPublicKey)` → `{ kemCiphertext, dataKey }`; `recoverDataKey(kemCiphertext, ownerSecretKey)`; `saveLogSeal` / `loadLogSeal` (0600, `wx`); owner key file `createOwnerKemKey` / `saveOwnerKemKey` / `loadOwnerKemKey`. ML-KEM-768 from `@noble/post-quantum/ml-kem.js`, AES from `crypto` |
+| `fleet/log-seal.ts` (new) | `createLogSeal(ownerPublicKey)` → `{ kemCiphertext, dataKey }`; `recoverDataKey(kemCiphertext, ownerSecretKey)`; `saveLogSeal` / `loadLogSeal` (0600, `wx`); owner key file `createOwnerKemKey` / `saveOwnerKemKey` / `loadOwnerKemKey`. ML-KEM-768 from `@noble/post-quantum/ml-kem.js`, HKDF and AES from `crypto` |
 | `fleet/sealed-log.ts` (new) | `sealEntry(dataKey, entry)` → sealed line; `openLine(dataKey, line)` → entry; `isSealedLine(line)` |
 | `fleet/fleet.ts` | `new Fleet(fleetDir, dataKeyOf?)`, default reads `dataKey` from the agent's `seal.json`; `register(entry, seal)` also writes `seal.json`; new `addSeal(agentId, seal)`; `appendDecision` seals; the log reader opens sealed lines and passes legacy ones through. `transactions.jsonl` stays plain (it only holds what is public on-chain) |
 | `agent/config.ts` | `ownerKemPath` from `OWNER_MLKEM_FILE`, default `.devnet/owner-mlkem.json` |
