@@ -25,6 +25,10 @@ const STEP_1_SIGNATURE: &[u8] = include_bytes!("fixtures/step-1.sig");
 const STEP_2_SIGNATURE: &[u8] = include_bytes!("fixtures/step-2.sig");
 const STEP_3_SIGNATURE: &[u8] = include_bytes!("fixtures/step-3.sig");
 const RESUME_2_SIGNATURE: &[u8] = include_bytes!("fixtures/resume-2.sig");
+const BATCH_1_SIGNATURE: &[u8] = include_bytes!("fixtures/batch-1.sig");
+/// Must match BATCH_ROOT and BATCH_SIZE in scripts/gen-guard-fixtures.ts.
+const BATCH_ROOT: [u8; 32] = [0xb7; 32];
+const BATCH_SIZE: u32 = 5;
 const SIGNED_INSTRUCTION_INDEX: u8 = 0;
 
 const PROGRAM: Address = Address::new_from_array(onchain_agent_guard::ID.to_bytes());
@@ -84,6 +88,15 @@ fn step_using_key(agent_key: Address, decision_hash: [u8; 32], signature: &[u8])
 /// The step that moves the counter to `counter`, with the fixture's decision hash for it.
 fn step(counter: u64, signature: &[u8]) -> Instruction {
     step_with(decision_hash(counter), signature)
+}
+
+/// The batch that moves the counter to the next value, signed over `root` and `size`.
+fn batch(root: [u8; 32], size: u32, signature: &[u8]) -> Instruction {
+    Instruction::new_with_bytes(
+        PROGRAM,
+        &program_ix::RecordBatch { root, size, signature: signature.to_vec() }.data(),
+        vec![AccountMeta::new(agent_address(), false), AccountMeta::new_readonly(AGENT_KEY, false)],
+    )
 }
 
 fn anchor_error(instruction: u8, error: AnchorError) -> Result<(), TransactionError> {
@@ -374,4 +387,76 @@ fn resume_by_a_non_owner_fails() {
         ledger.send_paid_by(STRANGER, "resume by stranger", &[resume_with(STRANGER, true, AGENT_KEY, RESUME_2_SIGNATURE)]),
         anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintHasOne)
     );
+}
+
+#[test]
+fn valid_batch_advances_the_counter_by_one_and_records_the_root() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("batch 1", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]), Ok(()));
+    let agent = ledger.agent();
+    assert_eq!(agent.counter, 1);
+    assert_eq!(agent.last_decision, BATCH_ROOT);
+}
+
+#[test]
+fn batch_with_another_root_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("batch 1 other root", &[batch([0xb8; 32], BATCH_SIZE, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn batch_with_another_size_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("batch 1 other size", &[batch(BATCH_ROOT, BATCH_SIZE + 1, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn empty_batch_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("empty batch", &[batch(BATCH_ROOT, 0, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::EmptyBatch)
+    );
+}
+
+#[test]
+fn step_signature_does_not_pass_as_a_batch() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("step 1 signature as batch", &[batch(decision_hash(1), BATCH_SIZE, STEP_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn replayed_batch_signature_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("batch 1", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]), Ok(()));
+    assert_eq!(
+        ledger.send("batch 1 replayed", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn batch_on_a_killed_agent_fails() {
+    let mut ledger = Ledger::killed_after_first_step();
+    assert_eq!(
+        ledger.send("batch while killed", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentKilled)
+    );
+}
+
+#[test]
+fn step_after_a_batch_uses_the_next_counter() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(ledger.send("batch 1", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]), Ok(()));
+    assert_eq!(ledger.send("step 2", &[step(2, STEP_2_SIGNATURE)]), Ok(()));
+    assert_eq!(ledger.agent().counter, 2);
 }

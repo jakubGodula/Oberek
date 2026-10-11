@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { getAddressDecoder, getBase16Encoder } from '@solana/kit';
 import vector from '../../../../../onchain/fixtures/message-vector.json';
-import { GUARD_CONTEXT, resumeMessage, signGuardMessage, stepMessage } from './message';
+import { batchMessage, GUARD_CONTEXT, resumeMessage, signGuardMessage, stepMessage } from './message';
 
 const bytes = (hex: string) => new Uint8Array(getBase16Encoder().encode(hex));
 const agent = getAddressDecoder().decode(bytes(vector.agent));
@@ -19,6 +19,14 @@ describe('guard messages', () => {
 
 	it('builds the resume message of the shared vector', () => {
 		expect(resumeMessage(agent, counter)).toEqual(bytes(vector.resumeMessage));
+	});
+
+	it('builds the batch message of the shared vector', () => {
+		expect(batchMessage(agent, counter, bytes(vector.batchRoot), vector.batchSize)).toEqual(bytes(vector.batchMessage));
+	});
+
+	it('rejects a batch root that is not 32 bytes', () => {
+		expect(() => batchMessage(agent, counter, new Uint8Array(31), 1)).toThrow(RangeError);
 	});
 
 	it('rejects a decision hash that is not 32 bytes', () => {

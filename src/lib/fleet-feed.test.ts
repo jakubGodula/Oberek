@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { acceptsShock, explorerAddressUrl, explorerTxUrl, toFeedRow, toTimeline, type FeedEntry, type OperatorAction } from './fleet-feed';
+import { acceptsShock, decisionHashLabel, explorerAddressUrl, explorerTxUrl, toFeedRow, toTimeline, type FeedEntry, type OperatorAction, type TimelineRow } from './fleet-feed';
 
 const AT = '2026-10-10T15:00:00.000Z';
 const BEFORE = { sol: 956.913095129, usdc: 104715, solShare: 0.492386 };
@@ -106,4 +106,34 @@ test('links a transaction to the devnet explorer', () => {
 
 test('links an account to the devnet explorer', () => {
 	expect(explorerAddressUrl('CA61y1mT')).toBe('https://explorer.solana.com/address/CA61y1mT?cluster=devnet');
+});
+
+describe('batches in the timeline', () => {
+	test('groups the decisions of one batch under one row, by counter among the others', () => {
+		const root = 'cd'.repeat(32);
+		const inBatch = (index: number): FeedEntry => ({
+			record: { counter: 5, index, kind: 'tick', decision: {}, summary: `TICK ${index}`, observedAt: AT },
+			decisionHash: `${index}`.padStart(64, 'e'),
+			batch: { root, size: 2 },
+			signature: 'sig-batch'
+		});
+		const single = { ...entry(6, 'tick', {}), decisionHash: 'f'.repeat(64) };
+		const rows = toTimeline([single, inBatch(1), inBatch(0)], [], null);
+
+		expect(rows.map((row) => row.type)).toEqual(['decision', 'batch']);
+		const batch = rows[1] as Extract<TimelineRow, { type: 'batch' }>;
+		expect(batch).toMatchObject({ key: root, counter: 5, root, size: 2, signature: 'sig-batch' });
+		expect(batch.rows.map((row) => row.batch?.index)).toEqual([1, 0]);
+	});
+
+	test('a single step has no batch', () => {
+		expect(toFeedRow(entry(3, 'tick', {}), null).batch).toBeNull();
+	});
+});
+
+describe('decisionHashLabel', () => {
+	test('names the Merkle root after a batch and the decision hash after a single step', () => {
+		expect(decisionHashLabel(16)).toBe('Quantum-Safe Merkle Root (SHA-256)');
+		expect(decisionHashLabel(null)).toBe('Last decision (SHA-256)');
+	});
 });

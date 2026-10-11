@@ -13,9 +13,11 @@ import {
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { decisionHashLabel } from '../../../fleet-feed';
 import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
+import { batchSizeOf } from '../fleet/latest-decision';
 import type { FleetRuntime } from '../fleet/submit-decision';
 import { memoText } from './memo';
 
@@ -31,6 +33,8 @@ export interface AgentStatusRecord {
   /** Address of the account holding the agent's ML-DSA-44 public key; null when the guard could not be read. */
   pqcKeyAccount: string | null;
   lastCommitmentRoot: string;
+  /** Decisions under the Merkle root `lastCommitmentRoot` holds; null when it is a single decision's hash. */
+  lastBatchSize: number | null;
   lastUpdated: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   actionsExecuted: number;
@@ -43,6 +47,8 @@ export interface FleetDetails {
   shockArmed: boolean;
   /** The kind of the agent's newest logged decision (e.g. "sentinel"); null before its first. */
   lastDecisionKind: string | null;
+  /** Decisions waiting in the server's buffer for the next batch. */
+  queued: number;
 }
 
 function genPqcHash(): string {
@@ -64,6 +70,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       currentTask: 'Cross-DEX arbitrage: Raydium ↔ Orca, spread 0.34%',
       pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'arbiter-02', task: 'ARB_SCAN', timestamp: Date.now() }),
+      lastBatchSize: null,
       lastUpdated: Date.now() - 30_000,
       riskLevel: 'HIGH',
       actionsExecuted: 182
@@ -78,6 +85,7 @@ const agentsStore: Map<string, AgentStatusRecord> = new Map([
       currentTask: 'Portfolio exposure monitoring, no active alerts',
       pqcKeyAccount: genPqcHash(),
       lastCommitmentRoot: genRoot({ agentId: 'guardian-03', task: 'MONITOR', timestamp: Date.now() }),
+      lastBatchSize: null,
       lastUpdated: Date.now() - 120_000,
       riskLevel: 'LOW',
       actionsExecuted: 9
@@ -103,7 +111,11 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
     lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
     riskLevel: entry.riskLevel
   };
-  const fleet = { shockArmed: shockStore.isArmed(entry.id), lastDecisionKind: last?.record.kind ?? null };
+  const fleet = {
+    shockArmed: shockStore.isArmed(entry.id),
+    lastDecisionKind: last?.record.kind ?? null,
+    queued: runtime.batcher?.queued(entry.id) ?? 0
+  };
   try {
     const account = await runtime.guard.readAgent(entry.id);
     const proposal = proposalAwaiting(runtime.fleet, entry.id, account);
@@ -117,6 +129,7 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
       status: cardStatus(account.status, proposal !== null),
       pqcKeyAccount: account.agentKey,
       lastCommitmentRoot: account.lastDecision,
+      lastBatchSize: batchSizeOf(runtime.fleet, entry.id, account.lastDecision),
       actionsExecuted: account.counter,
       fleet: { ...fleet, pendingProposal }
     };
@@ -128,6 +141,7 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
       currentTask: `Unavailable: ${reason}`,
       pqcKeyAccount: null,
       lastCommitmentRoot: NO_DECISION,
+      lastBatchSize: null,
       actionsExecuted: 0,
       fleet: { ...fleet, pendingProposal: null }
     };
@@ -168,6 +182,7 @@ export class BlinkService {
       currentTask: 'Waiting for the operator',
       pqcKeyAccount: null,
       lastCommitmentRoot: '00'.repeat(32),
+      lastBatchSize: null,
       lastUpdated: Date.now(),
       riskLevel: 'LOW' as const,
       actionsExecuted: 0
@@ -180,7 +195,7 @@ export class BlinkService {
       description:
         `Status: [${agent.status}] | Task: ${agent.currentTask}\n` +
         `ML-DSA-44 key account: ${agent.pqcKeyAccount ?? 'unknown'}\n` +
-        `Last decision (SHA-256): ${agent.lastCommitmentRoot.slice(0, 16)}...`,
+        `${decisionHashLabel(agent.lastBatchSize)}: ${agent.lastCommitmentRoot.slice(0, 16)}...`,
       label: 'Agent Authorization',
       links: {
         actions: [

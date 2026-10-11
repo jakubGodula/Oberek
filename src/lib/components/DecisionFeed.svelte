@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Activity, ExternalLink } from 'lucide-svelte';
-  import { explorerTxUrl, toTimeline, type Chip, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
+  import { explorerTxUrl, toTimeline, type Chip, type FeedEntry, type FeedRow, type OperatorAction } from '#lib/fleet-feed';
 
   let {
     agentId,
@@ -44,9 +44,11 @@
   };
   const PERCENT = 100;
   const SIGNATURE_EDGE = 4;
+  const ROOT_PREFIX = 12;
 
   const percent = (share: number) => `${(share * PERCENT).toFixed(2)}%`;
   const clock = (at: string | number) => new Date(at).toLocaleTimeString('en-GB', { timeZone: 'Europe/Warsaw' });
+  const shortRoot = (root: string) => `${root.slice(0, ROOT_PREFIX)}…`;
   const shortSignature = (signature: string) => `${signature.slice(0, SIGNATURE_EDGE)}…${signature.slice(-SIGNATURE_EDGE)}`;
 </script>
 
@@ -61,6 +63,42 @@
       tx {shortSignature(signature)} <ExternalLink class="w-2.5 h-2.5" />
     </a>
   {/if}
+{/snippet}
+
+{#snippet decision(row: FeedRow)}
+  <div class="p-3 rounded-xl bg-black/20 border border-white/[0.05]">
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="text-[10px] font-mono text-slate-500">{clock(row.observedAt)}</span>
+      <span class="text-[10px] font-mono text-slate-500">#{row.counter}</span>
+      <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold tracking-wider border {CHIP_STYLES[row.chip]}">
+        {CHIP_LABELS[row.chip]}
+      </span>
+      {#if row.details?.shockPct != null}
+        <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono border border-fuchsia-500/40 text-fuchsia-300">
+          simulated shock {row.details.shockPct}%
+        </span>
+      {/if}
+      {#if row.unconfirmed}
+        <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono border border-slate-500/40 text-slate-400">unconfirmed</span>
+      {/if}
+    </div>
+    {#if row.details}
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono text-slate-300">
+        <span>${row.details.priceUsd.toFixed(2)}</span>
+        <span>SOL {percent(row.details.solShareBefore)} → {percent(row.details.solShareAfter)}</span>
+        {#if row.details.trade}
+          <span class="text-white">
+            {row.details.trade.side} {row.details.trade.sol.toFixed(3)} SOL (${row.details.trade.usdc.toFixed(0)})
+          </span>
+        {/if}
+      </div>
+    {:else}
+      <p class="text-[11px] font-mono text-slate-300">{row.summary}</p>
+    {/if}
+    {#if !row.batch}
+      {@render transaction(row.signature)}
+    {/if}
+  </div>
 {/snippet}
 
 <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
@@ -84,39 +122,24 @@
           </div>
           {@render transaction(timelineRow.signature)}
         </div>
-      {:else}
-        {@const row = timelineRow.row}
-        <div class="p-3 rounded-xl bg-black/20 border border-white/[0.05]">
-          <div class="flex items-center gap-2 mb-1.5">
-            <span class="text-[10px] font-mono text-slate-500">{clock(row.observedAt)}</span>
-            <span class="text-[10px] font-mono text-slate-500">#{row.counter}</span>
-            <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold tracking-wider border {CHIP_STYLES[row.chip]}">
-              {CHIP_LABELS[row.chip]}
+      {:else if timelineRow.type === 'batch'}
+        <div class="p-3 rounded-xl bg-violet-500/[0.06] border border-violet-500/20">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-[10px] font-mono text-slate-500">#{timelineRow.counter}</span>
+            <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold tracking-wider border text-violet-300 bg-violet-500/15 border-violet-500/40">
+              MERKLE BATCH
             </span>
-            {#if row.details?.shockPct != null}
-              <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono border border-fuchsia-500/40 text-fuchsia-300">
-                simulated shock {row.details.shockPct}%
-              </span>
-            {/if}
-            {#if row.unconfirmed}
-              <span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono border border-slate-500/40 text-slate-400">unconfirmed</span>
-            {/if}
+            <span class="text-[10px] font-mono text-slate-400">{timelineRow.size} decisions · root {shortRoot(timelineRow.root)}</span>
           </div>
-          {#if row.details}
-            <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono text-slate-300">
-              <span>${row.details.priceUsd.toFixed(2)}</span>
-              <span>SOL {percent(row.details.solShareBefore)} → {percent(row.details.solShareAfter)}</span>
-              {#if row.details.trade}
-                <span class="text-white">
-                  {row.details.trade.side} {row.details.trade.sol.toFixed(3)} SOL (${row.details.trade.usdc.toFixed(0)})
-                </span>
-              {/if}
-            </div>
-          {:else}
-            <p class="text-[11px] font-mono text-slate-300">{row.summary}</p>
-          {/if}
-          {@render transaction(row.signature)}
+          <div class="space-y-1.5 pl-2 border-l border-violet-500/20">
+            {#each timelineRow.rows as row (row.key)}
+              {@render decision(row)}
+            {/each}
+          </div>
+          {@render transaction(timelineRow.signature)}
         </div>
+      {:else}
+        {@render decision(timelineRow.row)}
       {/if}
     {:else}
       <p class="text-[12px] text-slate-500 py-6 text-center">

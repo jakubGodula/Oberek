@@ -3,6 +3,7 @@ import { join } from 'path';
 import { assertAgentId, isAgentId, type LandedTransaction } from '../agent-guard/guard';
 import { loadLogSeal, saveLogSeal, type LogSeal } from './log-seal';
 import { isSealedLine, openLine, sealEntry, type SealedLine } from './sealed-log';
+import type { ProofStep } from './merkle';
 
 // The fleet: what the server knows about each registered agent (name, risk level), the log of its decisions and the
 // log of its guard transactions that landed. One directory per agent: <fleetDir>/<agentId>/agent.json, seal.json (the
@@ -22,6 +23,8 @@ export interface FleetEntry {
 export interface DecisionRecord {
 	agent: string;
 	counter: number;
+	/** In a batch: the record's place in the batch's Merkle tree, 0..size-1. Absent on a single step. */
+	index?: number;
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
@@ -35,6 +38,8 @@ export interface DecisionLogEntry {
 	decisionHash: string;
 	/** Set when the guard failed without a verdict: the step may or may not have been recorded. */
 	unconfirmed?: true;
+	/** Present when the record went on-chain in a batch: its root, the batch's size and the record's proof. */
+	batch?: { root: string; size: number; proof: ProofStep[] };
 }
 
 export interface LoggedTransaction extends LandedTransaction {
@@ -139,11 +144,17 @@ export class Fleet {
 		return this.readLog(agentId).slice(-limit).reverse();
 	}
 
-	/** The newest log entry with that hash; for the hash the guard holds, the record of the last recorded step. */
-	findDecision(agentId: string, decisionHash: string): DecisionLogEntry | undefined {
-		return this.readLog(agentId)
-			.reverse()
-			.find((entry) => entry.decisionHash === decisionHash);
+	/**
+	 * The newest single step with that hash, else the newest decision of the batch with that root (the batch's last); for
+	 * the hash the guard holds, the record of the last recorded step. A step wins, so a batch entry claiming a step's hash
+	 * as its root cannot pass for that step.
+	 */
+	findDecision(agentId: string, hash: string): DecisionLogEntry | undefined {
+		const newestFirst = this.readLog(agentId).reverse();
+		return (
+			newestFirst.find((entry) => !entry.batch && entry.decisionHash === hash) ??
+			newestFirst.find((entry) => entry.batch?.root === hash)
+		);
 	}
 
 	/** The data key is read only when a sealed line needs it, so an unsealed agent's plaintext log still reads. */

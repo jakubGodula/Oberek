@@ -1,5 +1,5 @@
 import { GuardError, NO_DECISION } from '../agent-guard/guard';
-import type { DecisionLogEntry } from './fleet';
+import type { DecisionLogEntry, Fleet } from './fleet';
 import type { FleetRuntime } from './submit-decision';
 
 /** The chain holds a decision hash that no entry of the agent's log has: the log and the chain disagree. */
@@ -18,4 +18,10 @@ export async function latestDecision(runtime: FleetRuntime, agentId: string): Pr
 		throw new DecisionNotInLogError(`agent ${agentId}: the decision ${lastDecision} recorded on chain is not in its log`);
 	}
 	return entry;
+}
+
+/** The number of decisions under `lastDecision` when it is a batch's Merkle root; null for a single step's hash. */
+export function batchSizeOf(fleet: Fleet, agentId: string, lastDecision: string): number | null {
+	if (lastDecision === NO_DECISION) return null;
+	return fleet.findDecision(agentId, lastDecision)?.batch?.size ?? null;
 }

@@ -6,7 +6,9 @@ import type { GuardClient } from '../agent/guard-client';
 import { connect } from '../agent/transaction';
 import { assertAgentId, GuardError, type LandedTransaction } from '../agent-guard/guard';
 import { OnchainGuard } from '../agent-guard/onchain-guard';
+import { batchPolicyFrom, DecisionBatcher } from './decision-batcher';
 import { Fleet } from './fleet';
+import { flushBatch } from './record-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
 
@@ -42,7 +44,9 @@ export async function createFleetRuntime(env: Env): Promise<FleetRuntime> {
 	const guard = await createGuard(env, onLanded).catch((error: unknown) => {
 		throw new FleetNotConfiguredError(error instanceof Error ? error.message : String(error));
 	});
-	return { guard, fleet, throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now };
+	const runtime: FleetRuntime = { guard, fleet, throttle: new StepThrottle(MIN_STEP_INTERVAL_MS), now };
+	runtime.batcher = new DecisionBatcher(batchPolicyFrom(env), (agentId, queued) => flushBatch(runtime, agentId, queued));
+	return runtime;
 }
 
 async function createGuard(env: Env, onLanded: (transaction: LandedTransaction) => void): Promise<OnchainGuard> {

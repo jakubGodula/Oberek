@@ -7,6 +7,7 @@ export type Chip = 'HOLD' | 'REBALANCE' | 'AWAITING_APPROVAL' | 'PROPOSAL' | 'AP
 export interface FeedEntry {
 	record: {
 		counter: number;
+		index?: number;
 		kind: string;
 		decision: Record<string, unknown>;
 		summary: string;
@@ -15,6 +16,8 @@ export interface FeedEntry {
 	};
 	decisionHash: string;
 	unconfirmed?: true;
+	/** Present when the decision went on-chain in a batch. */
+	batch?: { root: string; size: number };
 	/** The transaction that recorded it on chain; absent when the transaction log does not hold it. */
 	signature?: string;
 }
@@ -47,15 +50,23 @@ export interface FeedRow {
 	/** From the decision, or for a verdict from its proposal; null when the record has no price and portfolio. */
 	details: TradeDetails | null;
 	signature: string | null;
+	/** Present when the decision went on-chain in a batch. */
+	batch: { root: string; size: number; index: number } | null;
 }
 
 export type TimelineRow =
 	| { type: 'decision'; row: FeedRow }
+	| { type: 'batch'; key: string; counter: number; root: string; size: number; signature: string | null; rows: FeedRow[] }
 	| ({ type: 'action'; key: string } & OperatorAction);
 
 /** A kill keeps the counter of the step before it, so it ranks just above that step. */
 const KILL_RANK_OFFSET = 0.5;
 const EXPLORER_CLUSTER = 'devnet';
+
+/** The name of what the agent account's last_decision holds: a batch's Merkle root, or one decision's hash. */
+export function decisionHashLabel(lastBatchSize: number | null): string {
+	return lastBatchSize ? 'Quantum-Safe Merkle Root (SHA-256)' : 'Last decision (SHA-256)';
+}
 
 export function explorerTxUrl(signature: string): string {
 	return `https://explorer.solana.com/tx/${signature}?cluster=${EXPLORER_CLUSTER}`;
@@ -65,18 +76,39 @@ export function explorerAddressUrl(address: string): string {
 	return `https://explorer.solana.com/address/${address}?cluster=${EXPLORER_CLUSTER}`;
 }
 
-/** The decisions (newest first) and the owner's actions, merged newest first by counter. */
+/**
+ * The decisions (newest first), a batch's decisions grouped under it, and the owner's actions, merged newest first by
+ * counter.
+ */
 export function toTimeline(entries: FeedEntry[], actions: OperatorAction[], pendingCounter: number | null): TimelineRow[] {
+	const decisionRows = entries.map((entry) => toFeedRow(entry, pendingCounter));
 	const rows: TimelineRow[] = [
-		...entries.map((entry) => ({ type: 'decision' as const, row: toFeedRow(entry, pendingCounter) })),
+		...decisionRows.filter((row) => !row.batch).map((row) => ({ type: 'decision' as const, row })),
+		...batchRows(decisionRows.filter((row) => row.batch)),
 		...actions.map((action) => ({ type: 'action' as const, key: action.signature, ...action }))
 	];
 	// Stable: decisions sharing a counter (an unlanded step and its retry) keep their log order.
 	return rows.sort((a, b) => rankOf(b) - rankOf(a));
 }
 
+/** One row per batch root, its decisions in feed order. */
+function batchRows(rows: FeedRow[]): TimelineRow[] {
+	const byRoot = new Map<string, FeedRow[]>();
+	for (const row of rows) byRoot.set(row.batch!.root, [...(byRoot.get(row.batch!.root) ?? []), row]);
+	return [...byRoot].map(([root, members]) => ({
+		type: 'batch' as const,
+		key: root,
+		counter: members[0].counter,
+		root,
+		size: members[0].batch!.size,
+		signature: members[0].signature,
+		rows: members
+	}));
+}
+
 function rankOf(row: TimelineRow): number {
 	if (row.type === 'decision') return row.row.counter;
+	if (row.type === 'batch') return row.counter;
 	return row.event === 'AgentKilled' ? row.counter + KILL_RANK_OFFSET : row.counter;
 }
 
@@ -93,7 +125,8 @@ export function toFeedRow(entry: FeedEntry, pendingCounter: number | null): Feed
 		summary: record.summary,
 		unconfirmed: entry.unconfirmed === true,
 		details: tradeDetails(record.kind === 'approval' ? proposalDecision(record.decision) : record.decision),
-		signature: entry.signature ?? null
+		signature: entry.signature ?? null,
+		batch: entry.batch ? { root: entry.batch.root, size: entry.batch.size, index: record.index ?? 0 } : null
 	};
 }
 
