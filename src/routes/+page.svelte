@@ -30,6 +30,9 @@
     blinkUrl ? `https://dial.to/?action=solana-action:${encodeURIComponent(blinkUrl)}&cluster=devnet` : ''
   );
 
+  /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
+  const fleetAgents = $derived(agents.filter((a: any) => a.fleet));
+
   /** Mock agents are demo data, not real agents: the page says so on every card. */
   const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
 
@@ -256,28 +259,24 @@
       <!-- Stats panel -->
       <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
         <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <BarChart3 class="w-3.5 h-3.5 text-sky-400" /> Statystyki Sieci
+          <BarChart3 class="w-3.5 h-3.5 text-sky-400" /> Statystyki floty
         </h3>
         <div class="space-y-2.5">
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Aktywnych agentów</span>
+            <span class="text-[11px] text-slate-400">Aktywnych agentów on-chain</span>
             <span class="text-[13px] font-mono font-bold text-emerald-400">
-              {agents.filter(a => a.status === 'ACTIVE').length}/{agents.length}
+              {fleetAgents.filter((a: any) => a.status === 'ACTIVE').length}/{fleetAgents.length}
             </span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Łączna liczba tx</span>
+            <span class="text-[11px] text-slate-400">Łączny licznik on-chain</span>
             <span class="text-[13px] font-mono font-bold text-violet-300">
-              {agents.reduce((s, a) => s + (a.actionsExecuted || 0), 0)}
+              {fleetAgents.reduce((sum: number, a: any) => sum + a.actionsExecuted, 0)}
             </span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-[11px] text-slate-400">Algorytm PQC</span>
             <span class="text-[11px] font-mono text-violet-300">ML-DSA-44</span>
-          </div>
-          <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Algorytm KEM</span>
-            <span class="text-[11px] font-mono text-violet-300">ML-KEM-768</span>
           </div>
         </div>
       </div>
