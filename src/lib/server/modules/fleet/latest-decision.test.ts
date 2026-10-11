@@ -5,7 +5,7 @@ import { join } from 'path';
 import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
 import { Fleet, type DecisionLogEntry } from './fleet';
 import { TEST_SEAL } from './testing/test-seal';
-import { DecisionNotInLogError, latestDecision } from './latest-decision';
+import { batchSizeOf, DecisionNotInLogError, latestDecision } from './latest-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
 
@@ -103,5 +103,16 @@ describe('latestDecision', () => {
 			(caught: unknown) => caught
 		);
 		expect((error as GuardError).code).toBe('AgentNotFound');
+	});
+});
+
+describe('batchSizeOf', () => {
+	test('is the size of the batch whose root the chain holds, null for a single step or no decision', () => {
+		const root = 'cc'.repeat(32);
+		fleet.appendDecision(AGENT, entry(1, HASH_A));
+		fleet.appendDecision(AGENT, { ...entry(2, HASH_B), batch: { root, size: 1, proof: [] } });
+		expect(batchSizeOf(fleet, AGENT, root)).toBe(1);
+		expect(batchSizeOf(fleet, AGENT, HASH_A)).toBeNull();
+		expect(batchSizeOf(fleet, AGENT, NO_DECISION)).toBeNull();
 	});
 });

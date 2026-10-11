@@ -6,7 +6,7 @@
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import { acceptsShock, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
+  import { acceptsShock, decisionHashLabel, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
 
@@ -18,7 +18,8 @@
   let simulationSuccess = $state<boolean | null>(null);
   let feedEntries = $state<FeedEntry[]>([]);
   let feedActions = $state<OperatorAction[]>([]);
-  const FEED_LIMIT = 10;
+  /** Room for a full batch (BATCH_MAX_DECISIONS, 16 by default) and the rows around it. */
+  const FEED_LIMIT = 40;
   /** The demo shock the card's button arms, in percent of the price. */
   const SHOCK_PCT = -3;
 
@@ -245,7 +246,9 @@
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
                   {/if}
                 </span>
-                <span class="text-[10px] text-slate-500 font-mono">{agent.actionsExecuted} tx</span>
+                <span class="text-[10px] text-slate-500 font-mono">
+                  {agent.actionsExecuted} tx{#if agent.fleet?.queued}<span class="text-violet-300"> · {agent.fleet.queued} queued</span>{/if}
+                </span>
               </div>
             </button>
           {/each}
@@ -336,11 +339,11 @@
               </div>
             </div>
 
-            <!-- Last decision hash -->
+            <!-- Last decision hash, or the Merkle root of the last batch -->
             <div class="bg-black/30 rounded-xl p-3.5 border border-violet-500/[0.15] mb-3">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Key class="w-3 h-3" /> Last decision (SHA-256)
+                  <Key class="w-3 h-3" /> {decisionHashLabel(selectedAgent.lastBatchSize)}
                 </span>
                 <button
                   onclick={() => copyText(selectedAgent.lastCommitmentRoot, 'root')}
@@ -357,6 +360,9 @@
                 {selectedAgent.lastCommitmentRoot}
               </p>
               <p class="text-[10px] text-slate-500 mt-1.5">
+                {#if selectedAgent.lastBatchSize}
+                  Batch of {selectedAgent.lastBatchSize} decisions signed once with ML-DSA-44 ·
+                {/if}
                 The <code class="text-violet-400">last_decision</code> field of the agent account in the <code class="text-violet-400">onchain_agent_guard</code> program (Solana Devnet)
               </p>
             </div>
@@ -562,7 +568,7 @@
           {#each [
             { label: 'Agent signature, verified on-chain', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
             { label: 'Decision log seal, owner key', value: 'ML-KEM-768', note: 'NIST FIPS 203 · AES-256-GCM' },
-            { label: 'Decision hash', value: 'SHA-256', note: 'last_decision field' },
+            { label: 'Decision hash / Merkle root', value: 'SHA-256', note: 'last_decision field · one ML-DSA-44 signature per batch' },
             { label: 'Program', value: 'onchain_agent_guard', note: 'Solana Devnet' },
           ] as algo}
             <div class="flex items-start justify-between gap-2">
