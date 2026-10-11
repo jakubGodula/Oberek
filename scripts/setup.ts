@@ -6,9 +6,10 @@
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { createSolanaRpc, devnet, lamports, type Address } from '@solana/kit';
+import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
-import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
+import { loadAgentFile, loadKeypairSigner } from '../src/lib/server/modules/agent/files';
+import { decodeAgent } from '../src/lib/server/modules/agent/instructions';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
 import { runLogged } from './run-log';
@@ -36,11 +37,12 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 /** A plain RPC, without the server's rate-limit retries: a refused airdrop should go to the faucet hint at once. */
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
-await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf), existsSync(config.ownerMldsaPath)));
+const progress = await Promise.all(AGENTS.map(progressOf));
+await ensureFunded(rpc, payer, lamportsNeeded(progress, existsSync(config.ownerMldsaPath)));
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
 ensureOwnerKey();
-for (const agent of AGENTS) setUpAgent(agent);
+AGENTS.forEach((agent, index) => setUpAgent(agent, progress[index]));
 log('ready: bun scripts/demo.ts');
 log(telegramHint());
 
@@ -111,8 +113,8 @@ function ensureOwnerKey(): void {
 	runBun(['scripts/agent.ts', 'register-owner']);
 }
 
-function setUpAgent(agent: SetupAgent): void {
-	const steps = stepsFor(progressOf(agent));
+function setUpAgent(agent: SetupAgent, progress: AgentProgress): void {
+	const steps = stepsFor(progress);
 	if (steps.length === 0) {
 		log(`${agent.id} is in the fleet`);
 		return;
@@ -121,14 +123,27 @@ function setUpAgent(agent: SetupAgent): void {
 }
 
 function runStep(agent: SetupAgent, step: AgentStep): void {
-	if (step === 'register') runBun(['scripts/agent.ts', 'register'], { AGENT_FILE: agentFile(agent) });
-	else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
-	else runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
+	if (step === 'import') {
+		runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
+	} else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
+	else runBun(['scripts/agent.ts', step], { AGENT_FILE: agentFile(agent) });
 }
 
-function progressOf(agent: SetupAgent): AgentProgress {
+async function progressOf(agent: SetupAgent): Promise<AgentProgress> {
+	const registered = existsSync(agentFile(agent));
 	const imported = existsSync(join(FLEET_DIR, agent.id));
-	return { registered: existsSync(agentFile(agent)), imported, sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id) };
+	return {
+		registered,
+		pending: registered && (await isPending(agentFile(agent))),
+		imported,
+		sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id)
+	};
+}
+
+/** A registration whose outcome is unknown (no account yet) is not pending: `agent.ts status` reports it. */
+async function isPending(path: string): Promise<boolean> {
+	const account = await fetchEncodedAccount(rpc, loadAgentFile(path).agent);
+	return account.exists && decodeAgent(new Uint8Array(account.data)).status === 'Pending';
 }
 
 function agentFile(agent: SetupAgent): string {

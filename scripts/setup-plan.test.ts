@@ -1,10 +1,22 @@
 import { expect, test } from 'bun:test';
 import { LAMPORTS_FOR_OWNER_KEY, LAMPORTS_PER_AGENT, lamportsNeeded, stepsFor, type AgentProgress } from './setup-plan';
 
-const fresh: AgentProgress = { registered: false, imported: false, sealed: false };
-const registered: AgentProgress = { registered: true, imported: false, sealed: false };
-const done: AgentProgress = { registered: true, imported: true, sealed: true };
-const importedBeforeSealing: AgentProgress = { registered: true, imported: true, sealed: false };
+const fresh: AgentProgress = { registered: false, pending: false, imported: false, sealed: false };
+const registered: AgentProgress = { registered: true, pending: false, imported: false, sealed: false };
+const done: AgentProgress = { registered: true, pending: false, imported: true, sealed: true };
+const importedBeforeSealing: AgentProgress = { registered: true, pending: false, imported: true, sealed: false };
+
+test('a registered agent still awaiting activation is activated, then imported', () => {
+	expect(stepsFor({ ...registered, pending: true })).toEqual(['activate', 'import']);
+});
+
+test('an imported agent still awaiting activation is only activated', () => {
+	expect(stepsFor({ ...done, pending: true })).toEqual(['activate']);
+});
+
+test('an agent imported before logs were sealed and still awaiting activation is activated, then sealed', () => {
+	expect(stepsFor({ ...importedBeforeSealing, pending: true })).toEqual(['activate', 'seal']);
+});
 
 test('a fresh agent is registered, then imported', () => {
 	expect(stepsFor(fresh)).toEqual(['register', 'import']);
@@ -19,7 +31,7 @@ test('an agent in the fleet needs nothing', () => {
 });
 
 test('an agent in the fleet without its agent file still needs nothing', () => {
-	expect(stepsFor({ registered: false, imported: true, sealed: true })).toEqual([]);
+	expect(stepsFor({ registered: false, pending: false, imported: true, sealed: true })).toEqual([]);
 });
 
 test('an agent imported before logs were sealed is only sealed', () => {
