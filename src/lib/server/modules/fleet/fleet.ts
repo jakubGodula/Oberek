@@ -1,9 +1,10 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { assertAgentId, isAgentId } from '../agent-guard/guard';
+import { assertAgentId, isAgentId, type LandedTransaction } from '../agent-guard/guard';
 
-// The fleet: what the server knows about each registered agent (name, risk level) and the log of its decisions.
-// One directory per agent: <fleetDir>/<agentId>/agent.json and decisions.jsonl.
+// The fleet: what the server knows about each registered agent (name, risk level), the log of its decisions and the
+// log of its guard transactions that landed. One directory per agent: <fleetDir>/<agentId>/agent.json, decisions.jsonl
+// and transactions.jsonl.
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
@@ -21,6 +22,8 @@ export interface DecisionRecord {
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
+	/** The agent stops after this decision until the owner accepts or rejects it. */
+	requiresApproval?: true;
 	observedAt: string;
 }
 
@@ -31,8 +34,14 @@ export interface DecisionLogEntry {
 	unconfirmed?: true;
 }
 
+export interface LoggedTransaction extends LandedTransaction {
+	/** When the server saw it land, in ms. */
+	landedAt: number;
+}
+
 const ENTRY_FILE = 'agent.json';
 const DECISION_LOG_FILE = 'decisions.jsonl';
+const TRANSACTION_LOG_FILE = 'transactions.jsonl';
 
 export class Fleet {
 	constructor(private readonly fleetDir: string) {}
@@ -58,18 +67,68 @@ export class Fleet {
 	}
 
 	appendDecision(agentId: string, entry: DecisionLogEntry): void {
-		appendFileSync(join(this.agentDir(agentId), DECISION_LOG_FILE), JSON.stringify(entry) + '\n');
+		this.appendLine(agentId, DECISION_LOG_FILE, entry);
+	}
+
+	appendTransaction(transaction: LoggedTransaction): void {
+		this.appendLine(transaction.agentId, TRANSACTION_LOG_FILE, transaction);
+	}
+
+	/** The agent's guard transactions that landed, oldest first. */
+	transactions(agentId: string): LoggedTransaction[] {
+		return this.readLines(agentId, TRANSACTION_LOG_FILE);
 	}
 
 	lastDecision(agentId: string): DecisionLogEntry | undefined {
-		const path = join(this.agentDir(agentId), DECISION_LOG_FILE);
-		if (!existsSync(path)) return undefined;
-		const lines = readFileSync(path, 'utf8').trimEnd().split('\n');
-		return JSON.parse(lines[lines.length - 1]);
+		return this.readLog(agentId).at(-1);
+	}
+
+	/** The whole log, oldest first, `unconfirmed` marks included. */
+	decisions(agentId: string): DecisionLogEntry[] {
+		return this.readLog(agentId);
+	}
+
+	/** The newest `limit` log entries, newest first, `unconfirmed` marks included. */
+	recentDecisions(agentId: string, limit: number): DecisionLogEntry[] {
+		return this.readLog(agentId).slice(-limit).reverse();
+	}
+
+	/** The newest log entry with that hash; for the hash the guard holds, the record of the last recorded step. */
+	findDecision(agentId: string, decisionHash: string): DecisionLogEntry | undefined {
+		return this.readLog(agentId)
+			.reverse()
+			.find((entry) => entry.decisionHash === decisionHash);
+	}
+
+	private readLog(agentId: string): DecisionLogEntry[] {
+		return this.readLines(agentId, DECISION_LOG_FILE);
+	}
+
+	private appendLine(agentId: string, file: string, value: unknown): void {
+		appendFileSync(join(this.agentDir(agentId), file), JSON.stringify(value) + '\n');
+	}
+
+	private readLines<T>(agentId: string, file: string): T[] {
+		const path = join(this.agentDir(agentId), file);
+		if (!existsSync(path)) return [];
+		return readFileSync(path, 'utf8')
+			.split('\n')
+			.filter((line) => line !== '')
+			.flatMap((line) => parseLogLine<T>(path, line));
 	}
 
 	private agentDir(agentId: string): string {
 		assertAgentId(agentId);
 		return join(this.fleetDir, agentId);
+	}
+}
+
+/** A line that is not JSON (e.g. cut short by a crash mid-append) is reported and passed over, not fatal to the log. */
+function parseLogLine<T>(path: string, line: string): T[] {
+	try {
+		return [JSON.parse(line)];
+	} catch {
+		console.warn(`${path}: skipping a line that is not JSON: ${line.slice(0, 80)}`);
+		return [];
 	}
 }

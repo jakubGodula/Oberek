@@ -1,13 +1,16 @@
-import { createHash } from 'crypto';
-import { GuardError, type AgentGuard } from '../agent-guard/guard';
-import type { DecisionRecord, Fleet } from './fleet';
+import type { AgentGuard } from '../agent-guard/guard';
+import { AwaitingApprovalError, proposalAwaiting } from './approval';
+import type { Fleet } from './fleet';
+import { assertInFleet, recordDecision } from './record-decision';
 import type { StepThrottle } from './step-throttle';
 
-/** What an agent process sends: its own kind, its decision and one line describing it. */
+/** What an agent process sends: its own kind, its decision, one line describing it and whether it must wait. */
 export interface DecisionSubmission {
 	kind: string;
 	decision: Record<string, unknown>;
 	summary: string;
+	/** The agent stops after this decision until the owner accepts or rejects it. */
+	requiresApproval?: true;
 }
 
 export interface FleetRuntime {
@@ -18,43 +21,31 @@ export interface FleetRuntime {
 }
 
 /**
- * Hashes the agent's decision and records the step with the guard, which refuses it while the agent is killed. The
- * log keeps the full record, so anyone can recompute the hash the guard holds.
+ * Records the agent's decision as its next step. Refused while its proposal waits for a verdict (before the throttle,
+ * so a waiting agent spends nothing) and, by the guard, while the agent is killed.
  */
 export async function submitDecision(
 	runtime: FleetRuntime,
 	agentId: string,
 	submission: DecisionSubmission
 ): Promise<{ counter: number }> {
-	if (!runtime.fleet.get(agentId)) throw new GuardError('AgentNotFound', `agent ${agentId} is not in the fleet`);
-	runtime.throttle.claim(agentId, runtime.now().getTime());
+	assertInFleet(runtime, agentId);
 	const account = await runtime.guard.readAgent(agentId);
-	const record: DecisionRecord = {
-		agent: agentId,
-		counter: account.counter + 1,
-		...submission,
-		observedAt: runtime.now().toISOString()
-	};
-	const decisionHash = createHash('sha256').update(JSON.stringify(record)).digest('hex');
-	let recorded;
-	try {
-		recorded = await runtime.guard.recordStep(agentId, record.counter, decisionHash);
-	} catch (error) {
-		// A refusal is a verdict: nothing was recorded. Any other failure (e.g. a confirmation timeout on the chain) may
-		// still end with the step recorded, and the log is the only way to recompute its hash.
-		if (!(error instanceof GuardError)) runtime.fleet.appendDecision(agentId, { record, decisionHash, unconfirmed: true });
-		throw error;
+	if (proposalAwaiting(runtime.fleet, agentId, account)) {
+		throw new AwaitingApprovalError(`agent ${agentId} is waiting for the owner's verdict on its proposal`);
 	}
-	runtime.fleet.appendDecision(agentId, { record, decisionHash });
-	return { counter: recorded.counter };
+	runtime.throttle.claim(agentId, runtime.now().getTime());
+	const { record } = await recordDecision(runtime, agentId, account, submission);
+	return { counter: record.counter };
 }
 
-/** Returns the submission with exactly its three fields, or null when the body does not have that shape. */
+/** Returns the submission with exactly its fields, or null when the body does not have that shape. */
 export function parseSubmission(body: unknown): DecisionSubmission | null {
 	if (!isPlainObject(body)) return null;
-	const { kind, decision, summary } = body;
+	const { kind, decision, summary, requiresApproval } = body;
 	if (typeof kind !== 'string' || kind === '' || typeof summary !== 'string' || !isPlainObject(decision)) return null;
-	return { kind, decision, summary };
+	if (requiresApproval === undefined) return { kind, decision, summary };
+	return requiresApproval === true ? { kind, decision, summary, requiresApproval } : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

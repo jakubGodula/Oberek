@@ -6,7 +6,7 @@ import type { GuardClient } from '../agent/guard-client';
 import type { AgentState } from '../agent/instructions';
 import { GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
 import type { SendResult } from '../agent/transaction';
-import { GuardError } from './guard';
+import { GuardError, type LandedTransaction } from './guard';
 import { OnchainGuard, type ChainCalls } from './onchain-guard';
 
 const AGENT_ID = 'tick-01';
@@ -58,7 +58,7 @@ function fakeChain(initial: Partial<AgentState> = {}) {
 	};
 }
 
-function guardOver(chain: ReturnType<typeof fakeChain>, serverOwner = signer(OWNER)) {
+function guardOver(chain: ReturnType<typeof fakeChain>, serverOwner = signer(OWNER), landed: LandedTransaction[] = []) {
 	return new OnchainGuard({
 		client: {} as GuardClient,
 		feePayer: FEE_PAYER,
@@ -67,7 +67,8 @@ function guardOver(chain: ReturnType<typeof fakeChain>, serverOwner = signer(OWN
 			if (agentId !== AGENT_ID) throw new GuardError('AgentNotFound', `no ${agentId}`);
 			return IDENTITY;
 		},
-		chain: chain.calls
+		chain: chain.calls,
+		onLanded: (transaction) => landed.push(transaction)
 	});
 }
 
@@ -107,6 +108,24 @@ describe('recordStep', () => {
 		expect(input).toMatchObject({ feePayer: FEE_PAYER, agent: AGENT, agentKey: AGENT_KEY, decisionHash: DECISION_HASH_BYTES });
 		const message = stepMessage(AGENT, 12n, DECISION_HASH_BYTES);
 		expect(ml_dsa44.verify(input.signature as Uint8Array, message, KEYS.publicKey, { context: GUARD_CONTEXT })).toBe(true);
+	});
+
+	test('reports the landed step with its signature', async () => {
+		const landed: LandedTransaction[] = [];
+		await guardOver(fakeChain(), signer(OWNER), landed).recordStep(AGENT_ID, 12, DECISION_HASH);
+		expect(landed).toEqual([
+			{ agentId: AGENT_ID, event: 'StepRecorded', counter: 12, signature: 'tx-signature', decisionHash: DECISION_HASH }
+		]);
+	});
+
+	test('reports nothing when the step is refused or fails on chain', async () => {
+		const landed: LandedTransaction[] = [];
+		const killed = fakeChain({ status: 'Killed' });
+		await guardErrorCode(guardOver(killed, signer(OWNER), landed).recordStep(AGENT_ID, 12, DECISION_HASH));
+		const failing = fakeChain();
+		failing.failOnChainWith(PROGRAM_ERROR(6006));
+		await guardOver(failing, signer(OWNER), landed).recordStep(AGENT_ID, 12, DECISION_HASH).catch(() => {});
+		expect(landed).toEqual([]);
 	});
 
 	test('refuses without sending while the agent is killed', async () => {
@@ -149,6 +168,12 @@ describe('kill', () => {
 		expect((chain.sent[0].input.owner as TransactionSigner).address).toBe(OWNER);
 	});
 
+	test('reports the landed kill with the unchanged counter', async () => {
+		const landed: LandedTransaction[] = [];
+		await guardOver(fakeChain(), signer(OWNER), landed).kill(AGENT_ID, OWNER);
+		expect(landed).toEqual([{ agentId: AGENT_ID, event: 'AgentKilled', counter: 11, signature: 'tx-signature' }]);
+	});
+
 	test('refuses without sending when the agent is already killed', async () => {
 		const chain = fakeChain({ status: 'Killed' });
 		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID, OWNER))).toBe('AgentNotActive');
@@ -185,6 +210,12 @@ describe('resume', () => {
 		expect((input.owner as TransactionSigner).address).toBe(OWNER);
 		const message = resumeMessage(AGENT, 12n);
 		expect(ml_dsa44.verify(input.signature as Uint8Array, message, KEYS.publicKey, { context: GUARD_CONTEXT })).toBe(true);
+	});
+
+	test('reports the landed resume with the counter it used up', async () => {
+		const landed: LandedTransaction[] = [];
+		await guardOver(fakeChain({ status: 'Killed' }), signer(OWNER), landed).resume(AGENT_ID, OWNER);
+		expect(landed).toEqual([{ agentId: AGENT_ID, event: 'AgentResumed', counter: 12, signature: 'tx-signature' }]);
 	});
 
 	test('refuses without sending when the owner cannot pay for the resume', async () => {

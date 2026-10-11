@@ -1,6 +1,10 @@
 import * as env from '$app/env/private';
 import { createFleetRuntime, FleetNotConfiguredError } from './runtime';
+import { ShockStore } from './shock-store';
 import type { FleetRuntime } from './submit-decision';
+
+/** The server's one store of armed demo shocks. */
+export const shockStore = new ShockStore();
 
 let runtime: Promise<FleetRuntime> | undefined;
 let reportedNotConfigured = false;
