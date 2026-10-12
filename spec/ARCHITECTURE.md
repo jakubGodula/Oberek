@@ -178,6 +178,12 @@ Z tych samych endpointów korzysta bot Telegram właściciela (sekcja 5.2, decyz
      - Kotwiczenie wyłącznie 32-bajtowego korzenia stanu (**Quantum-Safe Merkle State Root**) na L1 Solany w PDA agenta.
      - Pełna agilność kryptograficzna (*Crypto Agility*) – możliwość rotacji parametrów PQC bez naruszania struktury bazowej konta Solana.
 
+### 4.4. Pakiet `pq-agent-guard` (`kit/`)
+Klient programu `onchain_agent_guard` i strażnik zbudowany na nim, jako samodzielny pakiet (workspace Bun): instrukcje i
+wiadomości podpisywane kluczami ML-DSA-44, transakcje V1, pliki kluczy, `OnchainGuard` oraz API jednego agenta
+`openGuardedAgent` / `step`. `kit/` nie importuje niczego z aplikacji; serwer (`fleet`), skrypty i testy importują
+`pq-agent-guard` jak każdą bibliotekę. Użycie: [kit/README.md](../kit/README.md).
+
 ---
 
 ## 5. Implementacje Kluczowych Komponentów

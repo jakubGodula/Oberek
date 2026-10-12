@@ -229,9 +229,14 @@ about 3 s per transaction: ~20 minutes for 400. Steps run with `bun scripts/agen
 fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they show as missing. How it works:
 [spec/history-audit.md](spec/history-audit.md).
 
+## Guard your own agent
+
+[kit/README.md](kit/README.md): the package `pq-agent-guard` puts any agent behind the program with
+`openGuardedAgent` and `agent.step(decision, act)`, without running Oberek. The app in this repo is built on it.
+
 ## Test
 
 ```sh
-bun test                         # server, fleet, agents, scripts and the Telegram bot, no network
+bun test                         # server, fleet, agents, scripts, the Telegram bot and the kit, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
