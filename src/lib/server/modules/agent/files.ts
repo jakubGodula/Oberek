@@ -1,5 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
-import { dirname } from 'path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { address, createKeyPairSignerFromBytes, type Address, type KeyPairSigner } from '@solana/kit';
 
 /** Everything the server needs to run one registered agent, including its ML-DSA-44 secret key. */
@@ -112,5 +112,5 @@ export function loadKeypairSigner(path: string): Promise<KeyPairSigner> {
 /** Appends one JSON line; bigints (e.g. RPC error codes) are written as numbers. */
 export function appendJsonLine(path: string, value: unknown): void {
 	mkdirSync(dirname(path), { recursive: true });
-	appendFileSync(path, JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? Number(item) : item)) + '\n');
+	appendFileSync(path, `${JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? Number(item) : item))}\n`);
 }

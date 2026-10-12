@@ -3,9 +3,9 @@
 // already done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
-import { spawnSync } from 'child_process';
-import { copyFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadAgentFile, loadKeypairSigner } from '../src/lib/server/modules/agent/files';
@@ -42,7 +42,7 @@ await ensureFunded(rpc, payer, lamportsNeeded(progress, existsSync(config.ownerM
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
 ensureOwnerKey();
-AGENTS.forEach((agent, index) => setUpAgent(agent, progress[index]));
+for (const [index, agent] of AGENTS.entries()) setUpAgent(agent, progress[index]);
 log('ready: bun scripts/demo.ts');
 log(telegramHint());
 
@@ -109,7 +109,10 @@ async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 
 /** Once per owner wallet, before any agent: every agent needs the owner's ML-DSA-44 activation. */
 function ensureOwnerKey(): void {
-	if (existsSync(config.ownerMldsaPath)) return log(`owner key ${config.ownerMldsaPath} exists`);
+	if (existsSync(config.ownerMldsaPath)) {
+		log(`owner key ${config.ownerMldsaPath} exists`);
+		return;
+	}
 	runBun(['scripts/agent.ts', 'register-owner']);
 }
 

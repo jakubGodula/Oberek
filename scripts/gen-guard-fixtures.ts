@@ -1,8 +1,8 @@
 // Writes a fresh noble ML-DSA-44 agent key, owner key and signatures for the Mollusk tests in
 // onchain/programs/onchain_agent_guard/tests/guard.rs. Called by onchain/run-tests.sh.
 // Usage: bun scripts/gen-guard-fixtures.ts <program id> <out dir>
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getAddressDecoder } from '@solana/kit';
 import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';

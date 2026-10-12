@@ -1,6 +1,6 @@
 // Owner and agent CLI for onchain_agent_guard. Run from the repo root; Bun reads .env (see .env.example).
 // Usage: bun scripts/agent.ts <register-owner|register|activate|run|kill|resume|status>
-import { existsSync } from 'fs';
+import { existsSync } from 'node:fs';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { generateKeyPairSigner, getBase16Decoder, type Address, type TransactionSigner } from '@solana/kit';
 import { runLoop } from '../src/lib/server/modules/agent/agent-loop';

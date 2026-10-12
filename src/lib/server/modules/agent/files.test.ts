@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getAddressDecoder } from '@solana/kit';
 import {
 	appendJsonLine,
