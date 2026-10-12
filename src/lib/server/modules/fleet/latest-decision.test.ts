@@ -4,7 +4,8 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
 import { Fleet, type DecisionLogEntry } from './fleet';
-import { DecisionNotInLogError, latestDecision } from './latest-decision';
+import { TEST_SEAL } from './testing/test-seal';
+import { batchSizeOf, DecisionNotInLogError, latestDecision } from './latest-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
 
@@ -18,11 +19,11 @@ let fleet: Fleet;
 
 /** Only readAgent matters here: it returns an account whose lastDecision the test sets. */
 function guardHolding(lastDecision: string): AgentGuard {
-	const account: GuardAccount = { owner: 'owner', status: 'Active', counter: 2, lastDecision };
+	const account: GuardAccount = { owner: 'owner', agentKey: 'agent-key', status: 'Active', counter: 2, lastDecision };
 	const unused = async (): Promise<GuardAccount> => {
 		throw new Error('not used');
 	};
-	return { readAgent: async () => account, recordStep: unused, kill: unused, resume: unused };
+	return { readAgent: async () => account, recordStep: unused, recordBatch: unused, kill: unused, resume: unused };
 }
 
 function runtimeWith(guard: AgentGuard): FleetRuntime {
@@ -44,7 +45,7 @@ function entry(counter: number, decisionHash: string, unconfirmed?: true): Decis
 beforeEach(() => {
 	rootDir = mkdtempSync(join(tmpdir(), 'latest-'));
 	fleet = new Fleet(join(rootDir, 'fleet'));
-	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() });
+	fleet.register({ id: AGENT, name: 'Sentinel', riskLevel: 'MEDIUM', registeredAt: NOW.getTime() }, TEST_SEAL);
 });
 
 afterEach(() => rmSync(rootDir, { recursive: true, force: true }));
@@ -57,6 +58,19 @@ describe('latestDecision', () => {
 	test('returns the log entry whose hash the chain holds', async () => {
 		fleet.appendDecision(AGENT, entry(1, HASH_A));
 		fleet.appendDecision(AGENT, entry(2, HASH_B));
+		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
+	});
+
+	test("after a batch, finds the batch's last decision by the root the chain holds", async () => {
+		const root = 'cc'.repeat(32);
+		fleet.appendDecision(AGENT, { ...entry(3, HASH_A), batch: { root, size: 2, proof: [] } });
+		fleet.appendDecision(AGENT, { ...entry(3, HASH_B), batch: { root, size: 2, proof: [] } });
+		expect((await latestDecision(runtimeWith(guardHolding(root)), AGENT))?.decisionHash).toBe(HASH_B);
+	});
+
+	test("a batch entry claiming a step's hash as its root does not pass for that step", async () => {
+		fleet.appendDecision(AGENT, entry(1, HASH_A));
+		fleet.appendDecision(AGENT, { ...entry(2, HASH_B), batch: { root: HASH_A, size: 1, proof: [] } });
 		expect(await latestDecision(runtimeWith(guardHolding(HASH_A)), AGENT)).toEqual(entry(1, HASH_A));
 	});
 
@@ -95,5 +109,16 @@ describe('latestDecision', () => {
 			(caught: unknown) => caught
 		);
 		expect((error as GuardError).code).toBe('AgentNotFound');
+	});
+});
+
+describe('batchSizeOf', () => {
+	test('is the size of the batch whose root the chain holds, null for a single step or no decision', () => {
+		const root = 'cc'.repeat(32);
+		fleet.appendDecision(AGENT, entry(1, HASH_A));
+		fleet.appendDecision(AGENT, { ...entry(2, HASH_B), batch: { root, size: 1, proof: [] } });
+		expect(batchSizeOf(fleet, AGENT, root)).toBe(1);
+		expect(batchSizeOf(fleet, AGENT, HASH_A)).toBeNull();
+		expect(batchSizeOf(fleet, AGENT, NO_DECISION)).toBeNull();
 	});
 });

@@ -32,10 +32,12 @@ export function anchorDiscriminator(namespace: 'global' | 'account' | 'event', n
 export const DISCRIMINATORS = {
 	registerAgent: anchorDiscriminator('global', 'register_agent'),
 	recordStep: anchorDiscriminator('global', 'record_step'),
+	recordBatch: anchorDiscriminator('global', 'record_batch'),
 	kill: anchorDiscriminator('global', 'kill'),
 	resume: anchorDiscriminator('global', 'resume'),
 	agent: anchorDiscriminator('account', 'Agent'),
 	stepRecorded: anchorDiscriminator('event', 'StepRecorded'),
+	batchRecorded: anchorDiscriminator('event', 'BatchRecorded'),
 	agentKilled: anchorDiscriminator('event', 'AgentKilled'),
 	agentResumed: anchorDiscriminator('event', 'AgentResumed')
 };
@@ -113,6 +115,24 @@ export function recordStepInstruction(input: {
 			{ address: input.agentKey, role: AccountRole.READONLY }
 		],
 		data: concatBytes(DISCRIMINATORS.recordStep, input.decisionHash, borshBytes(input.signature))
+	};
+}
+
+export function recordBatchInstruction(input: {
+	programAddress: Address;
+	agent: Address;
+	agentKey: Address;
+	root: Uint8Array;
+	size: number;
+	signature: Uint8Array;
+}) {
+	return {
+		programAddress: input.programAddress,
+		accounts: [
+			{ address: input.agent, role: AccountRole.WRITABLE },
+			{ address: input.agentKey, role: AccountRole.READONLY }
+		],
+		data: concatBytes(DISCRIMINATORS.recordBatch, input.root, getU32Encoder().encode(input.size), borshBytes(input.signature))
 	};
 }
 

@@ -10,7 +10,7 @@ kill-switch the server answers 409 and Tick keeps trying on the next tick.
 Put the agent in the fleet once (from the repo root), then start it next to the server (`bun run dev`):
 
 ```sh
-bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One — on-chain heartbeat"
+bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Oberek Tick One — on-chain heartbeat"
 bun agents/tick
 ```
 
@@ -30,3 +30,10 @@ recorded, 409 killed by the owner, 404 not in the fleet, 400 malformed, 429 too 
 ```sh
 bun test agents/shared
 ```
+
+With the server's `BATCHED_AGENT_IDS` naming this agent, the server answers `202` and records TICKs in batches, one
+transaction per batch under a Merkle root; the log line then says `queued for the next batch`.
+
+The page's speed wheel on Tick's card sets its pause between ticks from the next tick on (0.5–30 s when batched, 10 or
+30 s otherwise, as the server allows one step per 10 s); until it is moved, or when the server cannot be reached, Tick
+keeps `TICK_INTERVAL_MS`.

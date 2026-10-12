@@ -1,5 +1,6 @@
-// First-time devnet setup: .env, the payer wallet, its SOL, and the two agents (registered on chain, imported into the
-// fleet). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the two agents (registered on
+// chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync } from 'fs';
@@ -7,15 +8,17 @@ import { join } from 'path';
 import { createSolanaRpc, devnet, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
+import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
+import { runLogged } from './run-log';
 import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
 const ENV_FILE = '.env';
 const ENV_EXAMPLE = '.env.example';
 const AGENTS_DIR = '.devnet/agents';
 const AGENTS = [
-	{ id: 'sentinel-01', name: 'Aegis Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
-	{ id: 'tick-01', name: 'Tick One', risk: 'LOW' }
+	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
+	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' }
 ] as const;
 const FAUCET_URL = 'https://faucet.solana.com';
 const BALANCE_POLL_MS = 10_000;
@@ -24,6 +27,7 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 type SetupAgent = (typeof AGENTS)[number];
 type Rpc = ReturnType<typeof createSolanaRpc<ReturnType<typeof devnet>>>;
 
+await runLogged('setup');
 if (createdEnvFile()) restart();
 const config = loadConfig(process.env);
 ensurePayer(config.feePayerPath);
@@ -32,8 +36,22 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
 await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf)));
+// Idempotent; must come before any import or seal.
+runBun(['scripts/fleet.ts', 'owner-key']);
 for (const agent of AGENTS) setUpAgent(agent);
 log('ready: bun scripts/demo.ts');
+log(telegramHint());
+
+/** The owner bot is optional: its token comes from @BotFather, so setup can only point the way. */
+function telegramHint(): string {
+	if (!process.env.TELEGRAM_BOT_TOKEN) {
+		return `optional: the owner's Telegram bot needs TELEGRAM_BOT_TOKEN in ${ENV_FILE} (README: "The owner on Telegram")`;
+	}
+	if (!process.env.TELEGRAM_OWNER_CHAT_ID) {
+		return `Telegram: run bun bot/telegram, send /start to the bot, put the chat id in ${ENV_FILE} as TELEGRAM_OWNER_CHAT_ID`;
+	}
+	return 'Telegram: configured; bun scripts/demo.ts starts the bot too';
+}
 
 function createdEnvFile(): boolean {
 	if (existsSync(ENV_FILE)) {
@@ -51,7 +69,10 @@ function restart(): never {
 }
 
 function ensurePayer(path: string): void {
-	if (existsSync(path)) return log(`payer wallet ${path} exists`);
+	if (existsSync(path)) {
+		log(`payer wallet ${path} exists`);
+		return;
+	}
 	runBun(['scripts/new-keypair.ts', path]);
 }
 
@@ -84,17 +105,22 @@ async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 
 function setUpAgent(agent: SetupAgent): void {
 	const steps = stepsFor(progressOf(agent));
-	if (steps.length === 0) return log(`${agent.id} is in the fleet`);
+	if (steps.length === 0) {
+		log(`${agent.id} is in the fleet`);
+		return;
+	}
 	for (const step of steps) runStep(agent, step);
 }
 
 function runStep(agent: SetupAgent, step: AgentStep): void {
 	if (step === 'register') runBun(['scripts/agent.ts', 'register'], { AGENT_FILE: agentFile(agent) });
+	else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
 	else runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
 }
 
 function progressOf(agent: SetupAgent): AgentProgress {
-	return { registered: existsSync(agentFile(agent)), imported: existsSync(join(FLEET_DIR, agent.id)) };
+	const imported = existsSync(join(FLEET_DIR, agent.id));
+	return { registered: existsSync(agentFile(agent)), imported, sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id) };
 }
 
 function agentFile(agent: SetupAgent): string {

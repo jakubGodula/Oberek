@@ -40,4 +40,21 @@ describe('withTransactions', () => {
 	test('adds every kill and resume while the agent has no decision yet', () => {
 		expect(withTransactions([], [landed('AgentKilled', 0)]).operatorActions).toHaveLength(1);
 	});
+
+	test('keeps a batch transaction out of the operator actions', () => {
+		const batchTx: LoggedTransaction = { agentId: SENTINEL, event: 'BatchRecorded', counter: 7, signature: 'sig-batch', root: 'cd'.repeat(32), size: 2, landedAt: NOW };
+		expect(withTransactions([], [batchTx]).operatorActions).toEqual([]);
+	});
+
+	test("gives a batch's decisions the batch transaction's signature", () => {
+		const root = 'cd'.repeat(32);
+		const inBatch = (index: number): DecisionLogEntry => ({
+			...decision(7),
+			decisionHash: `${index}`.padStart(64, 'e'),
+			batch: { root, size: 2, proof: [] }
+		});
+		const batchTx: LoggedTransaction = { agentId: SENTINEL, event: 'BatchRecorded', counter: 7, signature: 'sig-batch', root, size: 2, landedAt: NOW };
+		const { entries } = withTransactions([inBatch(1), inBatch(0)], [batchTx]);
+		expect(entries.map((entry) => entry.signature)).toEqual(['sig-batch', 'sig-batch']);
+	});
 });

@@ -15,7 +15,7 @@ it next to the server (`bun run dev`):
 
 ```sh
 AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register
-bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM
+bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Oberek Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM
 bun agents/sentinel
 ```
 

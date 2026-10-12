@@ -11,6 +11,7 @@ export interface Submission {
 
 export type SubmitOutcome =
 	| { kind: 'recorded'; counter: number }
+	| { kind: 'queued' }
 	| { kind: 'paused' }
 	| { kind: 'awaiting' }
 	| { kind: 'failed'; reason: string };
@@ -36,8 +37,12 @@ export interface RuntimeClient {
 	latest(): Promise<LatestOutcome>;
 	/** Claims the shock armed for this agent's next cycle, which disarms it. */
 	claimShock(): Promise<ShockOutcome>;
+	/** The pause between steps the owner picked on the page's speed wheel; null when none is picked or unreadable. */
+	pace(): Promise<number | null>;
 }
 
+/** The server answers 202 when the agent's decisions go on-chain in batches: this one waits for the next. */
+const HTTP_ACCEPTED = 202;
 /** The server answers 409 when the owner killed the agent or its proposal waits for the owner's verdict. */
 const HTTP_CONFLICT = 409;
 const AWAITING_APPROVAL = 'AwaitingApproval';
@@ -65,6 +70,7 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				body: JSON.stringify(submission)
 			});
 			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
+			if (answer.response.status === HTTP_ACCEPTED) return { kind: 'queued' };
 			if (answer.response.ok) {
 				const { counter } = answer.body;
 				if (typeof counter !== 'number') return { kind: 'failed', reason: 'unexpected answer: no counter in it' };
@@ -86,6 +92,13 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 				return { kind: 'failed', reason: 'unexpected answer: no latest decision in it' };
 			}
 			return { kind: 'found', record: answer.body.latest.record };
+		},
+
+		async pace() {
+			const answer = await request(`${agentUrl}/pace`);
+			if (answer.kind === 'unreachable' || !answer.response.ok) return null;
+			const { intervalMs } = answer.body;
+			return typeof intervalMs === 'number' && intervalMs > 0 ? intervalMs : null;
 		},
 
 		async claimShock() {
@@ -113,6 +126,8 @@ export function describeSubmitOutcome(outcome: SubmitOutcome): string {
 	switch (outcome.kind) {
 		case 'recorded':
 			return `recorded #${outcome.counter}`;
+		case 'queued':
+			return 'queued for the next batch';
 		case 'paused':
 			return 'refused: the owner killed the agent';
 		case 'awaiting':

@@ -33,6 +33,12 @@ describe('submit', () => {
 		expect(JSON.parse(requests[0].init?.body as string)).toEqual(SUBMISSION);
 	});
 
+	test('reads 202 as queued for the next batch', async () => {
+		const { fetchFn } = answering(202, { queued: true });
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).submit(SUBMISSION)).toEqual({ kind: 'queued' });
+		expect(describeSubmitOutcome({ kind: 'queued' })).toBe('queued for the next batch');
+	});
+
 	test('reports the counter of a recorded decision', async () => {
 		const { fetchFn } = answering(200, { counter: 24 });
 		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).submit(SUBMISSION)).toEqual({
@@ -79,6 +85,23 @@ describe('submit', () => {
 		const { fetchFn, requests } = answering(200, { counter: 2 });
 		await createRuntimeClient('http://server', 'sentinel-01', fetchFn).submit({ ...SUBMISSION, requiresApproval: true });
 		expect(JSON.parse(requests[0].init?.body as string).requiresApproval).toBe(true);
+	});
+});
+
+describe('pace', () => {
+	test('reads the pause the owner picked on the speed wheel', async () => {
+		const { fetchFn, requests } = answering(200, { intervalMs: 500 });
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).pace()).toBe(500);
+		expect(requests[0].url).toBe('http://server/api/agents/tick-01/pace');
+	});
+
+	test.each([
+		['none is picked', answering(200, { intervalMs: null }).fetchFn],
+		['the answer has no number', answering(200, { intervalMs: 'fast' }).fetchFn],
+		['the server fails', answering(500, { message: 'boom' }).fetchFn],
+		['the server is unreachable', unreachable]
+	])('is null when %s, so the agent keeps its own pace', async (_, fetchFn) => {
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).pace()).toBeNull();
 	});
 });
 

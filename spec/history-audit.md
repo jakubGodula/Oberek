@@ -11,13 +11,38 @@ Run it with `bun scripts/audit.ts <agent id>`. It is read-only: it sends no tran
 Each decision of a fleet agent is written to two places:
 
 - **The log**, `.devnet/fleet/<id>/decisions.jsonl`: the full record (what the agent observed, what it decided,
-  when) and `decisionHash = sha256(JSON.stringify(record))`, keys in the order the log keeps them.
+  when) and `decisionHash = sha256(JSON.stringify(record))`, keys in the order the log keeps them. Each line is
+  sealed (see below); the hash is of the plaintext record.
 - **The chain**: a `record_step` transaction to `onchain_agent_guard` with the counter, the hash and the agent's
   ML-DSA-44 signature. The program verifies the signature and emits a `StepRecorded` event.
 
 The agent account (PDA) keeps only the current `counter`, `status` and the latest hash in `last_decision`. Earlier
 hashes are not in the account: they live only in the account's transaction history, as events in the transaction
 logs.
+
+### The sealed log
+
+Each log line is encrypted (decision 006, `src/lib/server/modules/fleet/sealed-log.ts`):
+
+```
+{ "counter": 548, "nonce": b64(12 B), "ciphertext": b64, "tag": b64(16 B) }
+```
+
+The plaintext is the whole log entry (`record`, `decisionHash`, `unconfirmed`), sealed with AES-256-GCM under the
+agent's data key, with the counter as additional authenticated data. Only the counter is in clear, so a line moved to
+another counter does not open.
+
+The data key comes from the agent's `seal.json`: an ML-KEM-768 capsule to the owner's public key, and the key
+HKDF-SHA256 derives from its shared secret. The server reads the stored `dataKey`. The audit never does: it
+decapsulates the capsule with the owner's secret key (`OWNER_MLKEM_FILE`, by default `.devnet/owner-mlkem.json`) and
+derives the key itself. So the audit needs that file as soon as the agent has one sealed line.
+
+A line that does not open (wrong owner key, a line changed on disk) is skipped with a warning
+`skipping a decision log line (counter N) that does not open with the key`. Its step then shows up as
+`on-chain, but not in the log`. When every sealed line fails this way, suspect the owner key before tampering.
+
+Lines written before the agent was sealed are plaintext entries and are read as they are. The audit prints how many
+of each kind the file holds.
 
 ### Why a kill does not move the counter
 
@@ -88,7 +113,21 @@ history OK
 
 383 steps and 5 resumes cover counters 1..388; each kill was followed by a resume; every step has its log record.
 
-`tick-01` reports 10 problems, `step 1–10: on-chain, but not in the log`. These are expected: its first 10 steps
+`bun scripts/audit.ts tick-01` on 2026-10-11, after its log was sealed and the demo ran on the sealed log:
+
+```
+agent tick-01 (BF8MdAhm…), Active, counter 574
+on-chain: 560 steps, 14 resumes, 14 kills; log: 550 entries
+log file: 54 lines sealed (opened with the owner's ML-KEM key), 524 plaintext from before sealing
+28 events and log entries newer than the account read, not audited
+  ✗ step 1: on-chain, but not in the log
+  …
+  ✗ step 10: on-chain, but not in the log
+10 problems
+```
+
+Every sealed line opened with the owner's key, and every step after the first 10 has its record. The 10 problems,
+`step 1–10: on-chain, but not in the log`, are expected: its first 10 steps
 were run with `bun scripts/agent.ts run` before the import into the fleet, so their records are in the CLI log
 `.devnet/decisions.jsonl`, which the audit does not read.
 

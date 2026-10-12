@@ -1,9 +1,9 @@
 import { getBase16Decoder, getBase16Encoder, type Address, type TransactionSigner } from '@solana/kit';
 import type { AgentFile } from '../agent/files';
-import { fetchAgent, fetchBalance, killAgent, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
+import { fetchAgent, fetchBalance, killAgent, recordBatch, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
 import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from '../agent/guard-errors';
 import type { AgentState } from '../agent/instructions';
-import { signGuardMessage, stepMessage } from '../agent/message';
+import { batchMessage, signGuardMessage, stepMessage } from '../agent/message';
 import { signResume } from '../agent/resume';
 import { TRANSACTION_FEE_LAMPORTS, type SendResult } from '../agent/transaction';
 import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode, type LandedTransaction } from './guard';
@@ -13,11 +13,12 @@ export interface ChainCalls {
 	fetchAgent(client: GuardClient, agent: Address): Promise<AgentState>;
 	fetchBalance: typeof fetchBalance;
 	recordStep: typeof recordStep;
+	recordBatch: typeof recordBatch;
 	killAgent: typeof killAgent;
 	resumeAgent: typeof resumeAgent;
 }
 
-const PROGRAM_CHAIN_CALLS: ChainCalls = { fetchAgent, fetchBalance, recordStep, killAgent, resumeAgent };
+const PROGRAM_CHAIN_CALLS: ChainCalls = { fetchAgent, fetchBalance, recordStep, recordBatch, killAgent, resumeAgent };
 
 export interface OnchainGuardDeps {
 	client: GuardClient;
@@ -58,12 +59,7 @@ export class OnchainGuard implements AgentGuard {
 
 	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
 		const identity = this.deps.identityOf(agentId);
-		const state = await this.readState(agentId);
-		if (state.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
-		if (BigInt(counter) !== state.counter + 1n) {
-			throw new GuardError('CounterMismatch', `agent ${agentId} is at step ${state.counter}, not ${counter - 1}`);
-		}
-		await this.assertCanPay(this.deps.feePayer, `step ${counter} of agent ${agentId}`);
+		const state = await this.readStateForStep(agentId, counter);
 		const hash = new Uint8Array(getBase16Encoder().encode(decisionHash));
 		const signature = signGuardMessage(stepMessage(identity.agent, BigInt(counter), hash), identity.mldsaSecretKey);
 		const step = {
@@ -77,6 +73,18 @@ export class OnchainGuard implements AgentGuard {
 		assertLanded(result, 'record_step');
 		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature: result.signature, decisionHash });
 		return { ...toGuardAccount(state), counter, lastDecision: decisionHash };
+	}
+
+	async recordBatch(agentId: string, counter: number, root: string, size: number): Promise<GuardAccount> {
+		const identity = this.deps.identityOf(agentId);
+		const state = await this.readStateForStep(agentId, counter);
+		const rootBytes = new Uint8Array(getBase16Encoder().encode(root));
+		const signature = signGuardMessage(batchMessage(identity.agent, BigInt(counter), rootBytes, size), identity.mldsaSecretKey);
+		const batch = { feePayer: this.deps.feePayer, agent: identity.agent, agentKey: identity.agentKey, root: rootBytes, size, signature };
+		const result = await this.chain.recordBatch(this.deps.client, batch);
+		assertLanded(result, 'record_batch');
+		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature: result.signature, root, size });
+		return { ...toGuardAccount(state), counter, lastDecision: root };
 	}
 
 	async kill(agentId: string): Promise<GuardAccount> {
@@ -102,6 +110,17 @@ export class OnchainGuard implements AgentGuard {
 		const counter = Number(state.counter + 1n);
 		this.deps.onLanded?.({ agentId, event: 'AgentResumed', counter, signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Active', counter };
+	}
+
+	/** The agent's state when it may take step `counter`: active, `counter` next, and the fee payer funded. */
+	private async readStateForStep(agentId: string, counter: number): Promise<AgentState> {
+		const state = await this.readState(agentId);
+		if (state.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
+		if (BigInt(counter) !== state.counter + 1n) {
+			throw new GuardError('CounterMismatch', `agent ${agentId} is at step ${state.counter}, not ${counter - 1}`);
+		}
+		await this.assertCanPay(this.deps.feePayer, `step ${counter} of agent ${agentId}`);
+		return state;
 	}
 
 	private async assertCanPay(payer: TransactionSigner, transaction: string): Promise<void> {
@@ -130,6 +149,7 @@ export class OnchainGuard implements AgentGuard {
 function toGuardAccount(state: AgentState): GuardAccount {
 	return {
 		owner: state.owner,
+		agentKey: state.agentKey,
 		status: state.status,
 		counter: Number(state.counter),
 		lastDecision: getBase16Decoder().decode(state.lastDecision)

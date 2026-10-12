@@ -6,7 +6,7 @@ import { join } from 'path';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getAddressDecoder } from '@solana/kit';
 import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
-import { resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { batchMessage, resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
 
 // Must match OWNER, AGENT_KEY and decision_hash() in guard.rs.
 const OWNER = getAddressDecoder().decode(new Uint8Array(32).fill(2));
@@ -14,6 +14,10 @@ const AGENT_KEY = getAddressDecoder().decode(new Uint8Array(32).fill(3));
 const STEP_COUNTERS = [1n, 2n, 3n];
 const RESUME_COUNTER = 2n;
 const decisionHash = (counter: bigint) => new Uint8Array(32).fill(Number(counter));
+// Must match BATCH_ROOT and BATCH_SIZE in guard.rs.
+const BATCH_COUNTER = 1n;
+const BATCH_ROOT = new Uint8Array(32).fill(0xb7);
+const BATCH_SIZE = 5;
 
 const [programId, outDir] = process.argv.slice(2);
 if (!programId || !outDir) {
@@ -31,4 +35,5 @@ for (const counter of STEP_COUNTERS) {
 	write(`step-${counter}.sig`, signGuardMessage(stepMessage(agent, counter, decisionHash(counter)), keys.secretKey));
 }
 write(`resume-${RESUME_COUNTER}.sig`, signGuardMessage(resumeMessage(agent, RESUME_COUNTER), keys.secretKey));
+write(`batch-${BATCH_COUNTER}.sig`, signGuardMessage(batchMessage(agent, BATCH_COUNTER, BATCH_ROOT, BATCH_SIZE), keys.secretKey));
 console.log(`wrote guard fixtures for agent ${agent} to ${outDir}`);

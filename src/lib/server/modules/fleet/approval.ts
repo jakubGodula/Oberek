@@ -40,7 +40,8 @@ export class NoPendingProposalError extends Error {}
 export async function recordVerdict(
 	runtime: FleetRuntime,
 	agentId: string,
-	verdict: Verdict
+	verdict: Verdict,
+	proposalCounter?: number
 ): Promise<DecisionLogEntry> {
 	assertInFleet(runtime, agentId);
 	if (verdictsInFlight.has(agentId)) {
@@ -48,16 +49,27 @@ export async function recordVerdict(
 	}
 	verdictsInFlight.add(agentId);
 	try {
-		return await recordVerdictOnChain(runtime, agentId, verdict);
+		return await recordVerdictOnChain(runtime, agentId, verdict, proposalCounter);
 	} finally {
 		verdictsInFlight.delete(agentId);
 	}
 }
 
-async function recordVerdictOnChain(runtime: FleetRuntime, agentId: string, verdict: Verdict): Promise<DecisionLogEntry> {
+/** A verdict names the proposal the owner saw; without a name it applies to whatever waits. */
+async function recordVerdictOnChain(
+	runtime: FleetRuntime,
+	agentId: string,
+	verdict: Verdict,
+	proposalCounter: number | undefined
+): Promise<DecisionLogEntry> {
 	const account = await runtime.guard.readAgent(agentId);
 	const proposal = proposalAwaiting(runtime.fleet, agentId, account);
 	if (!proposal) throw new NoPendingProposalError(`agent ${agentId} has no proposal waiting for a verdict`);
+	if (proposalCounter !== undefined && proposal.record.counter !== proposalCounter) {
+		throw new NoPendingProposalError(
+			`agent ${agentId}: proposal #${proposalCounter} is no longer waiting (now #${proposal.record.counter})`
+		);
+	}
 	const { counter, kind, decision, summary } = proposal.record;
 	return recordDecision(runtime, agentId, account, {
 		kind: APPROVAL_KIND,
@@ -70,7 +82,26 @@ async function recordVerdictOnChain(runtime: FleetRuntime, agentId: string, verd
 	});
 }
 
+export interface VerdictRequest {
+	verdict: Verdict;
+	/** The step counter of the proposal the owner decided on. */
+	counter?: number;
+}
+
+const fieldOf = (body: unknown, field: string): unknown =>
+	typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[field] : undefined;
+const isProposalCounter = (value: unknown): value is number => Number.isInteger(value) && (value as number) > 0;
+
 export function parseVerdict(body: unknown): Verdict | null {
-	const verdict = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).verdict : undefined;
+	const verdict = fieldOf(body, 'verdict');
 	return verdict === 'accept' || verdict === 'reject' ? verdict : null;
+}
+
+/** `{ verdict, counter? }`: the counter, when given, must be a positive integer. */
+export function parseVerdictRequest(body: unknown): VerdictRequest | null {
+	const verdict = parseVerdict(body);
+	const counter = fieldOf(body, 'counter');
+	if (!verdict) return null;
+	if (counter === undefined) return { verdict };
+	return isProposalCounter(counter) ? { verdict, counter } : null;
 }

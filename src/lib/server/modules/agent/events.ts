@@ -3,6 +3,7 @@ import {
 	getAddressDecoder,
 	getBytesDecoder,
 	getStructDecoder,
+	getU32Decoder,
 	getU64Decoder,
 	type Address
 } from '@solana/kit';
@@ -14,6 +15,7 @@ import { DECISION_HASH_LENGTH } from './message';
 
 export type GuardEvent =
 	| { name: 'StepRecorded'; agent: Address; counter: bigint; decisionHash: Uint8Array }
+	| { name: 'BatchRecorded'; agent: Address; counter: bigint; root: Uint8Array; size: number }
 	| { name: 'AgentKilled'; agent: Address; counter: bigint }
 	| { name: 'AgentResumed'; agent: Address; counter: bigint };
 
@@ -30,6 +32,12 @@ const stepRecordedDecoder = getStructDecoder([
 	['agent', getAddressDecoder()],
 	['counter', getU64Decoder()],
 	['decisionHash', fixDecoderSize(getBytesDecoder(), DECISION_HASH_LENGTH)]
+]);
+const batchRecordedDecoder = getStructDecoder([
+	['agent', getAddressDecoder()],
+	['counter', getU64Decoder()],
+	['root', fixDecoderSize(getBytesDecoder(), DECISION_HASH_LENGTH)],
+	['size', getU32Decoder()]
 ]);
 
 /**
@@ -57,6 +65,10 @@ function decodeEvent(data: Uint8Array): GuardEvent | undefined {
 	if (equalBytes(discriminator, DISCRIMINATORS.stepRecorded)) {
 		const event = stepRecordedDecoder.decode(data, DISCRIMINATOR_LENGTH);
 		return { name: 'StepRecorded', ...event, decisionHash: new Uint8Array(event.decisionHash) };
+	}
+	if (equalBytes(discriminator, DISCRIMINATORS.batchRecorded)) {
+		const event = batchRecordedDecoder.decode(data, DISCRIMINATOR_LENGTH);
+		return { name: 'BatchRecorded', ...event, root: new Uint8Array(event.root) };
 	}
 	if (equalBytes(discriminator, DISCRIMINATORS.agentKilled)) {
 		return { name: 'AgentKilled', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };

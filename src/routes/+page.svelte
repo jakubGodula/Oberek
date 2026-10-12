@@ -1,34 +1,34 @@
 <script lang="ts">
   import {
-    Shield, ShieldAlert, ShieldCheck, Cpu, Terminal, Key, Copy, Check,
+    Shield, ShieldAlert, ShieldCheck, Cpu, Send, Key, Copy, Check,
     ExternalLink, RefreshCw, Zap, AlertTriangle,
     Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
+  import { untrack } from 'svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
-  import { acceptsShock, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
+  import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
+  import { acceptsShock, decisionHashLabel, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
 
-  let agents = $state(data.agents);
-  let selectedAgent = $state(data.agents[0] || null);
+  // The page starts from the server's list and then refreshes it itself (refreshAll).
+  let agents = $state(untrack(() => data.agents));
+  type AgentCard = (typeof agents)[number];
+  let selectedAgent = $state(untrack(() => data.agents[0] || null));
   let copiedId = $state<string | null>(null);
   let isSimulating = $state(false);
   let simulationMessage = $state<string | null>(null);
   let simulationSuccess = $state<boolean | null>(null);
   let feedEntries = $state<FeedEntry[]>([]);
   let feedActions = $state<OperatorAction[]>([]);
-  const FEED_LIMIT = 10;
+  /** Room for a full batch (BATCH_MAX_DECISIONS, 16 by default) and the rows around it. */
+  const FEED_LIMIT = 40;
   /** The demo shock the card's button arms, in percent of the price. */
   const SHOCK_PCT = -3;
 
-  const blinkUrl = $derived(
-    selectedAgent ? `${data.origin}/api/actions/agent-action?agentId=${selectedAgent.id}` : ''
-  );
-
-  const dialToUrl = $derived(
-    blinkUrl ? `https://dial.to/?action=solana-action:${encodeURIComponent(blinkUrl)}&cluster=devnet` : ''
-  );
+  /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
+  const fleetAgents = $derived(agents.filter((a) => a.fleet));
 
   /** Mock agents are demo data, not real agents: the page says so on every card. */
   const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
@@ -50,9 +50,9 @@
 
   function timeAgo(ts: number): string {
     const diff = Math.floor((Date.now() - ts) / 1000);
-    if (diff < 60) return `${diff}s temu`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}min temu`;
-    return `${Math.floor(diff / 3600)}h temu`;
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}min ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
   }
 
   async function refreshAll() {
@@ -62,12 +62,12 @@
       if (agentsJson.success) {
         agents = agentsJson.agents;
         if (selectedAgent) {
-          const updated = agentsJson.agents.find((a: any) => a.id === selectedAgent.id);
+          const updated = agentsJson.agents.find((a: AgentCard) => a.id === selectedAgent.id);
           if (updated) selectedAgent = updated;
         }
       }
     } catch (e) {
-      console.error('Błąd odświeżania:', e);
+      console.error('Refresh failed:', e);
     }
   }
 
@@ -97,16 +97,18 @@
       feedEntries = feed.entries;
       feedActions = feed.operatorActions;
     } catch (e) {
-      console.error('Błąd odczytu decyzji:', e);
+      console.error('Decision feed failed:', e);
     }
   }
 
   async function sendVerdict(verdict: 'accept' | 'reject') {
     if (!selectedAgent) return;
     const done = verdict === 'accept'
-      ? 'Propozycja zatwierdzona: werdykt zapisany on-chain, agent wykona transakcję w następnym cyklu.'
-      : 'Propozycja odrzucona: werdykt zapisany on-chain, portfel bez zmian.';
-    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict }, done);
+      ? 'Proposal approved: the verdict is on-chain, the agent executes the trade in its next cycle.'
+      : 'Proposal rejected: the verdict is on-chain, the treasury is unchanged.';
+    // The counter names the proposal on screen: the server refuses the verdict if another one waits by now.
+    const counter = selectedAgent.fleet?.pendingProposal?.counter;
+    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict, counter }, done);
   }
 
   async function armShock() {
@@ -114,7 +116,27 @@
     await postAndReport(
       `/api/agents/${selectedAgent.id}/shock`,
       { pct: SHOCK_PCT },
-      'Szok ceny uzbrojony: agent użyje go w następnym cyklu.'
+      'Price shock armed: the agent applies it in its next cycle.'
+    );
+  }
+
+  const CONTROL_DONE = {
+    kill: 'Kill-Switch: the agent is stopped; the guard refuses its steps until you resume it.',
+    resume: "Resumed: the guard lets the agent's steps through again."
+  } as const;
+
+  async function control(action: 'kill' | 'resume') {
+    if (!selectedAgent) return;
+    const done = selectedAgent.fleet ? CONTROL_DONE[action] : 'Mock agent: only this card changed.';
+    await postAndReport(`/api/agents/${selectedAgent.id}/control`, { action }, done);
+  }
+
+  async function setPace(intervalMs: number) {
+    if (!selectedAgent) return;
+    await postAndReport(
+      `/api/agents/${selectedAgent.id}/pace`,
+      { intervalMs },
+      `Speed set: ${describePace(intervalMs)}, from the agent's next tick.`
     );
   }
 
@@ -130,11 +152,11 @@
       });
       const result = await res.json().catch(() => ({}));
       simulationSuccess = res.ok;
-      simulationMessage = res.ok ? successMessage : `Odmowa (${res.status}): ${result.message ?? res.statusText}`;
+      simulationMessage = res.ok ? successMessage : `Refused (${res.status}): ${result.message ?? res.statusText}`;
       await refreshAll();
-    } catch (err: any) {
+    } catch (err) {
       simulationSuccess = false;
-      simulationMessage = `Błąd: ${err.message}`;
+      simulationMessage = `Error: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
       isSimulating = false;
     }
@@ -146,44 +168,23 @@
     setTimeout(() => { copiedId = null; }, 2000);
   }
 
-  async function simulateAction(decision: 'approve' | 'pause') {
-    if (!selectedAgent) return;
-    isSimulating = true;
-    simulationMessage = null;
-    simulationSuccess = null;
-
-    try {
-      const demoAccount = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
-      const res = await fetch(`/api/actions/agent-action?agentId=${selectedAgent.id}&decision=${decision}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: demoAccount })
-      });
-      const result = await res.json();
-      simulationSuccess = res.ok;
-      simulationMessage = result.message || 'Transakcja przetworzona pomyślnie.';
-      await refreshAll();
-    } catch (err: any) {
-      simulationSuccess = false;
-      simulationMessage = `Błąd: ${err.message}`;
-    } finally {
-      isSimulating = false;
-    }
-  }
 </script>
+
+<svelte:head>
+  <meta property="og:image" content="{data.origin}/brand/social/oberek-og-1200x630.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+</svelte:head>
 
 <div class="min-h-screen bg-[#080b14] text-slate-100 flex flex-col font-sans selection:bg-purple-500/40 selection:text-white">
 
   <!-- Top Navigation -->
   <header class="border-b border-white/[0.06] bg-[#0c101e]/80 backdrop-blur-xl sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
     <div class="flex items-center gap-3.5">
-      <div class="relative p-2.5 bg-gradient-to-tr from-violet-600 via-purple-500 to-emerald-500 rounded-xl shadow-lg shadow-purple-500/25">
-        <Shield class="w-5 h-5 text-white" />
-        <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0c101e] animate-pulse"></span>
-      </div>
+      <img src="/logo.svg" alt="" class="h-10 w-auto" />
       <div>
         <h1 class="text-[17px] font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent leading-none">
-          Aegis Mercato
+          Oberek
         </h1>
         <p class="text-[11px] text-slate-500 mt-0.5">Post-Quantum Agent Observability Engine · Solana Devnet</p>
       </div>
@@ -195,12 +196,12 @@
         Devnet Live
       </div>
       <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-violet-500/[0.08] border border-violet-500/20 text-violet-300 text-[11px] font-mono">
-        <Lock class="w-3 h-3" /> ML-DSA-44 · KEM-768
+        <Lock class="w-3 h-3" /> ML-DSA-44 · ML-KEM-768
       </div>
       <button
         onclick={refreshAll}
         class="p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] transition-all border border-white/[0.08] text-slate-400 hover:text-white cursor-pointer"
-        title="Odśwież dane"
+        title="Refresh"
       >
         <RefreshCw class="w-3.5 h-3.5" />
       </button>
@@ -216,7 +217,7 @@
       <!-- Agent Fleet -->
       <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
         <h2 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <Cpu class="w-3.5 h-3.5 text-violet-400" /> Flota Agentów AI
+          <Cpu class="w-3.5 h-3.5 text-violet-400" /> AI Agent Fleet
           <span class="ml-auto text-violet-300 font-mono">{agents.length}</span>
         </h2>
 
@@ -246,7 +247,9 @@
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
                   {/if}
                 </span>
-                <span class="text-[10px] text-slate-500 font-mono">{agent.actionsExecuted} tx</span>
+                <span class="text-[10px] text-slate-500 font-mono">
+                  {agent.actionsExecuted} tx{#if agent.fleet?.queued}<span class="text-violet-300"> · {agent.fleet.queued} queued</span>{/if}
+                </span>
               </div>
             </button>
           {/each}
@@ -256,27 +259,27 @@
       <!-- Stats panel -->
       <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
         <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <BarChart3 class="w-3.5 h-3.5 text-sky-400" /> Statystyki Sieci
+          <BarChart3 class="w-3.5 h-3.5 text-sky-400" /> Fleet stats
         </h3>
         <div class="space-y-2.5">
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Aktywnych agentów</span>
+            <span class="text-[11px] text-slate-400">Active agents on-chain</span>
             <span class="text-[13px] font-mono font-bold text-emerald-400">
-              {agents.filter(a => a.status === 'ACTIVE').length}/{agents.length}
+              {fleetAgents.filter((a: any) => a.status === 'ACTIVE').length}/{fleetAgents.length}
             </span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Łączna liczba tx</span>
+            <span class="text-[11px] text-slate-400">Total on-chain counter</span>
             <span class="text-[13px] font-mono font-bold text-violet-300">
-              {agents.reduce((s, a) => s + (a.actionsExecuted || 0), 0)}
+              {fleetAgents.reduce((sum: number, a: any) => sum + a.actionsExecuted, 0)}
             </span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Algorytm PQC</span>
+            <span class="text-[11px] text-slate-400">Agent signature</span>
             <span class="text-[11px] font-mono text-violet-300">ML-DSA-44</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-[11px] text-slate-400">Algorytm KEM</span>
+            <span class="text-[11px] text-slate-400">Decision log seal</span>
             <span class="text-[11px] font-mono text-violet-300">ML-KEM-768</span>
           </div>
         </div>
@@ -324,11 +327,11 @@
             <!-- Metrics row -->
             <div class="grid grid-cols-3 gap-3 mb-5">
               <div class="bg-black/20 rounded-xl p-3 border border-white/[0.05]">
-                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">TX wykonane</p>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">TX executed</p>
                 <p class="text-xl font-bold font-mono text-violet-300">{selectedAgent.actionsExecuted}</p>
               </div>
               <div class="bg-black/20 rounded-xl p-3 border border-white/[0.05]">
-                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Ostatnia aktywność</p>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Last activity</p>
                 <p class="text-sm font-mono text-sky-300">{timeAgo(selectedAgent.lastUpdated)}</p>
               </div>
               <div class="bg-black/20 rounded-xl p-3 border border-white/[0.05]">
@@ -337,20 +340,20 @@
               </div>
             </div>
 
-            <!-- PQC State Root -->
+            <!-- Last decision hash, or the Merkle root of the last batch -->
             <div class="bg-black/30 rounded-xl p-3.5 border border-violet-500/[0.15] mb-3">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Key class="w-3 h-3" /> Quantum-Safe Merkle State Root (SHA3-256)
+                  <Key class="w-3 h-3" /> {decisionHashLabel(selectedAgent.lastBatchSize)}
                 </span>
                 <button
                   onclick={() => copyText(selectedAgent.lastCommitmentRoot, 'root')}
                   class="text-slate-500 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition"
                 >
                   {#if copiedId === 'root'}
-                    <Check class="w-3 h-3 text-emerald-400" /> Skopiowano
+                    <Check class="w-3 h-3 text-emerald-400" /> Copied
                   {:else}
-                    <Copy class="w-3 h-3" /> Kopiuj
+                    <Copy class="w-3 h-3" /> Copy
                   {/if}
                 </button>
               </div>
@@ -358,33 +361,47 @@
                 {selectedAgent.lastCommitmentRoot}
               </p>
               <p class="text-[10px] text-slate-500 mt-1.5">
-                Kotwiczone na Solana Devnet · Program PDA <code class="text-violet-400">aegis-registry</code>
+                {#if selectedAgent.lastBatchSize}
+                  Batch of {selectedAgent.lastBatchSize} decisions signed once with ML-DSA-44 ·
+                {/if}
+                The <code class="text-violet-400">last_decision</code> field of the agent account in the <code class="text-violet-400">onchain_agent_guard</code> program (Solana Devnet)
               </p>
             </div>
 
-            <!-- PQC Pubkey Hash -->
+            <!-- ML-DSA-44 public key account -->
             <div class="bg-black/30 rounded-xl p-3.5 border border-emerald-500/[0.12]">
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Lock class="w-3 h-3" /> Post-Quantum Public Key Hash (ML-DSA-44)
+                  <Lock class="w-3 h-3" /> ML-DSA-44 public key account
                 </span>
                 <button
-                  onclick={() => copyText(selectedAgent.pqcPubkeyHash, 'pubkey')}
+                  onclick={() => copyText(selectedAgent.pqcKeyAccount ?? '', 'pubkey')}
+                  disabled={!selectedAgent.pqcKeyAccount}
                   class="text-slate-500 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition"
                 >
                   {#if copiedId === 'pubkey'}
-                    <Check class="w-3 h-3 text-emerald-400" /> Skopiowano
+                    <Check class="w-3 h-3 text-emerald-400" /> Copied
                   {:else}
-                    <Copy class="w-3 h-3" /> Kopiuj
+                    <Copy class="w-3 h-3" /> Copy
                   {/if}
                 </button>
               </div>
               <p class="font-mono text-[11px] text-emerald-200 break-all select-all leading-relaxed bg-black/30 p-2 rounded-lg">
-                {selectedAgent.pqcPubkeyHash}
+                {selectedAgent.pqcKeyAccount ?? '—'}
               </p>
               <p class="text-[10px] text-slate-500 mt-1.5">
-                One-Time Attestation · Klucz powiązany z adresem konta Solana przez DMS (RFC 8032)
+                Stored when the agent was registered in <code class="text-violet-400">onchain_agent_guard</code>; every step and resume is verified against it
               </p>
+              {#if selectedAgent.fleet && selectedAgent.pqcKeyAccount}
+                <a
+                  href={explorerAddressUrl(selectedAgent.pqcKeyAccount)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-1 inline-flex items-center gap-1 text-[10px] font-mono text-violet-300 hover:text-violet-200"
+                >
+                  Solana Explorer <ExternalLink class="w-3 h-3" />
+                </a>
+              {/if}
             </div>
             {#if selectedAgent.fleet && acceptsShock(selectedAgent.fleet.lastDecisionKind)}
               <button
@@ -393,8 +410,47 @@
                 class="mt-3 w-full px-4 py-2.5 rounded-xl border border-fuchsia-500/40 bg-fuchsia-950/30 hover:bg-fuchsia-900/40 text-fuchsia-200 text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 <Play class="w-4 h-4" />
-                {selectedAgent.fleet.shockArmed ? 'Szok uzbrojony — w następnym cyklu' : 'Symuluj szok ceny (−3%)'}
+                {selectedAgent.fleet.shockArmed ? 'Shock armed, applied in the next cycle' : 'Simulate a price shock (−3%)'}
               </button>
+            {/if}
+            {#if selectedAgent.fleet && acceptsPace(selectedAgent.fleet.lastDecisionKind)}
+              {@const steps = paceStepsFor(selectedAgent.fleet.batched)}
+              {@const paceMs = selectedAgent.fleet.paceMs}
+              <div class="mt-3 px-4 py-3 rounded-xl border border-violet-500/30 bg-violet-950/20">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[10px] font-semibold text-violet-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Zap class="w-3 h-3" /> Speed wheel
+                  </span>
+                  <span class="text-[11px] font-mono text-white">{paceMs ? describePace(paceMs) : "agent's own pace"}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={steps.length - 1}
+                  step="1"
+                  value={paceMs && steps.includes(paceMs) ? steps.indexOf(paceMs) : steps.length - 1}
+                  disabled={isSimulating}
+                  onchange={(event) => setPace(steps[Number(event.currentTarget.value)])}
+                  class="w-full accent-violet-400 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <!-- One notch per step the slider snaps to; px-1.5 lines them up with the thumb's travel. -->
+                <div class="flex justify-between px-1.5 mt-0.5">
+                  {#each steps as step (step)}
+                    <div class="flex flex-col items-center w-0">
+                      <span class="w-px h-1.5 {step === paceMs ? 'bg-violet-300' : 'bg-slate-500'}"></span>
+                      <span class="mt-0.5 text-[9px] font-mono whitespace-nowrap {step === paceMs ? 'text-violet-200 font-bold' : 'text-slate-500'}">
+                        {paceLabel(step)}
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+                {#if !selectedAgent.fleet.batched}
+                  <p class="text-[10px] text-slate-500 mt-1.5">
+                    Without batching every tick is its own transaction and the server allows one per 10 s; add the agent
+                    to <code class="text-violet-400">BATCHED_AGENT_IDS</code> to go faster.
+                  </p>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -407,13 +463,13 @@
         <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-5 backdrop-blur-sm">
           <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
             <Zap class="w-3.5 h-3.5 text-amber-400" />
-            Human-In-The-Loop · Konsola Decyzyjna
+            Human-in-the-Loop · Decision Console
           </h3>
 
           {#if selectedAgent.fleet}
             <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
-              Przy dużej transakcji agent sam się zatrzymuje i czeka na Twoją decyzję: zatwierdź lub odrzuć krok.
-              Kill-Switch zatrzymuje go awaryjnie w każdej chwili. Każda decyzja trafia na Solana devnet.
+              On a large trade the agent stops on its own and waits for your verdict: approve or reject the step.
+              The Kill-Switch stops it at any moment. Every decision lands on Solana devnet.
             </p>
             <div class="grid grid-cols-2 gap-3 mb-4">
               <button
@@ -421,26 +477,26 @@
                 disabled={isSimulating || selectedAgent.status !== 'AWAITING_APPROVAL'}
                 class="px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
-                <ShieldCheck class="w-4 h-4" /> Autoryzuj Krok
+                <ShieldCheck class="w-4 h-4" /> Approve Step
               </button>
               <button
                 onclick={() => sendVerdict('reject')}
                 disabled={isSimulating || selectedAgent.status !== 'AWAITING_APPROVAL'}
                 class="px-4 py-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-amber-500/40 text-amber-200 text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
-                Odrzuć
+                Reject
               </button>
               {#if selectedAgent.status === 'PAUSED'}
                 <button
-                  onclick={() => simulateAction('approve')}
+                  onclick={() => control('resume')}
                   disabled={isSimulating}
                   class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
-                  <Unlock class="w-4 h-4" /> Wznów agenta
+                  <Unlock class="w-4 h-4" /> Resume agent
                 </button>
               {:else}
                 <button
-                  onclick={() => simulateAction('pause')}
+                  onclick={() => control('kill')}
                   disabled={isSimulating}
                   class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
@@ -450,12 +506,12 @@
             </div>
           {:else}
             <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
-              Zatwierdź kolejny krok agenta lub aktywuj awaryjny Kill-Switch.
-              Każda decyzja jest podpisana transakcją Solana z zaktualizowanym PQC State Rootem.
+              Mock agent: approve its next step or trigger the Kill-Switch.
+              Nothing goes on-chain; the decision only changes this card.
             </p>
             <div class="grid grid-cols-2 gap-3 mb-4">
               <button
-                onclick={() => simulateAction('approve')}
+                onclick={() => control('resume')}
                 disabled={isSimulating}
                 class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold shadow-lg shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
               >
@@ -465,10 +521,10 @@
                 {:else}
                   <ShieldCheck class="w-4 h-4" />
                 {/if}
-                Autoryzuj Krok
+                Approve Step
               </button>
               <button
-                onclick={() => simulateAction('pause')}
+                onclick={() => control('kill')}
                 disabled={isSimulating}
                 class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold shadow-lg shadow-rose-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
               >
@@ -490,52 +546,16 @@
           {/if}
         </div>
 
-        <!-- Blinks Hub -->
+        <!-- Owner bot on Telegram -->
         <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-5 backdrop-blur-sm">
-          <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-            <Terminal class="w-3.5 h-3.5 text-sky-400" /> Solana Actions & Dialect Blinks
+          <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+            <Send class="w-3.5 h-3.5 text-sky-400" /> Telegram
           </h3>
-
-          <div class="space-y-3">
-            <div>
-              <label for="blink-url" class="block text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">
-                Action URL (Solana Action Spec)
-              </label>
-              <div class="flex items-center gap-2">
-                <input
-                  id="blink-url"
-                  type="text"
-                  readonly
-                  value={blinkUrl}
-                  class="flex-1 bg-black/30 border border-white/[0.08] rounded-xl px-3 py-2.5 text-[11px] font-mono text-slate-300 focus:outline-none"
-                />
-                <button
-                  onclick={() => copyText(blinkUrl, 'blink')}
-                  class="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white text-[11px] font-semibold border border-white/[0.08] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  {#if copiedId === 'blink'}
-                    <Check class="w-3.5 h-3.5 text-emerald-400" />
-                  {:else}
-                    <Copy class="w-3.5 h-3.5" />
-                  {/if}
-                  Kopiuj
-                </button>
-              </div>
-            </div>
-
-            <a
-              href={dialToUrl}
-              target="_blank"
-              rel="noreferrer"
-              class="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-sky-950/40 to-violet-950/40 border border-sky-500/[0.2] hover:border-sky-500/40 transition-all group"
-            >
-              <div>
-                <p class="text-[13px] font-semibold text-white">Przetestuj w Dialect Inspector</p>
-                <p class="text-[11px] text-slate-400">Otwórz akcję na dial.to · Solana Devnet</p>
-              </div>
-              <ExternalLink class="w-4 h-4 text-sky-400 group-hover:text-sky-300 transition" />
-            </a>
-          </div>
+          <p class="text-[12px] text-slate-400 leading-relaxed">
+            The owner bot sends each proposal to your Telegram chat with Accept and Reject, and Kill or Resume on every
+            status change; <code class="text-sky-300">/agents</code> lists the fleet. Start it with
+            <code class="text-sky-300">bun bot/telegram</code>.
+          </p>
         </div>
       {/if}
     </section>
@@ -558,15 +578,14 @@
       <!-- PQC Algorithm Info -->
       <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-4 backdrop-blur-sm">
         <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <Lock class="w-3.5 h-3.5 text-violet-400" /> Stos Kryptograficzny
+          <Lock class="w-3.5 h-3.5 text-violet-400" /> Cryptographic Stack
         </h3>
         <div class="space-y-2">
           {#each [
-            { label: 'Podpis (podpisywanie)', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
-            { label: 'Enkapsulacja klucza', value: 'ML-KEM-768', note: 'NIST FIPS 203' },
-            { label: 'State Commitment', value: 'SHA3-256', note: 'Quantum-Safe Hash' },
-            { label: 'Ed25519 seed ochrona', value: 'DMS (RFC 8032)', note: 'Dual-Mode Sig' },
-            { label: 'Blockchain', value: 'Solana Devnet', note: 'sub-400ms finality' },
+            { label: 'Agent signature, verified on-chain', value: 'ML-DSA-44', note: 'NIST FIPS 204' },
+            { label: 'Decision log seal, owner key', value: 'ML-KEM-768', note: 'NIST FIPS 203 · AES-256-GCM' },
+            { label: 'Decision hash / Merkle root', value: 'SHA-256', note: 'last_decision field · one ML-DSA-44 signature per batch' },
+            { label: 'Program', value: 'onchain_agent_guard', note: 'Solana Devnet' },
           ] as algo}
             <div class="flex items-start justify-between gap-2">
               <div>
@@ -584,7 +603,7 @@
 
   <!-- Footer -->
   <footer class="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between text-[10px] text-slate-600">
-    <span>Aegis Mercato · Solana Hackathon 2025 · Open Mercato Standard</span>
-    <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">@solana/actions</span></span>
+    <span>Oberek · Colosseum Crypto World's Fair 2026</span>
+    <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">Telegram Bot API</span></span>
   </footer>
 </div>

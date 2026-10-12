@@ -31,3 +31,9 @@ Plany, notatki robocze, instrukcje, zadania należą do `docs/`.
 - `spec/` opisuje projekt i jest jedynym źródłem prawdy o nim.
 - `spec/decisions/` zawiera tylko obowiązujące decyzje i ich uzasadnienie. Decyzji się nie edytuje: gdy nowa jej przeczy, nowa ją zastępuje, zastąpiona może trafić do archiwum w `docs/output/`.
 - `docs/` wspiera pracę, ale nie definiuje projektu.
+
+## Jakość kodu
+
+- Przed otwarciem PR zielone są: `bun run check`, `bun run lint`, `bun test`.
+- Zmiana nie wprowadza nowych błędów svelte-check ani Biome; ostrzeżenia w plikach, których dotyka, usuwa przy okazji.
+- Biome tylko lintuje; formatowania całego repozytorium nie robimy jednym commitem.

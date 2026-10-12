@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { GuardError } from '../agent-guard/guard';
 import { AwaitingApprovalError, NoPendingProposalError } from './approval';
+import { LogNotSealedError } from './fleet';
 import { fleetErrorResponse } from './http-errors';
 import { DecisionNotInLogError } from './latest-decision';
 import { FleetNotConfiguredError } from './runtime';
@@ -28,6 +29,13 @@ test('answers a fleet without configuration with 503', async () => {
 	expect(await answer(new FleetNotConfiguredError('GUARD_PROGRAM_ID is not set'))).toEqual({
 		status: 503,
 		body: { error: 'FleetNotConfigured', message: 'GUARD_PROGRAM_ID is not set' }
+	});
+});
+
+test('answers an agent whose log is not sealed with 503 LogNotSealed', async () => {
+	expect(await answer(new LogNotSealedError('seal it'))).toEqual({
+		status: 503,
+		body: { error: 'LogNotSealed', message: 'seal it' }
 	});
 });
 

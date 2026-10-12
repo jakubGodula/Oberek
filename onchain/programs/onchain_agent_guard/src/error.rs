@@ -16,4 +16,6 @@ pub enum GuardError {
     InvalidKeyAccount,
     #[msg("ML-DSA-44 signature verification failed")]
     VerifyFailed,
+    #[msg("A batch holds at least one decision")]
+    EmptyBatch,
 }

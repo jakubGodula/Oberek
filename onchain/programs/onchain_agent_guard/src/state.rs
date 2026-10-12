@@ -22,6 +22,7 @@ pub struct Agent {
     pub status: AgentStatus,
     /// Number of accepted steps and resumes; every signed message names the next value, so a signature works once.
     pub counter: u64,
+    /// The last step's decision hash, or the last batch's Merkle root.
     pub last_decision: [u8; 32],
     pub bump: u8,
 }
@@ -37,6 +38,14 @@ pub struct StepRecorded {
     pub agent: Pubkey,
     pub counter: u64,
     pub decision_hash: [u8; 32],
+}
+
+#[event]
+pub struct BatchRecorded {
+    pub agent: Pubkey,
+    pub counter: u64,
+    pub root: [u8; 32],
+    pub size: u32,
 }
 
 #[event]

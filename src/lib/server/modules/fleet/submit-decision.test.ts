@@ -5,8 +5,11 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { GuardError, type AgentGuard } from '../agent-guard/guard';
 import { AwaitingApprovalError } from './approval';
-import { Fleet } from './fleet';
+import { DecisionBatcher } from './decision-batcher';
+import { Fleet, LogNotSealedError } from './fleet';
+import { TEST_SEAL } from './testing/test-seal';
 import { RateLimitedError, StepThrottle } from './step-throttle';
+import { flushBatch } from './record-decision';
 import { parseSubmission, submitDecision, type FleetRuntime } from './submit-decision';
 import { MemoryGuard } from './testing/memory-guard';
 
@@ -23,7 +26,7 @@ beforeEach(async () => {
 	rootDir = mkdtempSync(join(tmpdir(), 'fleet-'));
 	const guard = new MemoryGuard(AGENT, OWNER);
 	const fleet = new Fleet(join(rootDir, 'fleet'));
-	fleet.register({ id: AGENT, name: 'Test Agent', riskLevel: 'LOW', registeredAt: NOW.getTime() });
+	fleet.register({ id: AGENT, name: 'Test Agent', riskLevel: 'LOW', registeredAt: NOW.getTime() }, TEST_SEAL);
 	runtime = { guard, fleet, throttle: new StepThrottle(0), now: () => NOW };
 });
 
@@ -38,6 +41,13 @@ describe('submitDecision', () => {
 		const recomputed = createHash('sha256').update(JSON.stringify(logged.record)).digest('hex');
 		expect(logged.decisionHash).toBe(recomputed);
 		expect((await runtime.guard.readAgent(AGENT)).lastDecision).toBe(recomputed);
+	});
+
+	test('sends nothing on-chain for an agent whose log is not sealed', async () => {
+		rmSync(join(rootDir, 'fleet', AGENT, 'seal.json'));
+		const error = await submitDecision(runtime, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(LogNotSealedError);
+		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(0);
 	});
 
 	test('refuses a decision while the agent is killed and logs nothing', async () => {
@@ -94,6 +104,86 @@ describe('proposals', () => {
 	test('accepts the next decision when the latest one is not a proposal', async () => {
 		await submitDecision(runtime, AGENT, SUBMISSION);
 		expect(await submitDecision(runtime, AGENT, SUBMISSION)).toEqual({ counter: 2 });
+	});
+});
+
+describe('batched agents', () => {
+	function batched(base: FleetRuntime = runtime, flushMs = 60_000): FleetRuntime {
+		const withBatcher: FleetRuntime = { ...base };
+		withBatcher.batcher = new DecisionBatcher(
+			{ agentIds: new Set([AGENT]), flushMs, maxDecisions: 16 },
+			(agentId, queued) => flushBatch(withBatcher, agentId, queued)
+		);
+		return withBatcher;
+	}
+
+	test('queues the decision and answers at once, without the throttle or the chain', async () => {
+		const fast = { ...batched(), throttle: new StepThrottle(10_000) };
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
+		expect(fast.batcher!.queued(AGENT)).toBe(2);
+		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(0);
+	});
+
+	test('refuses a decision while the agent is killed, before queueing it', async () => {
+		const fast = batched();
+		await runtime.guard.kill(AGENT, OWNER);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect((error as GuardError).code).toBe('AgentKilled');
+		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
+	test('refuses a decision sent while its proposal is still on its way to the chain', async () => {
+		const memory = runtime.guard;
+		const slow: AgentGuard = {
+			...memory,
+			readAgent: (agentId) => memory.readAgent(agentId),
+			recordStep: async (agentId, counter, hash) => {
+				await Bun.sleep(20);
+				return memory.recordStep(agentId, counter, hash);
+			},
+			recordBatch: (agentId, counter, root, size) => memory.recordBatch(agentId, counter, root, size)
+		};
+		const fast = batched({ ...runtime, guard: slow });
+		const proposing = submitDecision(fast, AGENT, PROPOSAL);
+		await Bun.sleep(5);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect(await proposing).toEqual({ counter: 1 });
+		expect(error).toBeInstanceOf(AwaitingApprovalError);
+		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
+	test('passes the failure of the last batch to the next decision, so the agent learns its decisions were lost', async () => {
+		const unfunded: AgentGuard = {
+			...runtime.guard,
+			readAgent: (agentId) => runtime.guard.readAgent(agentId),
+			recordBatch: async () => {
+				throw new GuardError('PayerUnfunded', 'fee payer has no SOL');
+			}
+		};
+		const timerFlushMs = 10;
+		const fast = batched({ ...runtime, guard: unfunded }, timerFlushMs);
+		await submitDecision(fast, AGENT, SUBMISSION);
+		await submitDecision(fast, AGENT, SUBMISSION);
+		await Bun.sleep(timerFlushMs * 4);
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect((error as GuardError).code).toBe('PayerUnfunded');
+		expect(await submitDecision(fast, AGENT, SUBMISSION)).toEqual({ queued: true });
+	});
+
+	test('a proposal flushes the buffer first and lands after it as a single step', async () => {
+		const fast = batched();
+		await submitDecision(fast, AGENT, SUBMISSION);
+		await submitDecision(fast, AGENT, SUBMISSION);
+		expect(await submitDecision(fast, AGENT, PROPOSAL)).toEqual({ counter: 2 });
+
+		const log = runtime.fleet.decisions(AGENT);
+		expect(log.map((entry) => [entry.record.counter, entry.batch?.size ?? null])).toEqual([
+			[1, 2],
+			[1, 2],
+			[2, null]
+		]);
+		expect((await runtime.guard.readAgent(AGENT)).lastDecision).toBe(log[2].decisionHash);
 	});
 });
 
