@@ -7,7 +7,8 @@
     entries,
     operatorActions,
     pendingCounter,
-    mock
+    mock,
+    quiet
   }: {
     agentId: string;
     entries: FeedEntry[];
@@ -16,6 +17,8 @@
     pendingCounter: number | null;
     /** A demo agent: it never reaches the chain. */
     mock: boolean;
+    /** Quiet cycles since the last recorded decision. One line, no transaction. */
+    quiet: { count: number; at: number } | null;
   } = $props();
 
   const rows = $derived(toTimeline(entries, operatorActions, pendingCounter));
@@ -23,6 +26,8 @@
   const CHIP_STYLES: Record<Chip, string> = {
     HOLD: 'text-slate-300 bg-slate-500/15 border-slate-500/30',
     REBALANCE: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+    FOR: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+    AGAINST: 'text-rose-300 bg-rose-500/15 border-rose-500/30',
     AWAITING_APPROVAL: 'text-amber-300 bg-amber-500/15 border-amber-500/40',
     PROPOSAL: 'text-amber-200/70 border-amber-500/25',
     APPROVED: 'text-emerald-300 border-emerald-500/50',
@@ -32,6 +37,8 @@
   const CHIP_LABELS: Record<Chip, string> = {
     HOLD: 'HOLD',
     REBALANCE: 'REBALANCE',
+    FOR: 'FOR',
+    AGAINST: 'AGAINST',
     AWAITING_APPROVAL: 'AWAITING APPROVAL',
     PROPOSAL: 'PROPOSAL',
     APPROVED: 'APPROVED',
@@ -109,6 +116,14 @@
   </h2>
 
   <div class="space-y-2 max-h-[760px] overflow-y-auto pr-0.5">
+    {#if quiet}
+      <div class="p-3 rounded-xl bg-black/20 border border-white/[0.05]">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="text-[10px] font-mono text-slate-500">{clock(quiet.at)}</span>
+        </div>
+        <p class="text-[11px] font-mono text-slate-300">No new proposals detected ×{quiet.count}</p>
+      </div>
+    {/if}
     {#each rows as timelineRow (timelineRow.type === 'decision' ? timelineRow.row.key : timelineRow.key)}
       {#if timelineRow.type === 'action'}
         {@const chip = ACTION_CHIPS[timelineRow.event]}
@@ -142,9 +157,11 @@
         {@render decision(timelineRow.row)}
       {/if}
     {:else}
-      <p class="text-[12px] text-slate-500 py-6 text-center">
-        {mock ? 'Mock agent: sends no transactions on-chain' : 'No decisions yet: the agent has not run'}
-      </p>
+      {#if !quiet}
+        <p class="text-[12px] text-slate-500 py-6 text-center">
+          {mock ? 'Mock agent: sends no transactions on-chain' : 'No decisions yet: the agent has not run'}
+        </p>
+      {/if}
     {/each}
   </div>
 </div>

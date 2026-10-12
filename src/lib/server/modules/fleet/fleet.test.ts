@@ -147,3 +147,11 @@ test('refuses to seal an agent that is not in the fleet', () => {
 test('register keeps the seal it was given', () => {
 	expect(fleet.seal(AGENT)).toEqual(TEST_SEAL);
 });
+
+test('rename changes only the page name', () => {
+	fleet.rename(AGENT, 'JitoSOL Steward');
+	expect(fleet.get(AGENT)).toMatchObject({ id: AGENT, name: 'JitoSOL Steward', riskLevel: 'MEDIUM', registeredAt: 0 });
+	expect(fleet.seal(AGENT)).toEqual(TEST_SEAL);
+	fleet.rename(AGENT, 'JitoSOL Steward');
+	expect(fleet.get(AGENT)?.name).toBe('JitoSOL Steward');
+});

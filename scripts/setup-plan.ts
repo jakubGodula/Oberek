@@ -7,7 +7,7 @@ export const LAMPORTS_PER_AGENT = 200_000_000n;
 export const LAMPORTS_FOR_OWNER_KEY = 200_000_000n;
 
 export interface AgentProgress {
-	/** Its agent file exists: the on-chain account was created. */
+	/** Its agent file exists: the on-chain account was created, or a registration is still in doubt. */
 	readonly registered: boolean;
 	/** Registered on chain but still `Pending`: an earlier run's activation failed. */
 	readonly pending: boolean;
@@ -15,15 +15,20 @@ export interface AgentProgress {
 	readonly imported: boolean;
 	/** Its decision log has a seal (import seals; agents imported before that need `seal`). */
 	readonly sealed: boolean;
+	/** `onchain.json` is in the fleet entry, so the server can sign for this agent. */
+	readonly identified: boolean;
 }
 
 /** `register` also activates the agent; `activate` retries only that. */
-export type AgentStep = 'register' | 'activate' | 'import' | 'seal';
+export type AgentStep = 'register' | 'activate' | 'import' | 'seal' | 'identify';
 
-export function stepsFor({ registered, pending, imported, sealed }: AgentProgress): AgentStep[] {
-	const activation: AgentStep[] = pending ? ['activate'] : [];
-	if (imported) return sealed ? activation : [...activation, 'seal'];
-	return registered ? [...activation, 'import'] : ['register', 'import'];
+export function stepsFor({ registered, pending, imported, sealed, identified }: AgentProgress): AgentStep[] {
+	const steps: AgentStep[] = pending ? ['activate'] : [];
+	if (!imported) return registered ? [...steps, 'import'] : ['register', 'import'];
+	if (!sealed) steps.push('seal');
+	// An import that stopped after the fleet entry, or a fleet copied without the key file.
+	if (!identified) steps.push('identify');
+	return steps;
 }
 
 /** Only registration costs SOL; importing and sealing are local. The owner key is registered once, before any agent. */

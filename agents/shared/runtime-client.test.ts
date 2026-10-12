@@ -135,6 +135,61 @@ describe('claimShock', () => {
 	});
 });
 
+describe('claimProposal', () => {
+	test.each(['positive', 'negative'] as const)('posts to the proposal claim endpoint and reports %s', async (direction) => {
+		const { fetchFn, requests } = answering(200, { proposal: { direction } });
+		expect(await createRuntimeClient('http://server', 'jito-01', fetchFn).claimProposal()).toEqual({
+			kind: 'armed',
+			direction
+		});
+		expect(requests[0].url).toBe('http://server/api/agents/jito-01/proposal/claim');
+		expect(requests[0].init?.method).toBe('POST');
+	});
+
+	test('reports none when nothing is armed', async () => {
+		const { fetchFn } = answering(200, { proposal: null });
+		expect(await createRuntimeClient('http://server', 'jito-01', fetchFn).claimProposal()).toEqual({ kind: 'none' });
+	});
+
+	test.each([
+		['an error answer', 404, { error: 'AgentNotFound', message: 'not in the fleet' }],
+		['an answer without a proposal field', 200, {}],
+		['a proposal with an unknown direction', 200, { proposal: { direction: 'hold' } }]
+	])('reports %s as failed', async (_, status, body) => {
+		const { fetchFn } = answering(status, body);
+		expect((await createRuntimeClient('http://server', 'jito-01', fetchFn).claimProposal()).kind).toBe('failed');
+	});
+
+	test('reports an unreachable server as failed', async () => {
+		expect((await createRuntimeClient('http://server', 'jito-01', unreachable).claimProposal()).kind).toBe('failed');
+	});
+});
+
+describe('reportQuiet', () => {
+	test('posts to the quiet endpoint and reports the count', async () => {
+		const { fetchFn, requests } = answering(200, { count: 3 });
+		expect(await createRuntimeClient('http://server', 'jito-01', fetchFn).reportQuiet()).toEqual({
+			kind: 'noted',
+			count: 3
+		});
+		expect(requests[0].url).toBe('http://server/api/agents/jito-01/quiet');
+		expect(requests[0].init?.method).toBe('POST');
+	});
+
+	test.each([
+		['an error answer', 404, { error: 'AgentNotFound', message: 'not in the fleet' }],
+		['an answer without a count', 200, {}],
+		['a count of zero', 200, { count: 0 }]
+	])('reports %s as failed', async (_, status, body) => {
+		const { fetchFn } = answering(status, body);
+		expect((await createRuntimeClient('http://server', 'jito-01', fetchFn).reportQuiet()).kind).toBe('failed');
+	});
+
+	test('reports an unreachable server as failed', async () => {
+		expect((await createRuntimeClient('http://server', 'jito-01', unreachable).reportQuiet()).kind).toBe('failed');
+	});
+});
+
 describe('latest', () => {
 	test('asks the latest endpoint of the agent', async () => {
 		const { fetchFn, requests } = answering(200, { latest: null });

@@ -72,8 +72,16 @@ export class Fleet {
 		const dir = this.agentDir(entry.id);
 		if (existsSync(dir)) throw new Error(`agent ${entry.id} is already in the fleet`);
 		mkdirSync(dir, { recursive: true });
-		writeFileSync(join(dir, ENTRY_FILE), JSON.stringify(entry, null, 2) + '\n');
+		writeFileSync(join(dir, ENTRY_FILE), `${JSON.stringify(entry, null, 2)}\n`);
 		this.addSeal(entry.id, seal);
+	}
+
+	/** The name shown on the page. Local only: the guard account has no name, so this never touches the chain. */
+	rename(agentId: string, name: string): void {
+		const entry = this.get(agentId);
+		if (!entry) throw new Error(`agent ${agentId} is not in the fleet`);
+		if (entry.name === name) return;
+		writeFileSync(join(this.agentDir(agentId), ENTRY_FILE), `${JSON.stringify({ ...entry, name }, null, 2)}\n`);
 	}
 
 	/** Seals an agent imported before the log was sealed; its plaintext lines stay readable. */
@@ -169,7 +177,7 @@ export class Fleet {
 	}
 
 	private appendLine(agentId: string, file: string, value: unknown): void {
-		appendFileSync(join(this.agentDir(agentId), file), JSON.stringify(value) + '\n');
+		appendFileSync(join(this.agentDir(agentId), file), `${JSON.stringify(value)}\n`);
 	}
 
 	private readLines<T>(agentId: string, file: string): T[] {
