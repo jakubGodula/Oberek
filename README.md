@@ -36,6 +36,8 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
 
 Why, and what is still open: [spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md](spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 
+Which key lives where and what it signs, with a diagram: [spec/keys.md](spec/keys.md).
+
 ## Batched agents: many decisions in one transaction
 
 Agents listed in `BATCHED_AGENT_IDS` (`.env`) get `202` for each decision. The server buffers them and every
@@ -73,6 +75,11 @@ first; that is often rate-limited, so it may print the address and wait until yo
 https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it creates the owner's ML-KEM-768
 key (`OWNER_MLKEM_FILE`), registers `sentinel-01` and `tick-01` (agent files in `.devnet/agents/`), imports them into
 the fleet and seals their decision logs.
+
+Something broke? Each run of `setup.ts` and `demo.ts` writes its whole output, children included, to
+`.devnet/logs/<script>-<time>.log` and prints the path at the end. The log is timestamped and redacted: tokens, secrets,
+the Telegram chat id and keys inside RPC URLs are masked, and the header lists the git revision and the `.env.example`
+settings. Glance through it and send it to whoever is helping.
 
 ### A real agent on devnet, by hand
 
