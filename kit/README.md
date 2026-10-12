@@ -72,8 +72,8 @@ A refused step throws `GuardError`, and the action does not run. `error.code`:
 | `PayerUnfunded` | the payer (or, for kill and resume, the owner) cannot pay the fee; nothing was sent |
 | `AgentNotFound` | no such agent on this cluster |
 
-Runnable: `AGENT_FILE=.devnet/my-agent.json FEE_PAYER_KEYPAIR=.devnet/agent-payer.json bun kit/example.ts` records
-three steps and prints the status.
+Runnable: `AGENT_FILE=.devnet/my-agent.json FEE_PAYER_KEYPAIR=.devnet/agent-payer.json bun kit/example.ts` prints the
+status, records three steps and prints the status again; a refused step ends it with exit code 1.
 
 To test your agent without the network, use the in-memory guard:
 

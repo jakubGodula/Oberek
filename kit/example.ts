@@ -39,11 +39,13 @@ async function printStatus(agent: GuardedAgent): Promise<void> {
 
 const agent = await openAgentFromEnv();
 try {
+	await printStatus(agent);
 	for (let index = 1; index <= STEPS; index++) await greet(agent, index);
+	await printStatus(agent);
 } catch (error) {
 	if (!(error instanceof GuardError)) throw error;
-	console.log(`refused by the guard: ${error.code}, no action ran (${error.message})`);
+	console.log(`refused by the guard: ${error.code} (${error.message}); a refused step runs no action`);
+	process.exitCode = 1;
 }
-await printStatus(agent);
 // The RPC subscription client keeps the event loop alive.
-process.exit(0);
+process.exit();
