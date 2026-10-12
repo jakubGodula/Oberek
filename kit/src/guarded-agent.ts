@@ -36,11 +36,18 @@ export function hashDecision(decision: string): string {
 
 export function createGuardedAgent(guard: AgentGuard, agentId: string): GuardedAgent {
 	const read = () => guard.readAgent(agentId);
+	const recordThenAct = async <T>(decision: string, act: () => T | Promise<T>): Promise<GuardedStep<T>> => {
+		const decisionHash = hashDecision(decision);
+		const { counter } = await guard.recordStep(agentId, (await read()).counter + 1, decisionHash);
+		return { counter, decisionHash, result: await act() };
+	};
+	// Steps run one at a time: two at once would both sign the same next counter, and one would be refused.
+	let previousStep: Promise<unknown> = Promise.resolve();
 	return {
-		async step<T>(decision: string, act: () => T | Promise<T>): Promise<GuardedStep<T>> {
-			const decisionHash = hashDecision(decision);
-			const { counter } = await guard.recordStep(agentId, (await read()).counter + 1, decisionHash);
-			return { counter, decisionHash, result: await act() };
+		step<T>(decision: string, act: () => T | Promise<T>): Promise<GuardedStep<T>> {
+			const step = previousStep.then(() => recordThenAct(decision, act));
+			previousStep = step.catch(() => undefined);
+			return step;
 		},
 		status: read,
 		// AgentGuard takes the owner the caller claims; OnchainGuard checks its own owner key against the account.

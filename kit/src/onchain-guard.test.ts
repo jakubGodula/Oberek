@@ -58,6 +58,19 @@ function fakeChain(initial: Partial<AgentState> = {}) {
 		calls,
 		sent,
 		failOnChainWith: (err: unknown) => (landedError = err),
+		/** Another sender's step lands first: the counter moves before this transaction is processed. */
+		loseNextSendToAnotherSender: () => {
+			const land = calls.recordStep;
+			const landBatch = calls.recordBatch;
+			calls.recordStep = async (client, step) => {
+				state.counter += 1n;
+				return land(client, step);
+			};
+			calls.recordBatch = async (client, batch) => {
+				state.counter += 1n;
+				return landBatch(client, batch);
+			};
+		},
 		empty: (account: string) => balances.set(account, 0n)
 	};
 }
@@ -180,6 +193,20 @@ describe('recordStep', () => {
 		const chain = fakeChain();
 		chain.failOnChainWith(PROGRAM_ERROR(6000));
 		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 12, DECISION_HASH))).toBe('AgentKilled');
+	});
+
+	test('reports a step whose counter another sender took first as CounterMismatch', async () => {
+		const chain = fakeChain();
+		chain.loseNextSendToAnotherSender();
+		chain.failOnChainWith(PROGRAM_ERROR(GUARD_ERROR_CODES.VerifyFailed));
+		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 12, DECISION_HASH))).toBe('CounterMismatch');
+	});
+
+	test('reports a batch whose counter another sender took first as CounterMismatch', async () => {
+		const chain = fakeChain();
+		chain.loseNextSendToAnotherSender();
+		chain.failOnChainWith(PROGRAM_ERROR(GUARD_ERROR_CODES.VerifyFailed));
+		expect(await guardErrorCode(guardOver(chain).recordBatch(AGENT_ID, 12, ROOT, 5))).toBe('CounterMismatch');
 	});
 
 	test('reports any other on-chain failure as a plain error naming the program error', async () => {

@@ -86,6 +86,17 @@ describe('createGuardedAgent step', () => {
 		expect(ran).toBe(false);
 	});
 
+	it('takes concurrent steps one after another, at consecutive counters', async () => {
+		const { agent } = agentWith();
+
+		const steps = await Promise.all([agent.step('a', () => 'first'), agent.step('b', () => 'second')]);
+
+		expect(steps.map((step) => [step.counter, step.result])).toEqual([
+			[1, 'first'],
+			[2, 'second']
+		]);
+	});
+
 	it('keeps the step recorded when the action throws', async () => {
 		const { agent } = agentWith();
 

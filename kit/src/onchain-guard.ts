@@ -71,7 +71,7 @@ export class OnchainGuard implements AgentGuard {
 			signature
 		};
 		const result = await this.chain.recordStep(this.deps.client, step);
-		assertLanded(result, 'record_step');
+		await this.assertStepLanded(agentId, counter, result, 'record_step');
 		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature: result.signature, decisionHash });
 		return { ...toGuardAccount(state), counter, lastDecision: decisionHash };
 	}
@@ -83,7 +83,7 @@ export class OnchainGuard implements AgentGuard {
 		const signature = signGuardMessage(batchMessage(identity.agent, BigInt(counter), rootBytes, size), identity.mldsaSecretKey);
 		const batch = { feePayer: this.deps.feePayer, agent: identity.agent, agentKey: identity.agentKey, root: rootBytes, size, signature };
 		const result = await this.chain.recordBatch(this.deps.client, batch);
-		assertLanded(result, 'record_batch');
+		await this.assertStepLanded(agentId, counter, result, 'record_batch');
 		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature: result.signature, root, size });
 		return { ...toGuardAccount(state), counter, lastDecision: root };
 	}
@@ -125,6 +125,20 @@ export class OnchainGuard implements AgentGuard {
 		}
 		await this.assertCanPay(this.deps.feePayer, `step ${counter} of agent ${agentId}`);
 		return state;
+	}
+
+	/**
+	 * The program has no counter error: a step signed for a counter another sender took first fails its signature check
+	 * (VerifyFailed). Re-reading the agent tells that race apart from a bad signature.
+	 */
+	private async assertStepLanded(agentId: string, counter: number, result: SendResult, instruction: string): Promise<void> {
+		if (customErrorCode(result.err) === GUARD_ERROR_CODES.VerifyFailed) {
+			const { counter: current } = await this.readState(agentId);
+			if (current >= BigInt(counter)) {
+				throw new GuardError('CounterMismatch', `agent ${agentId} reached step ${current} before step ${counter} landed`);
+			}
+		}
+		assertLanded(result, instruction);
 	}
 
 	private async assertCanPay(payer: TransactionSigner, transaction: string): Promise<void> {
