@@ -24,9 +24,10 @@ export const AGENT_KEY_ACCOUNT_SIZE = 20_552n;
 /** 8 B Anchor discriminator + 20,544 B prepared ML-DSA-44 key (OwnerKey in state.rs). */
 export const OWNER_KEY_ACCOUNT_SIZE = 20_552n;
 export const SYSTEM_PROGRAM_ADDRESS = address('11111111111111111111111111111111');
+const SYSTEM_PROGRAM_ACCOUNT = { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY };
 const AGENT_SEED = new TextEncoder().encode('agent');
 const OWNER_SEED = new TextEncoder().encode('owner');
-const DISCRIMINATOR_LENGTH = 8;
+export const DISCRIMINATOR_LENGTH = 8;
 
 export function anchorDiscriminator(namespace: 'global' | 'account' | 'event', name: string): Uint8Array {
 	return new Uint8Array(createHash('sha256').update(`${namespace}:${name}`).digest().subarray(0, DISCRIMINATOR_LENGTH));
@@ -103,10 +104,10 @@ export function registerOwnerInstruction(input: {
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.owner.address, role: AccountRole.WRITABLE_SIGNER, signer: input.owner },
+			signerAccount(input.owner, AccountRole.WRITABLE_SIGNER),
 			{ address: input.ownerKey, role: AccountRole.WRITABLE },
 			{ address: input.ownerRecord, role: AccountRole.WRITABLE },
-			{ address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY }
+			SYSTEM_PROGRAM_ACCOUNT
 		],
 		data: concatBytes(DISCRIMINATORS.registerOwner, borshBytes(input.publicKey))
 	};
@@ -141,10 +142,10 @@ export function registerAgentInstruction(input: {
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.owner.address, role: AccountRole.WRITABLE_SIGNER, signer: input.owner },
+			signerAccount(input.owner, AccountRole.WRITABLE_SIGNER),
 			{ address: input.agentKey, role: AccountRole.WRITABLE },
 			{ address: input.agent, role: AccountRole.WRITABLE },
-			{ address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY }
+			SYSTEM_PROGRAM_ACCOUNT
 		],
 		data: concatBytes(DISCRIMINATORS.registerAgent, borshBytes(input.publicKey))
 	};
@@ -160,8 +161,7 @@ export function recordStepInstruction(input: {
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.agent, role: AccountRole.WRITABLE },
-			{ address: input.agentKey, role: AccountRole.READONLY }
+			...signedStepAccounts(input)
 		],
 		data: concatBytes(DISCRIMINATORS.recordStep, input.decisionHash, borshBytes(input.signature))
 	};
@@ -178,8 +178,7 @@ export function recordBatchInstruction(input: {
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.agent, role: AccountRole.WRITABLE },
-			{ address: input.agentKey, role: AccountRole.READONLY }
+			...signedStepAccounts(input)
 		],
 		data: concatBytes(DISCRIMINATORS.recordBatch, input.root, getU32Encoder().encode(input.size), borshBytes(input.signature))
 	};
@@ -189,7 +188,7 @@ export function killInstruction(input: { programAddress: Address; owner: Transac
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.owner.address, role: AccountRole.READONLY_SIGNER, signer: input.owner },
+			signerAccount(input.owner, AccountRole.READONLY_SIGNER),
 			{ address: input.agent, role: AccountRole.WRITABLE }
 		],
 		data: DISCRIMINATORS.kill
@@ -206,12 +205,23 @@ export function resumeInstruction(input: {
 	return {
 		programAddress: input.programAddress,
 		accounts: [
-			{ address: input.owner.address, role: AccountRole.READONLY_SIGNER, signer: input.owner },
-			{ address: input.agent, role: AccountRole.WRITABLE },
-			{ address: input.agentKey, role: AccountRole.READONLY }
+			signerAccount(input.owner, AccountRole.READONLY_SIGNER),
+			...signedStepAccounts(input)
 		],
 		data: concatBytes(DISCRIMINATORS.resume, borshBytes(input.signature))
 	};
+}
+
+function signerAccount(signer: TransactionSigner, role: AccountRole.READONLY_SIGNER | AccountRole.WRITABLE_SIGNER) {
+	return { address: signer.address, role, signer };
+}
+
+/** The agent's account, whose counter moves, and the key account the agent's ML-DSA-44 signature is checked against. */
+function signedStepAccounts(input: { agent: Address; agentKey: Address }) {
+	return [
+		{ address: input.agent, role: AccountRole.WRITABLE },
+		{ address: input.agentKey, role: AccountRole.READONLY }
+	];
 }
 
 /** Borsh `Vec<u8>`: u32 LE length, then the bytes. */

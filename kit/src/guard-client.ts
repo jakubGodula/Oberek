@@ -15,7 +15,7 @@ import {
 } from './instructions';
 import { parseGuardEvents, type GuardEvent } from './events';
 import { GuardError } from './guard';
-import { sendV1, type SendResult, type SolanaConnection } from './transaction';
+import { fetchConfirmedTransaction, sendV1, type SendResult, type SolanaConnection } from './transaction';
 
 /** Preparing a 1,312 B key (agent or owner) costs ~1.09M CU. */
 const REGISTER_COMPUTE_UNIT_LIMIT = 1_400_000;
@@ -59,9 +59,7 @@ export async function fetchGuardEvents(
 	const signatures = await fetchSuccessfulSignatures(client, account);
 	const events: GuardEvent[] = [];
 	for (const [index, signature] of signatures.entries()) {
-		const transaction = await client.connection.rpc
-			.getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
-			.send();
+		const transaction = await fetchConfirmedTransaction(client.connection.rpc, signature);
 		const logs = transaction?.meta?.logMessages;
 		if (!logs) throw new Error(`transaction ${signature} or its logs are not available from this RPC (pruned?)`);
 		events.push(...parseGuardEvents(logs, client.programAddress));

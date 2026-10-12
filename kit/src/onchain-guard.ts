@@ -37,6 +37,21 @@ export interface OnchainGuardDeps {
 	chain?: ChainCalls;
 }
 
+/** What every signed step sends, whatever it records. */
+interface SignedStep {
+	feePayer: TransactionSigner;
+	agent: Address;
+	agentKey: Address;
+	signature: Uint8Array;
+}
+
+/** A step or a batch: the instruction's name for errors, the message the agent signs and how to send it. */
+interface SignedStepRequest {
+	instruction: string;
+	message(agent: Address): Uint8Array;
+	send(signed: SignedStep): Promise<SendResult>;
+}
+
 const GUARD_ERROR_BY_PROGRAM_CODE = new Map<number, GuardErrorCode>([
 	[GUARD_ERROR_CODES.AgentKilled, 'AgentKilled'],
 	[GUARD_ERROR_CODES.AgentPending, 'AgentPending'],
@@ -60,32 +75,24 @@ export class OnchainGuard implements AgentGuard {
 	}
 
 	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
-		const identity = this.deps.identityOf(agentId);
-		const state = await this.readStateForStep(agentId, counter);
-		const hash = new Uint8Array(getBase16Encoder().encode(decisionHash));
-		const signature = signGuardMessage(stepMessage(identity.agent, BigInt(counter), hash), identity.mldsaSecretKey);
-		const step = {
-			feePayer: this.deps.feePayer,
-			agent: identity.agent,
-			agentKey: identity.agentKey,
-			decisionHash: hash,
-			signature
-		};
-		const result = await this.chain.recordStep(this.deps.client, step);
-		await this.assertStepLanded(agentId, counter, result, 'record_step');
-		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature: result.signature, decisionHash });
+		const hash = hexToBytes(decisionHash);
+		const { state, signature } = await this.sendSignedStep(agentId, counter, {
+			instruction: 'record_step',
+			message: (agent) => stepMessage(agent, BigInt(counter), hash),
+			send: (signed) => this.chain.recordStep(this.deps.client, { ...signed, decisionHash: hash })
+		});
+		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature, decisionHash });
 		return { ...toGuardAccount(state), counter, lastDecision: decisionHash };
 	}
 
 	async recordBatch(agentId: string, counter: number, root: string, size: number): Promise<GuardAccount> {
-		const identity = this.deps.identityOf(agentId);
-		const state = await this.readStateForStep(agentId, counter);
-		const rootBytes = new Uint8Array(getBase16Encoder().encode(root));
-		const signature = signGuardMessage(batchMessage(identity.agent, BigInt(counter), rootBytes, size), identity.mldsaSecretKey);
-		const batch = { feePayer: this.deps.feePayer, agent: identity.agent, agentKey: identity.agentKey, root: rootBytes, size, signature };
-		const result = await this.chain.recordBatch(this.deps.client, batch);
-		await this.assertStepLanded(agentId, counter, result, 'record_batch');
-		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature: result.signature, root, size });
+		const rootBytes = hexToBytes(root);
+		const { state, signature } = await this.sendSignedStep(agentId, counter, {
+			instruction: 'record_batch',
+			message: (agent) => batchMessage(agent, BigInt(counter), rootBytes, size),
+			send: (signed) => this.chain.recordBatch(this.deps.client, { ...signed, root: rootBytes, size })
+		});
+		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature, root, size });
 		return { ...toGuardAccount(state), counter, lastDecision: root };
 	}
 
@@ -114,6 +121,16 @@ export class OnchainGuard implements AgentGuard {
 		const counter = Number(state.counter + 1n);
 		this.deps.onLanded?.({ agentId, event: 'AgentResumed', counter, signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Active', counter };
+	}
+
+	/** Checks the agent may take step `counter`, signs the step's message with the agent's key and sends it. */
+	private async sendSignedStep(agentId: string, counter: number, step: SignedStepRequest) {
+		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
+		const state = await this.readStateForStep(agentId, counter);
+		const signature = signGuardMessage(step.message(agent), mldsaSecretKey);
+		const result = await step.send({ feePayer: this.deps.feePayer, agent, agentKey, signature });
+		await this.assertStepLanded(agentId, counter, result, step.instruction);
+		return { state, signature: result.signature };
 	}
 
 	/** The agent's state when it may take step `counter`: active, `counter` next, and the fee payer funded. */
@@ -166,6 +183,10 @@ export class OnchainGuard implements AgentGuard {
 		}
 		return { state, owner };
 	}
+}
+
+function hexToBytes(hex: string): Uint8Array {
+	return new Uint8Array(getBase16Encoder().encode(hex));
 }
 
 function toGuardAccount(state: AgentState): GuardAccount {
