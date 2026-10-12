@@ -76,6 +76,14 @@ export class Fleet {
 		this.addSeal(entry.id, seal);
 	}
 
+	/** The name shown on the page. Local only: the guard account has no name, so this never touches the chain. */
+	rename(agentId: string, name: string): void {
+		const entry = this.get(agentId);
+		if (!entry) throw new Error(`agent ${agentId} is not in the fleet`);
+		if (entry.name === name) return;
+		writeFileSync(join(this.agentDir(agentId), ENTRY_FILE), JSON.stringify({ ...entry, name }, null, 2) + '\n');
+	}
+
 	/** Seals an agent imported before the log was sealed; its plaintext lines stay readable. */
 	addSeal(agentId: string, seal: LogSeal): void {
 		if (!this.get(agentId)) throw new Error(`agent ${agentId} is not in the fleet`);

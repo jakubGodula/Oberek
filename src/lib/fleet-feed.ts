@@ -2,7 +2,7 @@
 // with the owner's kills and resumes between them. Records it cannot read as Sentinel's (e.g. Tick's) show their
 // summary only.
 
-export type Chip = 'HOLD' | 'REBALANCE' | 'AWAITING_APPROVAL' | 'PROPOSAL' | 'APPROVED' | 'REJECTED' | 'DECISION';
+export type Chip = 'HOLD' | 'REBALANCE' | 'FOR' | 'AGAINST' | 'AWAITING_APPROVAL' | 'PROPOSAL' | 'APPROVED' | 'REJECTED' | 'DECISION';
 
 export interface FeedEntry {
 	record: {
@@ -139,7 +139,8 @@ function chipOf(record: FeedEntry['record'], pendingCounter: number | null): Chi
 	if (record.kind === 'approval') return record.decision.verdict === 'accept' ? 'APPROVED' : 'REJECTED';
 	if (record.requiresApproval) return record.counter === pendingCounter ? 'AWAITING_APPROVAL' : 'PROPOSAL';
 	const { action } = record.decision;
-	return action === 'HOLD' || action === 'REBALANCE' ? action : 'DECISION';
+	if (action === 'HOLD' || action === 'REBALANCE' || action === 'FOR' || action === 'AGAINST') return action;
+	return 'DECISION';
 }
 
 function proposalDecision(verdict: Record<string, unknown>): unknown {

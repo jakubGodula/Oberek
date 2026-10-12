@@ -8,7 +8,8 @@ owner kill and resume the agent.
 - `src/`: the SvelteKit server and operator page. It runs the fleet: signs each agent's steps with its key and sends
   them to the program, and shows the agents with their decisions, approval of large steps, Kill-Switch and resume.
 - `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys:
-  `agents/tick` (the simplest one) and `agents/sentinel` (rebalances a virtual SOL/USDC treasury from the live price).
+  `agents/tick` (the simplest one), `agents/sentinel` (rebalances a virtual SOL/USDC treasury from the live price)
+  and `agents/jito` (JitoSOL Steward; a quiet cycle stays on the page, a simulated proposal is a vote).
 
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
@@ -62,18 +63,20 @@ bun run dev                      # http://localhost:5173
 
 ```sh
 bun install
-bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
-bun scripts/demo.ts              # server + Sentinel + Tick, + the Telegram bot once .env has its token
+bun scripts/setup.ts             # .env, payer wallet, its SOL, the agents; safe to re-run
+bun scripts/demo.ts              # server + Sentinel + Tick + JitoSOL steward, + the Telegram bot once .env has its token
 ```
 
 The two Telegram values can't be generated: the token comes from @BotFather and the chat id from your bot's answer to
 `/start`. See [The owner on Telegram](#the-owner-on-telegram); setup ends with a hint on which one is still missing.
 
-`setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
+`setup.ts` does the steps below for you, skipping each one already done. A machine that already has Sentinel and Tick
+keeps them: they are not registered again, and their keys stay where they are. The name on the page is updated to the one in this script. Only an agent that is not in the fleet
+yet, such as `jito-01`, is registered, which needs about 0.2 SOL. It creates `.env` from `.env.example` and the
 payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
 first; that is often rate-limited, so it may print the address and wait until you send SOL from
 https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it creates the owner's ML-KEM-768
-key (`OWNER_MLKEM_FILE`), registers `sentinel-01` and `tick-01` (agent files in `.devnet/agents/`), imports them into
+key (`OWNER_MLKEM_FILE`), registers `sentinel-01`, `tick-01` and `jito-01` (agent files in `.devnet/agents/`), imports them into
 the fleet and seals their decision logs.
 
 Something broke? Each run of `setup.ts` and `demo.ts` writes its whole output, children included, to
@@ -95,7 +98,7 @@ requests per 8 hours; or a transfer from any devnet wallet): each registration l
 ```sh
 bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json
 bun scripts/fleet.ts owner-key   # once: the owner's ML-KEM-768 key, .devnet/owner-mlkem.json
-bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One"
+bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Oberek Tick One — on-chain heartbeat"
 bun run dev                      # tick-01 appears on the page, read from devnet
 bun agents/tick                  # one step every 30 s; see agents/tick/README.md
 ```
@@ -111,14 +114,30 @@ agent file, next to Tick's:
 
 ```sh
 AGENT_FILE=.devnet/agents/sentinel-01.json bun scripts/agent.ts register
-bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Aegis Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM
+bun scripts/fleet.ts import .devnet/agents/sentinel-01.json --as sentinel-01 --name "Oberek Sentinel Alpha — Treasury Rebalancer" --risk MEDIUM
 bun agents/sentinel              # one decision every 30 s
 ```
 
 For a demo, start it with `SENTINEL_SCHEDULE_MIN=2 SENTINEL_INTERVAL_MS=10000 bun agents/sentinel` (a rebalance about
-every 2 minutes) and press **Symuluj szok ceny (−3%)** on its card: the next decision is made at the price moved by −3%,
+every 2 minutes) and press **Simulate a price shock (−3%)** in the **Simulate** panel: the next decision is made at the price moved by −3%,
 is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. Details:
 [agents/sentinel/README.md](agents/sentinel/README.md).
+
+### Third agent: JitoSOL steward
+
+The steward speaks for JitoSOL holders who also hold JTO. Every 30 seconds, with nothing armed, the page shows
+`No new proposals detected` and counts the repeats; that cycle sends no transaction. Arm an upcoming proposal from the
+**Simulate** panel: one the steward reads as positive for JitoSOL holders is recorded as `FOR`, one it reads as negative
+as `AGAINST`. The answer is simulated in the agent: it does not call a model, and it does not vote on Jito's Realms.
+It needs the setup above and the server running.
+
+```sh
+AGENT_FILE=.devnet/agents/jito-01.json bun scripts/agent.ts register
+bun scripts/fleet.ts import .devnet/agents/jito-01.json --as jito-01 --name "JitoSOL Steward" --risk MEDIUM
+bun agents/jito                 # a quiet check every 30 s; a vote when a proposal is armed
+```
+
+Details: [agents/jito/README.md](agents/jito/README.md).
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 
@@ -156,15 +175,15 @@ bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_
 
 ### The whole demo in one command
 
-With both agents set up as above:
+With the agents set up as above:
 
 ```sh
-bun scripts/demo.ts              # server, then Sentinel at demo pace, Tick and the Telegram bot, in one terminal
+bun scripts/demo.ts              # server, then Sentinel at demo pace, Tick, the JitoSOL steward and the Telegram bot, in one terminal
 ```
 
 The Telegram bot starts only when `.env` has `TELEGRAM_BOT_TOKEN` (see [The owner on Telegram](#the-owner-on-telegram));
-without it the demo says so and runs the rest. Each output line is prefixed with `[server]`, `[sentinel]`, `[tick]` or
-`[telegram]`. Ctrl+C stops it gracefully: the agents finish
+without it the demo says so and runs the rest. Each output line is prefixed with `[server]`, `[sentinel]`, `[tick]`,
+`[jito]` or `[telegram]`. Ctrl+C stops it gracefully: the agents finish
 the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
 same way. Port 5173 must be free.
 

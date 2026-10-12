@@ -1,4 +1,4 @@
-// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the two agents (registered on
+// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the agents (registered on
 // chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
@@ -8,8 +8,9 @@ import { join } from 'path';
 import { createSolanaRpc, devnet, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
+import { loadAgentFile, saveAgentFile } from '../src/lib/server/modules/agent/files';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
-import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
+import { FLEET_DIR, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { runLogged } from './run-log';
 import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
@@ -18,7 +19,8 @@ const ENV_EXAMPLE = '.env.example';
 const AGENTS_DIR = '.devnet/agents';
 const AGENTS = [
 	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
-	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' }
+	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' },
+	{ id: 'jito-01', name: 'JitoSOL Steward', risk: 'MEDIUM' }
 ] as const;
 const FAUCET_URL = 'https://faucet.solana.com';
 const BALANCE_POLL_MS = 10_000;
@@ -104,7 +106,10 @@ async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 }
 
 function setUpAgent(agent: SetupAgent): void {
-	const steps = stepsFor(progressOf(agent));
+	const progress = progressOf(agent);
+	// The page name lives only in the fleet entry. A re-run brings it in line with this script; keys and the account stay.
+	if (progress.imported) alignName(agent);
+	const steps = stepsFor(progress);
 	if (steps.length === 0) {
 		log(`${agent.id} is in the fleet`);
 		return;
@@ -112,15 +117,48 @@ function setUpAgent(agent: SetupAgent): void {
 	for (const step of steps) runStep(agent, step);
 }
 
+function alignName(agent: SetupAgent): void {
+	const fleet = new Fleet(FLEET_DIR);
+	const entry = fleet.get(agent.id);
+	if (!entry || entry.name === agent.name) return;
+	fleet.rename(agent.id, agent.name);
+	log(`${agent.id} renamed to ${agent.name}`);
+}
+
 function runStep(agent: SetupAgent, step: AgentStep): void {
 	if (step === 'register') runBun(['scripts/agent.ts', 'register'], { AGENT_FILE: agentFile(agent) });
 	else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
+	else if (step === 'identify') restoreIdentity(agent);
 	else runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
+}
+
+/** Copies the agent file into the fleet entry. Never overwrites a key file that is already there. */
+function restoreIdentity(agent: SetupAgent): void {
+	const destination = onchainIdentityPath(agent.id);
+	if (existsSync(destination)) {
+		log(`${agent.id} already has its on-chain identity`);
+		return;
+	}
+	const source = agentFile(agent);
+	if (!existsSync(source)) {
+		log(
+			`${agent.id} is in the fleet but ${destination} is missing and ${source} is too, so its key cannot be restored`
+		);
+		process.exit(1);
+	}
+	saveAgentFile(destination, loadAgentFile(source));
+	log(`${agent.id}: on-chain identity restored from ${source}`);
 }
 
 function progressOf(agent: SetupAgent): AgentProgress {
 	const imported = existsSync(join(FLEET_DIR, agent.id));
-	return { registered: existsSync(agentFile(agent)), imported, sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id) };
+	const fleet = new Fleet(FLEET_DIR);
+	return {
+		registered: existsSync(agentFile(agent)),
+		imported,
+		sealed: imported && fleet.isSealed(agent.id),
+		identified: imported && existsSync(onchainIdentityPath(agent.id))
+	};
 }
 
 function agentFile(agent: SetupAgent): string {

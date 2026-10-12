@@ -1,7 +1,8 @@
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
-import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
+import { findFleetRuntime, getFleetRuntime, paceStore, proposalStore, quietStore, shockStore } from '../fleet/app-runtime';
+import { quietSummary } from '../fleet/quiet-store';
 import type { FleetEntry } from '../fleet/fleet';
 import { controlAgent as controlFleetAgent, type ControlAction } from '../fleet/control';
 import { batchSizeOf } from '../fleet/latest-decision';
@@ -31,6 +32,10 @@ export interface AgentStatusRecord {
 export interface FleetDetails {
   pendingProposal: { counter: number; summary: string; decision: Record<string, unknown> } | null;
   shockArmed: boolean;
+  /** The simulated Jito proposal waiting for the agent's next cycle; null when none is armed. */
+  proposalArmed: 'positive' | 'negative' | null;
+  /** Quiet cycles since the last recorded decision; null when the agent has just voted or has not reported one. */
+  quiet: { count: number; at: number } | null;
   /** The kind of the agent's newest logged decision (e.g. "sentinel"); null before its first. */
   lastDecisionKind: string | null;
   /** Decisions waiting in the server's buffer for the next batch. */
@@ -94,15 +99,18 @@ const NO_DECISION_YET = 'No decisions yet: the agent has not run';
 /** One unreadable agent shows as UNAVAILABLE instead of failing the whole list. */
 async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Promise<AgentStatusRecord> {
   const last = runtime.fleet.lastDecision(entry.id);
+  const quiet = quietStore.get(entry.id);
   const card = {
     id: entry.id,
     name: entry.name,
-    currentTask: last?.record.summary ?? NO_DECISION_YET,
-    lastUpdated: last ? Date.parse(last.record.observedAt) : entry.registeredAt,
+    currentTask: quiet ? quietSummary(quiet.count) : (last?.record.summary ?? NO_DECISION_YET),
+    lastUpdated: quiet?.at ?? (last ? Date.parse(last.record.observedAt) : entry.registeredAt),
     riskLevel: entry.riskLevel
   };
   const fleet = {
     shockArmed: shockStore.isArmed(entry.id),
+    proposalArmed: proposalStore.direction(entry.id),
+    quiet,
     lastDecisionKind: last?.record.kind ?? null,
     queued: runtime.batcher?.queued(entry.id) ?? 0,
     batched: runtime.batcher?.batches(entry.id) ?? false,

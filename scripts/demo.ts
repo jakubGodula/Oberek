@@ -1,4 +1,4 @@
-// The whole demo in one terminal: the server, then Sentinel (at demo pace), Tick and, with TELEGRAM_BOT_TOKEN in .env,
+// The whole demo in one terminal: the server, then Sentinel (at demo pace), Tick, the JitoSOL steward and, with TELEGRAM_BOT_TOKEN in .env,
 // the owner's Telegram bot, their output prefixed by name.
 // Ctrl+C stops it gracefully: the agents finish the step in flight and exit, and only then the server stops.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
@@ -21,7 +21,11 @@ const AGENT_GRACE_MS = 30_000;
 const SERVER_GRACE_MS = 10_000;
 const DEMO_PACE = { SENTINEL_SCHEDULE_MIN: '2', SENTINEL_INTERVAL_MS: '10000' };
 /** The ids the agents run as: their defaults unless .env overrides them. */
-const AGENT_IDS = [process.env.SENTINEL_AGENT_ID ?? 'sentinel-01', process.env.TICK_AGENT_ID ?? 'tick-01'];
+const AGENT_IDS = [
+	process.env.SENTINEL_AGENT_ID ?? 'sentinel-01',
+	process.env.TICK_AGENT_ID ?? 'tick-01',
+	process.env.JITO_AGENT_ID ?? 'jito-01'
+];
 const TICK_ID = AGENT_IDS[1];
 /** Tick at a fast agent's pace when the server batches its decisions (BATCHED_AGENT_IDS in .env, which Bun loads). */
 const BATCHED_TICK_PACE = { TICK_INTERVAL_MS: '1000' };
@@ -54,7 +58,8 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => vo
 if (await serverReady()) {
 	agents.push(
 		start('sentinel', process.execPath, ['agents/sentinel'], DEMO_PACE),
-		start('tick', process.execPath, ['agents/tick'], tickBatched ? BATCHED_TICK_PACE : {})
+		start('tick', process.execPath, ['agents/tick'], tickBatched ? BATCHED_TICK_PACE : {}),
+		start('jito', process.execPath, ['agents/jito'])
 	);
 	if (telegramConfigured) agents.push(start('telegram', process.execPath, ['bot/telegram'], { TELEGRAM_API_URL: SERVER_URL }));
 	log(`demo running at ${SERVER_URL}; Ctrl+C stops it`);
