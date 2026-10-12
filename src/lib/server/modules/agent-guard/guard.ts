@@ -1,4 +1,4 @@
-// The guard as the server sees it: the agent's account that onchain_agent_guard keeps on Solana, and the four things
+// The guard: the agent's account that onchain_agent_guard keeps on Solana, and the four things
 // the program lets anyone do with it. OnchainGuard implements it; tests use an in-memory stand-in.
 
 export type GuardStatus = 'Active' | 'Killed' | 'Pending';
@@ -17,12 +17,12 @@ export interface GuardAccount {
 export const NO_DECISION = '00'.repeat(32);
 
 /** The events the program emits, one per successful transaction. */
-export type GuardEvent = 'StepRecorded' | 'BatchRecorded' | 'AgentKilled' | 'AgentResumed';
+export type GuardEventName = 'StepRecorded' | 'BatchRecorded' | 'AgentKilled' | 'AgentResumed';
 
 /** A guard transaction that landed and succeeded, named by the event it emitted on chain. */
 export interface LandedTransaction {
 	agentId: string;
-	event: GuardEvent;
+	event: GuardEventName;
 	/** The counter the event carries: the step's or the resume's, or the unchanged one of a kill. */
 	counter: number;
 	signature: string;
@@ -57,17 +57,6 @@ export class GuardError extends Error {
 	}
 }
 
-export const HTTP_STATUS_BY_GUARD_ERROR: Record<GuardErrorCode, number> = {
-	AgentNotFound: 404,
-	NotOwner: 403,
-	AgentKilled: 409,
-	AgentPending: 409,
-	AgentNotKilled: 409,
-	AgentNotActive: 409,
-	CounterMismatch: 409,
-	PayerUnfunded: 503
-};
-
 export interface AgentGuard {
 	readAgent(agentId: string): Promise<GuardAccount>;
 	/**
@@ -84,17 +73,4 @@ export interface AgentGuard {
 	kill(agentId: string, owner: string): Promise<GuardAccount>;
 	/** Owner only; the agent must be killed. Uses up one counter value, like the program. */
 	resume(agentId: string, owner: string): Promise<GuardAccount>;
-}
-
-const AGENT_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
-
-/** Agent ids arrive in URLs and become file names; no agent can have an id outside the pattern. */
-export function isAgentId(agentId: string): boolean {
-	return AGENT_ID_PATTERN.test(agentId);
-}
-
-export function assertAgentId(agentId: string): void {
-	if (!isAgentId(agentId)) {
-		throw new GuardError('AgentNotFound', `invalid agent id: ${JSON.stringify(agentId)}`);
-	}
 }
