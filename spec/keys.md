@@ -1,17 +1,18 @@
-# Keys: where each one lives and what it signs
+# Keys: who holds each one and what it signs
 
 The system uses five secrets. Two are post-quantum and three are classical. The agent's decision history rests only on
 the post-quantum ones.
 
-| Key | Algorithm | Lives in | Signs / opens | Survives Q-day |
+| Key | Algorithm | Held by | Signs / opens | Survives Q-day |
 | --- | --- | --- | --- | --- |
-| **Agent key**, one per agent | ML-DSA-44 | secret: server, `.devnet/fleet/<id>/onchain.json`; public: on-chain `AgentKey` account | `record_step`, `record_batch`, `resume` | yes |
-| **Owner wallet** | Ed25519 | server, `FEE_PAYER_KEYPAIR` = `OWNER_KEYPAIR` (one file on devnet) | `register_agent`, `kill`, `resume`; pays every fee; upgrades the program | no |
-| **Owner log key** | ML-KEM-768 | `.devnet/owner-mlkem.json` (`OWNER_MLKEM_FILE`) | its public key seals each agent's log key; its secret key opens them for the audit | yes |
-| **Log data key**, one per agent | AES-256-GCM | `.devnet/fleet/<id>/seal.json` | encrypts every line of `decisions.jsonl` | yes |
-| **Telegram bot token** | not a key pair | `.env`, `TELEGRAM_BOT_TOKEN` | controls the owner's bot | n/a |
+| **Agent key**, one per agent | ML-DSA-44 | secret: the server; public: on-chain `AgentKey` account | `record_step`, `record_batch`, `resume` | yes |
+| **Owner wallet** | Ed25519 | the server (one wallet on devnet) | `register_agent`, `kill`, `resume`; pays every fee; upgrades the program | no |
+| **Owner log key** | ML-KEM-768 | the server | its public key seals each agent's log key; its secret key opens them for the audit | yes |
+| **Log data key**, one per agent | AES-256-GCM | the server | encrypts every line of `decisions.jsonl` | yes |
+| **Telegram bot token** | not a key pair | the bot | controls the owner's bot | n/a |
 
-Agent processes (`agents/`) hold no keys. They send decisions to the server over HTTP, and the server signs.
+Agent processes (`agents/`) hold no keys. They send decisions to the server over HTTP, and the server signs. The files
+each key is kept in are listed at the end, in [Files](#files).
 
 ## Diagram
 
@@ -21,13 +22,13 @@ flowchart LR
         AP["sentinel, tick<br/>POST decision over HTTP"]
     end
 
-    subgraph Server["Server machine: .devnet/ (gitignored)"]
-        MLDSA["Agent key, one per agent<br/>ML-DSA-44 secret<br/>fleet/&lt;id&gt;/onchain.json"]
-        WALLET["Owner wallet<br/>Ed25519<br/>FEE_PAYER_KEYPAIR = OWNER_KEYPAIR"]
-        DATAKEY["Log data key, one per agent<br/>AES-256-GCM<br/>fleet/&lt;id&gt;/seal.json"]
-        KEM["Owner log key<br/>ML-KEM-768 key pair<br/>owner-mlkem.json"]
+    subgraph Server["Server machine"]
+        MLDSA["Agent key, one per agent<br/>ML-DSA-44 secret"]
+        WALLET["Owner wallet<br/>Ed25519"]
+        DATAKEY["Log data key, one per agent<br/>AES-256-GCM"]
+        KEM["Owner log key<br/>ML-KEM-768 key pair"]
         LOG[("decisions.jsonl<br/>sealed log")]
-        TOKEN["Telegram bot token<br/>.env"]
+        TOKEN["Telegram bot token"]
     end
 
     subgraph Chain["Solana devnet"]
@@ -65,10 +66,9 @@ Green is post-quantum, orange is Ed25519, and grey holds no cryptographic key.
 
 ### Agent key: ML-DSA-44, one per agent
 
-- **Created** by `bun scripts/agent.ts register`, which `scripts/setup.ts` runs once per agent. The register file
-  (`.devnet/agents/<id>.json` from setup, `.devnet/agent.json` from the CLI) is then copied by `scripts/fleet.ts import`
-  into `.devnet/fleet/<id>/onchain.json`, which the server reads. Both files hold the secret key, and no other copy
-  exists. Lose both and the agent can never record a step or resume again.
+- **Created** by `bun scripts/agent.ts register`, which `scripts/setup.ts` runs once per agent, and copied into the
+  fleet by `scripts/fleet.ts import`. The register file and the fleet's copy both hold the secret key, and no other
+  copy exists. Lose both and the agent can never record a step or resume again.
 - **Public key** is on-chain in the agent's `AgentKey` account (20,552 B, already in the form the verifier uses). It is
   written once by `register_agent` and read by every signed instruction (decision 002).
 - **Signs** a message the program builds itself: `tag ‖ agent address ‖ next counter ‖ payload`, with FIPS 204 context
@@ -79,9 +79,8 @@ Green is post-quantum, orange is Ed25519, and grey holds no cryptographic key.
 
 ### Owner wallet: Ed25519
 
-- **One file, three roles on devnet.** `.env.example` points both `FEE_PAYER_KEYPAIR` and `OWNER_KEYPAIR` at
-  `.devnet/payer.json`. On the demo machine both point at `spikes/falcon-noble-compat/.devnet/payer.json`
-  (`ftbM4rfE…`), which `onchain/deploy-devnet.sh` also deploys with, so it is the program's **upgrade authority** too.
+- **One wallet, three roles on devnet.** The fee payer and the owner are the same key pair, and the program was
+  deployed with it too, so it is also the program's **upgrade authority**.
 - **As fee payer** it signs every transaction so the transaction can pay its fee. The program does not check who paid,
   so this signature authorizes nothing.
 - **As owner** it signs `register_agent`, which pays the rent; the owner's address is also part of the Agent PDA seed.
@@ -97,13 +96,13 @@ Green is post-quantum, orange is Ed25519, and grey holds no cryptographic key.
   the capsule's shared secret into the agent's log data key (decision 006).
 - **Secret key** is used only by `scripts/audit.ts`, to unwrap each capsule and open the log without trusting the
   server's copy of the data key. The server never reads it while running, so it could be moved off the server after
-  setup. On devnet it stays in `.devnet/`.
+  setup. On devnet it stays on the server.
 - **No backup means no audit.** A wrong key does not raise an error: every sealed line just fails to open, and the audit
   reports each one as `on-chain, but not in the log`.
 
 ### Log data key: AES-256-GCM, one per agent
 
-- `seal.json` holds both the capsule (`kemCiphertext`) and the derived key (`dataKey`). The server reads `dataKey`
+- The agent's seal file holds both the capsule (`kemCiphertext`) and the derived key (`dataKey`). The server reads `dataKey`
   because it must read its own log: the page, Sentinel's restart and approvals all depend on that.
 - Each log line is encrypted with a random nonce, and the step counter is bound in as additional authenticated data. It
   protects a copy of `decisions.jsonl` on its own, but not a copy of the whole agent directory, and not a taken-over
@@ -120,7 +119,7 @@ owner wallet. That local API has no authentication of its own (decision 008, "Cz
 - **Key-account keypair** (Ed25519): `register` generates it, uses it to sign the `create_account` for the 20,552 B
   `AgentKey` account (a program cannot allocate more than 10 KiB through CPI), and then discards it. Only its address
   is kept, as `agentKey`.
-- **Program keypair** (`onchain/.devnet/program-keypair.json`, Ed25519): it fixes the program address
+- **Program keypair** (Ed25519): it fixes the program address
   `BL6Fjh4p…` and signed the first deploy. Upgrades are signed by the upgrade authority, not by this keypair.
 
 ## Who must sign each instruction
@@ -136,6 +135,9 @@ owner wallet. That local API has no authentication of its own (decision 008, "Cz
 
 ## If every Ed25519 key were broken
 
+This assumes the program is immutable, as decision 002 requires of the version shown as quantum-safe. The devnet deploy
+is still upgradeable by the owner wallet for development; that authority is removed in the immutable deploy.
+
 A quantum attacker who can forge any Ed25519 signature:
 
 - **Cannot** forge, reorder or replay a step, a batch or a resume, because each one needs the agent's ML-DSA-44
@@ -144,8 +146,21 @@ A quantum attacker who can forge any Ed25519 signature:
 - **Can** `kill` an agent. That is deliberate: an attacker can stop an agent but cannot resume it.
 - **Can** `register_agent` new agents under the owner's address. Existing agents are not affected. The fix is an
   owner ML-DSA-44 key (decision 004, next steps).
-- **Can upgrade the program** while it is upgradeable, and replace the verifier. This is the largest gap on devnet:
-  the upgrade authority is the same wallet that pays fees on the server. Decision 002 closes it by deploying the
-  version shown as quantum-safe as immutable.
 
 The rationale, and why there is no DMS seed proof, is in [decision 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
+
+## Files
+
+Paths are relative to the repo root. `.devnet/` and `.env` are gitignored.
+
+| Key | File | Setting in `.env` |
+| --- | --- | --- |
+| Agent key | `.devnet/fleet/<id>/onchain.json`, read by the server; the register file `.devnet/agents/<id>.json` (setup) or `.devnet/agent.json` (CLI) | |
+| Owner wallet | `.devnet/payer.json` by default | `FEE_PAYER_KEYPAIR`, `OWNER_KEYPAIR` |
+| Owner log key | `.devnet/owner-mlkem.json` | `OWNER_MLKEM_FILE` |
+| Log data key | `.devnet/fleet/<id>/seal.json` | |
+| Telegram bot token | `.env` | `TELEGRAM_BOT_TOKEN` |
+| Program keypair | `onchain/.devnet/program-keypair.json` | |
+
+On the demo machine both wallet settings point at `spikes/falcon-noble-compat/.devnet/payer.json` (`ftbM4rfE…`), the
+wallet `onchain/deploy-devnet.sh` deployed with.
