@@ -1,4 +1,4 @@
-# SolanaHackaton01
+# Oberek
 
 AI agents whose every step is guarded on Solana with a post-quantum signature. The `onchain_agent_guard` program
 holds each agent's ML-DSA-44 public key, records a step only with a valid ML-DSA-44 signature over it, and lets the
