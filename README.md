@@ -36,6 +36,8 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
 
 Why, and what is still open: [spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md](spec/decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 
+Which key lives where and what it signs, with a diagram: [spec/keys.md](spec/keys.md).
+
 ## Batched agents: many decisions in one transaction
 
 Agents listed in `BATCHED_AGENT_IDS` (`.env`) get `202` for each decision. The server buffers them and every
