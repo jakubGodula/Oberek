@@ -22,13 +22,14 @@ export async function recordDecision(
 	runtime: FleetRuntime,
 	agentId: string,
 	account: GuardAccount,
-	submission: DecisionSubmission
+	submission: DecisionSubmission,
+	observedAt = runtime.now().toISOString()
 ): Promise<DecisionLogEntry> {
 	const record: DecisionRecord = {
 		agent: agentId,
 		counter: account.counter + 1,
 		...submission,
-		observedAt: runtime.now().toISOString()
+		observedAt
 	};
 	const decisionHash = hashDecisionRecord(record);
 	// Before anything goes on-chain: a step whose record cannot be logged could never be backed.
@@ -53,7 +54,8 @@ export interface QueuedDecision {
 }
 
 /**
- * Records the buffered decisions as the agent's next step: one signature over their Merkle root. Logs each record with
+ * Records the buffered decisions as the agent's next step: one signature over their Merkle root (a lone decision goes
+ * as a single step). Logs each record with
  * its proof, so anyone can check a single decision against the root on-chain without the rest of the batch.
  */
 export async function flushBatch(
@@ -66,6 +68,11 @@ export async function flushBatch(
 	// A batch landing after a proposal would bury it: the agent would go on without the owner's verdict.
 	if (proposalAwaiting(runtime.fleet, agentId, account)) {
 		throw new AwaitingApprovalError(`agent ${agentId} is waiting for the owner's verdict; batch of ${queued.length} dropped`);
+	}
+	// A tree over one decision adds nothing: it goes as a single step, as without batching.
+	if (queued.length === 1) {
+		const [{ submission, observedAt }] = queued;
+		return [await recordDecision(runtime, agentId, account, submission, observedAt)];
 	}
 	runtime.fleet.assertSealed(agentId);
 	const counter = account.counter + 1;

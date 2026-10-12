@@ -167,39 +167,39 @@ describe('recordStep', () => {
 describe('kill', () => {
 	test("sends kill signed with the server's owner key", async () => {
 		const chain = fakeChain();
-		expect((await guardOver(chain).kill(AGENT_ID, OWNER)).status).toBe('Killed');
+		expect((await guardOver(chain).kill(AGENT_ID)).status).toBe('Killed');
 		expect(chain.sent[0]).toMatchObject({ action: 'kill', input: { agent: AGENT } });
 		expect((chain.sent[0].input.owner as TransactionSigner).address).toBe(OWNER);
 	});
 
 	test('reports the landed kill with the unchanged counter', async () => {
 		const landed: LandedTransaction[] = [];
-		await guardOver(fakeChain(), signer(OWNER), landed).kill(AGENT_ID, OWNER);
+		await guardOver(fakeChain(), signer(OWNER), landed).kill(AGENT_ID);
 		expect(landed).toEqual([{ agentId: AGENT_ID, event: 'AgentKilled', counter: 11, signature: 'tx-signature' }]);
 	});
 
 	test('refuses without sending when the agent is already killed', async () => {
 		const chain = fakeChain({ status: 'Killed' });
-		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID, OWNER))).toBe('AgentNotActive');
+		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID))).toBe('AgentNotActive');
 		expect(chain.sent).toEqual([]);
 	});
 
 	test('refuses without sending when the owner cannot pay for the kill', async () => {
 		const chain = fakeChain();
 		chain.empty(OWNER);
-		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID, OWNER))).toBe('PayerUnfunded');
+		expect(await guardErrorCode(guardOver(chain).kill(AGENT_ID))).toBe('PayerUnfunded');
 		expect(chain.sent).toEqual([]);
 	});
 
 	test('does not need the fee payer, which pays only for steps', async () => {
 		const chain = fakeChain();
 		chain.empty(FEE_PAYER_ADDRESS);
-		expect((await guardOver(chain).kill(AGENT_ID, OWNER)).status).toBe('Killed');
+		expect((await guardOver(chain).kill(AGENT_ID)).status).toBe('Killed');
 	});
 
 	test("refuses without sending when the server's key does not own the agent", async () => {
 		const chain = fakeChain();
-		expect(await guardErrorCode(guardOver(chain, signer(STRANGER)).kill(AGENT_ID, OWNER))).toBe('NotOwner');
+		expect(await guardErrorCode(guardOver(chain, signer(STRANGER)).kill(AGENT_ID))).toBe('NotOwner');
 		expect(chain.sent).toEqual([]);
 	});
 });
@@ -207,7 +207,7 @@ describe('kill', () => {
 describe('resume', () => {
 	test("signs the resume for the next counter with the agent's key and sends it with the owner's key", async () => {
 		const chain = fakeChain({ status: 'Killed' });
-		expect(await guardOver(chain).resume(AGENT_ID, OWNER)).toMatchObject({ status: 'Active', counter: 12 });
+		expect(await guardOver(chain).resume(AGENT_ID)).toMatchObject({ status: 'Active', counter: 12 });
 
 		const { action, input } = chain.sent[0];
 		expect(action).toBe('resume');
@@ -218,20 +218,20 @@ describe('resume', () => {
 
 	test('reports the landed resume with the counter it used up', async () => {
 		const landed: LandedTransaction[] = [];
-		await guardOver(fakeChain({ status: 'Killed' }), signer(OWNER), landed).resume(AGENT_ID, OWNER);
+		await guardOver(fakeChain({ status: 'Killed' }), signer(OWNER), landed).resume(AGENT_ID);
 		expect(landed).toEqual([{ agentId: AGENT_ID, event: 'AgentResumed', counter: 12, signature: 'tx-signature' }]);
 	});
 
 	test('refuses without sending when the owner cannot pay for the resume', async () => {
 		const chain = fakeChain({ status: 'Killed' });
 		chain.empty(OWNER);
-		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID, OWNER))).toBe('PayerUnfunded');
+		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID))).toBe('PayerUnfunded');
 		expect(chain.sent).toEqual([]);
 	});
 
 	test('refuses without signing or sending while the agent is active', async () => {
 		const chain = fakeChain();
-		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID, OWNER))).toBe('AgentNotKilled');
+		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID))).toBe('AgentNotKilled');
 		expect(chain.sent).toEqual([]);
 	});
 });

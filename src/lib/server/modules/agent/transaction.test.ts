@@ -23,7 +23,7 @@ function transportAnswering(answers: unknown[]) {
 describe('withRateLimitRetry', () => {
 	it('retries a request the RPC rate-limited', async () => {
 		const { transport, calls } = transportAnswering([httpError(429), httpError(429), RESPONSE]);
-		expect(await withRateLimitRetry(transport, NO_WAIT_MS)(REQUEST)).toBe(RESPONSE);
+		expect(await withRateLimitRetry(transport, NO_WAIT_MS)<typeof RESPONSE>(REQUEST)).toBe(RESPONSE);
 		expect(calls.count).toBe(3);
 	});
 

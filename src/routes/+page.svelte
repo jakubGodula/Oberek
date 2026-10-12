@@ -6,6 +6,7 @@
   } from 'lucide-svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
+  import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
   import { acceptsShock, decisionHashLabel, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
   let { data } = $props();
@@ -115,6 +116,15 @@
       `/api/agents/${selectedAgent.id}/shock`,
       { pct: SHOCK_PCT },
       'Price shock armed: the agent applies it in its next cycle.'
+    );
+  }
+
+  async function setPace(intervalMs: number) {
+    if (!selectedAgent) return;
+    await postAndReport(
+      `/api/agents/${selectedAgent.id}/pace`,
+      { intervalMs },
+      `Speed set: ${describePace(intervalMs)}, from the agent's next tick.`
     );
   }
 
@@ -411,6 +421,45 @@
                 <Play class="w-4 h-4" />
                 {selectedAgent.fleet.shockArmed ? 'Shock armed, applied in the next cycle' : 'Simulate a price shock (−3%)'}
               </button>
+            {/if}
+            {#if selectedAgent.fleet && acceptsPace(selectedAgent.fleet.lastDecisionKind)}
+              {@const steps = paceStepsFor(selectedAgent.fleet.batched)}
+              {@const paceMs = selectedAgent.fleet.paceMs}
+              <div class="mt-3 px-4 py-3 rounded-xl border border-violet-500/30 bg-violet-950/20">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[10px] font-semibold text-violet-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Zap class="w-3 h-3" /> Speed wheel
+                  </span>
+                  <span class="text-[11px] font-mono text-white">{paceMs ? describePace(paceMs) : "agent's own pace"}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={steps.length - 1}
+                  step="1"
+                  value={paceMs && steps.includes(paceMs) ? steps.indexOf(paceMs) : steps.length - 1}
+                  disabled={isSimulating}
+                  onchange={(event) => setPace(steps[Number(event.currentTarget.value)])}
+                  class="w-full accent-violet-400 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <!-- One notch per step the slider snaps to; px-1.5 lines them up with the thumb's travel. -->
+                <div class="flex justify-between px-1.5 mt-0.5">
+                  {#each steps as step (step)}
+                    <div class="flex flex-col items-center w-0">
+                      <span class="w-px h-1.5 {step === paceMs ? 'bg-violet-300' : 'bg-slate-500'}"></span>
+                      <span class="mt-0.5 text-[9px] font-mono whitespace-nowrap {step === paceMs ? 'text-violet-200 font-bold' : 'text-slate-500'}">
+                        {paceLabel(step)}
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+                {#if !selectedAgent.fleet.batched}
+                  <p class="text-[10px] text-slate-500 mt-1.5">
+                    Without batching every tick is its own transaction and the server allows one per 10 s; add the agent
+                    to <code class="text-violet-400">BATCHED_AGENT_IDS</code> to go faster.
+                  </p>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>

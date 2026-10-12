@@ -15,7 +15,7 @@ import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { decisionHashLabel } from '../../../fleet-feed';
 import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
-import { findFleetRuntime, getFleetRuntime, shockStore } from '../fleet/app-runtime';
+import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
 import { batchSizeOf } from '../fleet/latest-decision';
 import type { FleetRuntime } from '../fleet/submit-decision';
@@ -49,6 +49,10 @@ export interface FleetDetails {
   lastDecisionKind: string | null;
   /** Decisions waiting in the server's buffer for the next batch. */
   queued: number;
+  /** Its decisions go on-chain in batches (BATCHED_AGENT_IDS). */
+  batched: boolean;
+  /** The pause between ticks picked on the speed wheel; null while the agent keeps its own. */
+  paceMs: number | null;
 }
 
 function genPqcHash(): string {
@@ -114,7 +118,9 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
   const fleet = {
     shockArmed: shockStore.isArmed(entry.id),
     lastDecisionKind: last?.record.kind ?? null,
-    queued: runtime.batcher?.queued(entry.id) ?? 0
+    queued: runtime.batcher?.queued(entry.id) ?? 0,
+    batched: runtime.batcher?.batches(entry.id) ?? false,
+    paceMs: paceStore.get(entry.id)
   };
   try {
     const account = await runtime.guard.readAgent(entry.id);
@@ -200,10 +206,12 @@ export class BlinkService {
       links: {
         actions: [
           {
+            type: 'transaction',
             label: '✅ Approve next step',
             href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=approve`
           },
           {
+            type: 'transaction',
             label: '🛑 Emergency Kill-Switch',
             href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=pause`
           }
@@ -243,6 +251,7 @@ export class BlinkService {
 
     return await createPostResponse({
       fields: {
+        type: 'transaction',
         transaction: tx,
         message:
           decision === 'approve'

@@ -22,7 +22,8 @@ export class MemoryGuard implements AgentGuard {
 		const account = await this.readAgent(agentId);
 		if (account.status === 'Killed') throw new GuardError('AgentKilled', 'killed');
 		if (counter !== account.counter + 1) throw new GuardError('CounterMismatch', 'stale counter');
-		return (this.account = { ...account, counter, lastDecision: decisionHash });
+		this.account = { ...account, counter, lastDecision: decisionHash };
+		return this.account;
 	}
 
 	async recordBatch(agentId: string, counter: number, root: string): Promise<GuardAccount> {
@@ -30,11 +31,13 @@ export class MemoryGuard implements AgentGuard {
 	}
 
 	async kill(agentId: string): Promise<GuardAccount> {
-		return (this.account = { ...(await this.readAgent(agentId)), status: 'Killed' });
+		this.account = { ...(await this.readAgent(agentId)), status: 'Killed' };
+		return this.account;
 	}
 
 	async resume(agentId: string): Promise<GuardAccount> {
 		const account = await this.readAgent(agentId);
-		return (this.account = { ...account, status: 'Active', counter: account.counter + 1 });
+		this.account = { ...account, status: 'Active', counter: account.counter + 1 };
+		return this.account;
 	}
 }
