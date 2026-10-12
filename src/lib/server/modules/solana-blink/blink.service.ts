@@ -1,6 +1,9 @@
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
+import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { decisionHashLabel } from '../../../fleet-feed';
+import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
 import { controlAgent as controlFleetAgent, type ControlAction } from '../fleet/control';
