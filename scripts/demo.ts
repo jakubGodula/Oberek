@@ -1,6 +1,7 @@
 // The whole demo in one terminal: the server, then Sentinel (at demo pace), Tick and, with TELEGRAM_BOT_TOKEN in .env,
 // the owner's Telegram bot, their output prefixed by name.
 // Ctrl+C stops it gracefully: the agents finish the step in flight and exit, and only then the server stops.
+// Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, with .env set up as in README): bun scripts/demo.ts
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
@@ -9,6 +10,7 @@ import { batchPolicyFrom } from '../src/lib/server/modules/fleet/decision-batche
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
 import { stopInOrder, type DemoProcess } from './demo-stop';
+import { runLogged } from './run-log';
 
 const PORT = 5173;
 const SERVER_URL = `http://localhost:${PORT}`;
@@ -27,6 +29,7 @@ const tickBatched = batchPolicyFrom(process.env).agentIds.has(TICK_ID);
 /** The owner bot is optional: it runs only when .env has its token from @BotFather. */
 const telegramConfigured = Boolean(process.env.TELEGRAM_BOT_TOKEN);
 
+await runLogged('demo');
 if (!existsSync('.env')) {
 	console.error('No .env in the current directory: run from the repo root after the setup in README.md');
 	process.exit(1);

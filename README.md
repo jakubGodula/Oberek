@@ -74,6 +74,11 @@ https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on
 key (`OWNER_MLKEM_FILE`), registers `sentinel-01` and `tick-01` (agent files in `.devnet/agents/`), imports them into
 the fleet and seals their decision logs.
 
+Something broke? Each run of `setup.ts` and `demo.ts` writes its whole output, children included, to
+`.devnet/logs/<script>-<time>.log` and prints the path at the end. The log is timestamped and redacted: tokens, secrets,
+the Telegram chat id and keys inside RPC URLs are masked, and the header lists the git revision and the `.env.example`
+settings. Glance through it and send it to whoever is helping.
+
 ### A real agent on devnet, by hand
 
 ```sh
