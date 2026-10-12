@@ -67,7 +67,7 @@
   }
 </script>
 
-<div class="fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-3">
+<div class="fixed bottom-5 left-5 z-[60] flex flex-col items-start gap-3">
   {#if open}
     <section class="w-96 rounded-2xl border border-white/[0.08] bg-[#0c101e]/95 shadow-2xl shadow-black/40 backdrop-blur-xl p-4">
       <div class="flex items-start justify-between gap-3 mb-3">
