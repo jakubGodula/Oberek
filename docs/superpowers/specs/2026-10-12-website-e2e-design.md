@@ -33,19 +33,19 @@ change. The tests find elements by role and visible text; no `data-testid` is ad
 
 ### App change: the fleet directory comes from the environment
 
-`FLEET_DIR` (`src/lib/server/modules/fleet/runtime.ts`) becomes a variable declared in `src/env.ts`, defaulting to
-`.devnet/fleet`. The server's runtime and the scripts that import the constant (`setup.ts`, `demo.ts`) read it through
-one function, so the default behaviour is unchanged. This is the only change outside `e2e/` and the setup script.
+The constant `FLEET_DIR` (`src/lib/server/modules/fleet/runtime.ts`) becomes a function `fleetDir()` in a new
+`fleet-dir.ts`: `process.env.FLEET_DIR`, else `.devnet/fleet`. The server's runtime and the scripts (`setup.ts`,
+`fleet.ts`, `audit.ts`, `demo.ts`) call it, so the default behaviour is unchanged. This is the only change outside
+`e2e/` and the setup script.
 
-The test server gets the value from Vite's mode files: `vite dev --mode e2e` loads a committed `.env.e2e` holding only
-`FLEET_DIR=.devnet/e2e-fleet` on top of `.env`. The plan's first task confirms that the server sees it; if SvelteKit's
-`defineEnvVars` ignores mode files, the fallback is the shell environment of the `webServer` command.
+The test server gets the value from the environment of Playwright's `webServer` command. Not from `src/env.ts` or a
+mode file: SvelteKit's declared variables come from the `.env` files in dev, and `.gitignore` excludes `.env.*`.
 
 ### Test fleet setup
 
 `scripts/setup.ts` gets a profile: the default one is today's (three agents, `.devnet/fleet/`, `.devnet/agents/`), and
 `--e2e` sets up `E2E Sentinel` and `E2E Tick` in `.devnet/e2e-fleet/` and `.devnet/e2e-agents/`. Same steps, same
-idempotence, same funding check. One-off cost about 0.3 SOL (key account rent).
+idempotence, same funding check. One-off cost about 0.4 SOL (key account rent plus room for first steps, `LAMPORTS_PER_AGENT` in `scripts/setup-plan.ts`).
 
 ### Harness
 
@@ -103,4 +103,4 @@ change and the setup profile get unit tests next to the existing ones (`bun test
 ## Cost
 
 A run is about a dozen devnet transactions (kill, resume, a few ticks, Sentinel steps, two verdicts): a fraction of a
-cent. The setup is about 0.3 SOL once.
+cent. The setup is about 0.4 SOL once.
