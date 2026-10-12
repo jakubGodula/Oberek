@@ -6,7 +6,7 @@ the post-quantum ones.
 | Key | Algorithm | Held by | Signs / opens | Survives Q-day |
 | --- | --- | --- | --- | --- |
 | **Agent key**, one per agent | ML-DSA-44 | secret: the server; public: on-chain `AgentKey` account | `record_step`, `record_batch`, `resume` | yes |
-| **Owner wallet** | Ed25519 | the server (one wallet on devnet) | `register_agent`, `kill`, `resume`; pays every fee; upgrades the program | no |
+| **Owner wallet** | Ed25519 | the server (one wallet on devnet) | `register_agent`, `kill`; pays every fee; upgrades the program | no |
 | **Owner log key** | ML-KEM-768 | the server | its public key seals each agent's log key; its secret key opens them for the audit | yes |
 | **Log data key**, one per agent | AES-256-GCM | the server | encrypts every line of `decisions.jsonl` | yes |
 | **Telegram bot token** | not a key pair | the bot | controls the owner's bot | n/a |
