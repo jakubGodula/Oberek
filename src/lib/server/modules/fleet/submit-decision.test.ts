@@ -133,6 +133,13 @@ describe('batched agents', () => {
 		expect(fast.batcher!.queued(AGENT)).toBe(0);
 	});
 
+	test('refuses a decision while the agent awaits activation, before queueing it', async () => {
+		const fast = batched({ ...runtime, guard: new MemoryGuard(AGENT, OWNER, 'Pending') });
+		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
+		expect((error as GuardError).code).toBe('AgentPending');
+		expect(fast.batcher!.queued(AGENT)).toBe(0);
+	});
+
 	test('refuses a decision sent while its proposal is still on its way to the chain', async () => {
 		const memory = runtime.guard;
 		const slow: AgentGuard = {
