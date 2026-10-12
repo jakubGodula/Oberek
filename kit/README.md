@@ -2,10 +2,8 @@
 
 Puts an existing agent behind the `onchain_agent_guard` program on Solana. Before each action, the agent's decision is
 signed with its ML-DSA-44 key (post-quantum), and the program verifies that signature on chain and records it. Only
-then does the action run. Once the owner kills the agent, every further step is refused, so no further action runs
-until a resume. A resume needs the owner's wallet and the agent's ML-DSA-44 key; `openGuardedAgent` holds both in the
-agent's process, so for now the kill stops an agent that misbehaves by mistake, not one whose code resumes itself (see
-[What it protects](#what-it-protects-and-what-it-does-not)).
+then does the action run. Once the owner kills the agent, every further step is refused, so no further action runs,
+whatever the agent's code: a resume needs the owner's wallet, and `openGuardedAgent` refuses it as the agent's payer.
 
 The kit talks to the program directly; you do not need the Oberek server. Oberek itself
 (`src/lib/server/modules/fleet/`) runs its agents on this package and is the larger worked example.
@@ -24,7 +22,11 @@ If the activation fails after the registration landed, `AGENT_FILE=.devnet/my-ag
 activate` retries it. **Back up `.devnet/owner-mldsa.json` and the agent file.** The first is registered once per
 wallet; without it the wallet cannot activate new agents. The second holds the agent's only ML-DSA-44 secret key.
 
-Each step then costs ~15,000 lamports, paid by the owner's wallet.
+Then give the agent its own fee payer, not the owner's wallet, and fund it with a small balance:
+
+```sh
+bun scripts/new-keypair.ts .devnet/agent-payer.json   # send it ~0.05 SOL: each step costs ~15,000 lamports
+```
 
 ## Use
 
@@ -33,7 +35,7 @@ import { GuardError, openGuardedAgent } from 'pq-agent-guard';
 
 const agent = await openGuardedAgent({
 	agentFile: '.devnet/my-agent.json',
-	wallet: '.devnet/payer.json' // the owner's keypair: pays fees, signs kill and resume
+	payer: '.devnet/agent-payer.json' // pays the steps; not the owner's wallet
 	// rpcUrl, wsUrl, programId: default to devnet and the devnet deploy
 });
 
@@ -54,7 +56,7 @@ A refused step throws `GuardError`, and the action does not run. `error.code`:
 | `AgentKilled` | the owner killed the agent |
 | `AgentPending` | registered, not activated by the owner yet |
 | `CounterMismatch` | another process recorded a step for this agent first; retry |
-| `PayerUnfunded` | the wallet cannot pay the fee; nothing was sent |
+| `PayerUnfunded` | the payer (or, for kill and resume, the owner) cannot pay the fee; nothing was sent |
 | `AgentNotFound` | no such agent on this cluster |
 
 Runnable: `AGENT_FILE=.devnet/my-agent.json bun kit/example.ts` records three steps and prints the status.
@@ -70,24 +72,32 @@ const agent = createGuardedAgent(new MemoryGuard('my-agent', 'owner'), 'my-agent
 
 ## Kill and resume
 
-`await agent.kill()` and `await agent.resume()`, or `bun scripts/agent.ts kill` / `resume` with the same `AGENT_FILE`.
-Only the agent's owner can do either (`NotOwner` otherwise). A resume is signed with the agent's ML-DSA-44 key, so the
-owner's Solana key alone cannot bring a killed agent back.
+From a process the agent cannot reach, with the owner's wallet:
+
+```ts
+import { openAgentOwner } from 'pq-agent-guard';
+
+const owner = await openAgentOwner({ agentFile: '.devnet/my-agent.json', owner: '.devnet/payer.json' });
+await owner.kill();
+await owner.resume();
+```
+
+or `bun scripts/agent.ts kill` / `resume` with the same `AGENT_FILE`. The agent's handle has neither. A resume needs two
+signatures: the owner's wallet and the agent's ML-DSA-44 key. So whoever takes the agent's process (its payer and its
+ML-DSA-44 key) cannot undo a kill, and the owner's Solana key alone cannot either.
 
 ## What it protects, and what it does not
 
 - **Protected:** the agent's decisions, as an on-chain record no one can forge without the ML-DSA-44 key, and the
-  owner's kill switch, which the agent cannot get around through `step` (but see the last point).
+  owner's kill switch, which the agent cannot get around through `step` or undo without the owner's wallet.
 - **Not protected:** the agent's own Solana wallet. It is still an Ed25519 key, as quantum-vulnerable as any wallet
   today.
 - **Only what goes through `step`.** An action the agent runs without `step` is neither recorded nor stopped by a kill.
 - **Ask before acting.** `step` stops an action only because it runs first. Recording after the action gives an audit
   trail but no kill switch.
-- **An agent that resumes itself.** `openGuardedAgent` gives the agent's process both keys a resume needs: the owner's
-  wallet and the agent's ML-DSA-44 key. Code that calls `agent.resume()` undoes a kill, wherever the kill came from, and
-  the process can spend that wallet. So today the kill switch stops an agent that misbehaves by mistake, not one written
-  to resist it; give it a wallet with a small balance. Holding the owner's key outside the agent's process, so that it
-  cannot resume itself, is not built yet.
+- **Until the kill.** Whoever takes the agent's process can record steps while the agent is active, and spend its
+  payer's balance. Kill it, and keep that balance small. `openGuardedAgent` refuses the owner's wallet as the payer;
+  code that loads the owner's wallet into the agent's process anyway gives the agent a way to resume itself.
 
 ## Gating your own on-chain program
 

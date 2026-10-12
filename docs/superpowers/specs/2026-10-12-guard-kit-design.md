@@ -21,7 +21,7 @@ In:
 - `spec/ARCHITECTURE.md`: a section on the kit and who uses it. Root `README.md`: a link to `kit/README.md`.
 
 Out (later, if wanted): an npm publish and a build to JavaScript; batches and history in the one-agent API (they stay
-available as low-level exports); a fee payer separate from the owner; the parked HTTP kit (`createGuard`, branch
+available as low-level exports); the parked HTTP kit (`createGuard`, branch
 `pq-agent-kit`), which needs the Oberek server.
 
 ## Boundary
@@ -52,6 +52,12 @@ the Rust and TypeScript sides, and the kit is the program's client. That is the 
   `package.json`, the pattern `#lib` already uses; everything else in this design stays.
 
 ## One-agent API
+
+Amended 2026-10-12 after review: the agent and the owner hold separate handles. `openGuardedAgent({ agentFile, payer })`
+returns only `step` and `status`, and refuses the owner's wallet as `payer`; `openAgentOwner({ agentFile, owner })`
+returns `status`, `kill` and `resume`. `OnchainGuard`'s owner key is optional; without it kill and resume are refused
+(`NotOwner`). A resume needs the owner's wallet, so whoever takes the agent's process cannot undo a kill. The text
+below describes the first version, with one handle holding the owner's wallet.
 
 ```ts
 import { openGuardedAgent } from 'pq-agent-guard';

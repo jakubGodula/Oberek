@@ -1,6 +1,7 @@
 // Three guarded steps of one agent on devnet. Run from the repo root (Bun reads .env):
 //   AGENT_FILE=.devnet/my-agent.json bun kit/example.ts
-// The agent comes from `bun scripts/agent.ts register`; OWNER_KEYPAIR is the owner's wallet, which pays the fees.
+// The agent comes from `bun scripts/agent.ts register`; FEE_PAYER_KEYPAIR pays the steps (use a wallet that is not the
+// owner's, so the agent cannot resume itself after a kill).
 import { GuardError, openGuardedAgent } from 'pq-agent-guard';
 
 const STEPS = 3;
@@ -13,7 +14,7 @@ function requiredEnv(name: string): string {
 
 const agent = await openGuardedAgent({
 	agentFile: requiredEnv('AGENT_FILE'),
-	wallet: requiredEnv('OWNER_KEYPAIR'),
+	payer: requiredEnv('FEE_PAYER_KEYPAIR'),
 	rpcUrl: process.env.SOLANA_RPC_URL,
 	wsUrl: process.env.SOLANA_WS_URL,
 	programId: process.env.GUARD_PROGRAM_ID

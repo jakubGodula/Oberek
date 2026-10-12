@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { createGuardedAgent, subscriptionsUrlFor } from './guarded-agent';
+import { assertPayerIsNotOwner, createAgentOwner, createGuardedAgent, subscriptionsUrlFor } from './guarded-agent';
 import { GuardError, type GuardAccount, type GuardStatus } from './guard';
 import { MemoryGuard } from './testing/memory-guard';
 
@@ -110,20 +110,7 @@ describe('createGuardedAgent step', () => {
 	});
 });
 
-describe('createGuardedAgent kill and resume', () => {
-	it('refuses steps after kill and takes them again after resume, at the counter after the resume', async () => {
-		const { agent } = agentWith();
-		await agent.step('before', () => undefined);
-
-		await agent.kill();
-		expect(await refusalCode(agent.step('while killed', () => undefined))).toBe('AgentKilled');
-
-		await agent.resume();
-		const step = await agent.step('after', () => undefined);
-
-		expect(step.counter).toBe(3);
-	});
-
+describe('createGuardedAgent status', () => {
 	it('reports the status of a fresh agent', async () => {
 		const { agent } = agentWith();
 
@@ -131,6 +118,28 @@ describe('createGuardedAgent kill and resume', () => {
 
 		expect(account.status).toBe('Active');
 		expect(account.counter).toBe(0);
+	});
+
+	it('gives the agent no way to kill or resume itself', () => {
+		const { agent } = agentWith();
+
+		expect(Object.keys(agent).sort()).toEqual(['status', 'step']);
+	});
+});
+
+describe('createAgentOwner', () => {
+	it("stops the agent's steps with kill and lets them go on after resume, at the counter after the resume", async () => {
+		const { guard, agent } = agentWith();
+		const owner = createAgentOwner(guard, AGENT_ID);
+		await agent.step('before', () => undefined);
+
+		await owner.kill();
+		expect(await refusalCode(agent.step('while killed', () => undefined))).toBe('AgentKilled');
+
+		await owner.resume();
+		const step = await agent.step('after', () => undefined);
+
+		expect(step.counter).toBe(3);
 	});
 });
 
@@ -140,5 +149,18 @@ describe('subscriptionsUrlFor', () => {
 		['http://my-rpc.example:8899', 'ws://my-rpc.example:8899']
 	])('derives the WebSocket URL of %s', (rpcUrl, wsUrl) => {
 		expect(subscriptionsUrlFor(rpcUrl)).toBe(wsUrl);
+	});
+});
+
+describe('assertPayerIsNotOwner', () => {
+	const OWNER_ADDRESS = 'ftbM4rfEotUq8EvPc6kJ1yBJ6iivjiok37sQwAoJ5cq';
+	const AGENT_PAYER = 'C6zgep8phi8fg4aA1wqS6ugzBAvh9UtXEyj3L8MyQnuJ';
+
+	it("refuses the owner's wallet as the agent's payer", () => {
+		expect(() => assertPayerIsNotOwner(OWNER_ADDRESS, OWNER_ADDRESS)).toThrow('owner');
+	});
+
+	it('accepts any other payer', () => {
+		expect(() => assertPayerIsNotOwner(AGENT_PAYER, OWNER_ADDRESS)).not.toThrow();
 	});
 });

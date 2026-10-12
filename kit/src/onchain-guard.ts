@@ -25,10 +25,11 @@ export interface OnchainGuardDeps {
 	/** Pays for the agents' steps. */
 	feePayer: TransactionSigner;
 	/**
-	 * The owner's key, held by the server so it can sign kill and resume (the page has no wallet yet). Whoever reaches
-	 * the server can therefore kill and resume; the owner address a caller claims is not used.
+	 * The owner's key, which signs kill and resume; the owner address a caller claims is not used. Leave it out in the
+	 * agent's own process: without it kill and resume are refused, and whoever takes that process cannot resume a kill.
+	 * The server holds it because the page has no wallet yet, so whoever reaches the server can kill and resume.
 	 */
-	owner: TransactionSigner;
+	owner?: TransactionSigner;
 	/** The agent's on-chain addresses and ML-DSA-44 secret key; throws AgentNotFound for an unknown agent. */
 	identityOf(agentId: string): AgentFile;
 	/** Told of every transaction that landed and succeeded, for the agent's transaction log. */
@@ -89,25 +90,25 @@ export class OnchainGuard implements AgentGuard {
 	}
 
 	async kill(agentId: string): Promise<GuardAccount> {
-		const state = await this.readOwnedState(agentId);
+		const { state, owner } = await this.readOwnedState(agentId);
 		if (state.status !== 'Active') {
 			throw new GuardError('AgentNotActive', `agent ${agentId} is ${state.status.toLowerCase()}, not active`);
 		}
-		await this.assertCanPay(this.deps.owner, `kill of agent ${agentId}`);
+		await this.assertCanPay(owner, `kill of agent ${agentId}`);
 		const { agent } = this.deps.identityOf(agentId);
-		const result = await this.chain.killAgent(this.deps.client, this.deps.owner, agent);
+		const result = await this.chain.killAgent(this.deps.client, owner, agent);
 		assertLanded(result, 'kill');
 		this.deps.onLanded?.({ agentId, event: 'AgentKilled', counter: Number(state.counter), signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Killed' };
 	}
 
 	async resume(agentId: string): Promise<GuardAccount> {
-		const state = await this.readOwnedState(agentId);
+		const { state, owner } = await this.readOwnedState(agentId);
 		if (state.status !== 'Killed') throw new GuardError('AgentNotKilled', `agent ${agentId} is not killed`);
-		await this.assertCanPay(this.deps.owner, `resume of agent ${agentId}`);
+		await this.assertCanPay(owner, `resume of agent ${agentId}`);
 		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
 		const signature = signResume(agent, state, mldsaSecretKey);
-		const resume = { owner: this.deps.owner, agent, agentKey, signature };
+		const resume = { owner, agent, agentKey, signature };
 		const result = await this.chain.resumeAgent(this.deps.client, resume);
 		assertLanded(result, 'resume');
 		const counter = Number(state.counter + 1n);
@@ -155,12 +156,15 @@ export class OnchainGuard implements AgentGuard {
 		return this.chain.fetchAgent(this.deps.client, this.deps.identityOf(agentId).agent);
 	}
 
-	private async readOwnedState(agentId: string): Promise<AgentState> {
+	/** The agent's state and the owner key that may kill or resume it. */
+	private async readOwnedState(agentId: string): Promise<{ state: AgentState; owner: TransactionSigner }> {
+		const { owner } = this.deps;
+		if (!owner) throw new GuardError('NotOwner', `no owner key here to kill or resume agent ${agentId}`);
 		const state = await this.readState(agentId);
-		if (state.owner !== this.deps.owner.address) {
-			throw new GuardError('NotOwner', `the server's owner key ${this.deps.owner.address} does not own agent ${agentId}`);
+		if (state.owner !== owner.address) {
+			throw new GuardError('NotOwner', `the owner key ${owner.address} does not own agent ${agentId}`);
 		}
-		return state;
+		return { state, owner };
 	}
 }
 

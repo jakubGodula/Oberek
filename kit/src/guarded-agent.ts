@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { address } from '@solana/kit';
+import { address, type TransactionSigner } from '@solana/kit';
 import { loadAgentFile, loadKeypairSigner } from './files';
 import type { AgentGuard, GuardAccount } from './guard';
 import { OnchainGuard } from './onchain-guard';
 import { connect } from './transaction';
 
 // One agent behind onchain_agent_guard: each action runs only after the program has recorded the decision behind it.
+// The agent and its owner hold different handles: the agent records steps, only the owner kills and resumes.
 
 export interface GuardedStep<T> {
 	/** The agent's counter after this step. */
@@ -16,6 +17,7 @@ export interface GuardedStep<T> {
 	result: T;
 }
 
+/** The agent's handle: it can record steps, not kill or resume itself. */
 export interface GuardedAgent {
 	/**
 	 * Records `decision` as the agent's next step, then runs `act`. A refused step throws GuardError and `act` does not
@@ -23,9 +25,14 @@ export interface GuardedAgent {
 	 */
 	step<T>(decision: string, act: () => T | Promise<T>): Promise<GuardedStep<T>>;
 	status(): Promise<GuardAccount>;
-	/** Owner only: every further step is refused until resume. */
+}
+
+/** The owner's handle on one agent. */
+export interface AgentOwner {
+	status(): Promise<GuardAccount>;
+	/** Every further step is refused until resume. */
 	kill(): Promise<GuardAccount>;
-	/** Owner only: signed with the agent's ML-DSA-44 key; uses up one counter value. */
+	/** Signed with the owner's wallet and the agent's ML-DSA-44 key; uses up one counter value. */
 	resume(): Promise<GuardAccount>;
 }
 
@@ -49,6 +56,13 @@ export function createGuardedAgent(guard: AgentGuard, agentId: string): GuardedA
 			previousStep = step.catch(() => undefined);
 			return step;
 		},
+		status: read
+	};
+}
+
+export function createAgentOwner(guard: AgentGuard, agentId: string): AgentOwner {
+	const read = () => guard.readAgent(agentId);
+	return {
 		status: read,
 		// AgentGuard takes the owner the caller claims; OnchainGuard checks its own owner key against the account.
 		kill: async () => guard.kill(agentId, (await read()).owner),
@@ -58,14 +72,12 @@ export function createGuardedAgent(guard: AgentGuard, agentId: string): GuardedA
 
 export const DEVNET_PROGRAM_ID = address('BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs');
 export const DEVNET_RPC_URL = 'https://api.devnet.solana.com';
-/** OnchainGuard looks agents up by id; a guarded agent is one agent, so a fixed id names it. */
+/** OnchainGuard looks agents up by id; a handle is for one agent, so a fixed id names it. */
 const GUARDED_AGENT_ID = 'guarded-agent';
 
-export interface GuardedAgentOptions {
+interface ConnectionOptions {
 	/** The agent file `bun scripts/agent.ts register` wrote (AGENT_FILE): addresses and the ML-DSA-44 secret key. */
 	agentFile: string;
-	/** The owner's Solana keypair file: pays every fee and signs kill and resume. */
-	wallet: string;
 	/** Default: devnet. */
 	rpcUrl?: string;
 	/** Default: derived from rpcUrl. A local validator serves it on another port (8900), so pass it there. */
@@ -74,21 +86,50 @@ export interface GuardedAgentOptions {
 	programId?: string;
 }
 
-/** The agent from `options.agentFile`, guarded by the program on chain. */
+export interface GuardedAgentOptions extends ConnectionOptions {
+	/**
+	 * A Solana keypair file that pays the steps' fees. Not the owner's wallet: whoever takes the agent's process gets
+	 * this key, and with the owner's they could resume a kill. Keep a small balance in it.
+	 */
+	payer: string;
+}
+
+export interface AgentOwnerOptions extends ConnectionOptions {
+	/** The owner's Solana keypair file: signs and pays kill and resume. */
+	owner: string;
+}
+
+/** The agent's handle, for the agent's own process. */
 export async function openGuardedAgent(options: GuardedAgentOptions): Promise<GuardedAgent> {
+	const payer = await loadKeypairSigner(options.payer);
+	assertPayerIsNotOwner(payer.address, loadAgentFile(options.agentFile).owner);
+	return createGuardedAgent(onchainGuard(options, { feePayer: payer }), GUARDED_AGENT_ID);
+}
+
+/** With the owner's wallet in its process, the agent's code could resume itself after a kill. */
+export function assertPayerIsNotOwner(payer: string, owner: string): void {
+	if (payer === owner) {
+		throw new Error(`the agent's payer ${payer} is its owner's wallet; give the agent a wallet of its own`);
+	}
+}
+
+/** The owner's handle, for a process the agent cannot reach. */
+export async function openAgentOwner(options: AgentOwnerOptions): Promise<AgentOwner> {
+	const owner = await loadKeypairSigner(options.owner);
+	return createAgentOwner(onchainGuard(options, { feePayer: owner, owner }), GUARDED_AGENT_ID);
+}
+
+function onchainGuard(options: ConnectionOptions, signers: { feePayer: TransactionSigner; owner?: TransactionSigner }) {
 	const rpcUrl = options.rpcUrl ?? DEVNET_RPC_URL;
 	const identity = loadAgentFile(options.agentFile);
-	const wallet = await loadKeypairSigner(options.wallet);
-	const guard = new OnchainGuard({
+	return new OnchainGuard({
 		client: {
 			connection: connect(rpcUrl, options.wsUrl ?? subscriptionsUrlFor(rpcUrl)),
 			programAddress: address(options.programId ?? DEVNET_PROGRAM_ID)
 		},
-		feePayer: wallet,
-		owner: wallet,
+		...signers,
 		identityOf: () => identity
 	});
-	return createGuardedAgent(guard, GUARDED_AGENT_ID);
 }
 
 /** Public RPCs serve subscriptions on the same host and port over WebSocket. */

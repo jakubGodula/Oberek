@@ -89,6 +89,11 @@ function guardOver(chain: ReturnType<typeof fakeChain>, serverOwner = signer(OWN
 	});
 }
 
+/** A guard in the agent's own process: it pays for steps but holds no owner key. */
+function guardWithoutOwner(chain: ReturnType<typeof fakeChain>) {
+	return new OnchainGuard({ client: {} as GuardClient, feePayer: FEE_PAYER, identityOf: () => IDENTITY, chain: chain.calls });
+}
+
 async function guardErrorCode(action: Promise<unknown>): Promise<string> {
 	const error = await action.then(
 		() => null,
@@ -217,6 +222,12 @@ describe('recordStep', () => {
 });
 
 describe('kill', () => {
+	test('refuses without sending when it holds no owner key', async () => {
+		const chain = fakeChain();
+		expect(await guardErrorCode(guardWithoutOwner(chain).kill(AGENT_ID))).toBe('NotOwner');
+		expect(chain.sent).toEqual([]);
+	});
+
 	test("sends kill signed with the server's owner key", async () => {
 		const chain = fakeChain();
 		expect((await guardOver(chain).kill(AGENT_ID)).status).toBe('Killed');
@@ -257,6 +268,12 @@ describe('kill', () => {
 });
 
 describe('resume', () => {
+	test('refuses without sending when it holds no owner key', async () => {
+		const chain = fakeChain({ status: 'Killed' });
+		expect(await guardErrorCode(guardWithoutOwner(chain).resume(AGENT_ID))).toBe('NotOwner');
+		expect(chain.sent).toEqual([]);
+	});
+
 	test("signs the resume for the next counter with the agent's key and sends it with the owner's key", async () => {
 		const chain = fakeChain({ status: 'Killed' });
 		expect(await guardOver(chain).resume(AGENT_ID)).toMatchObject({ status: 'Active', counter: 12 });
