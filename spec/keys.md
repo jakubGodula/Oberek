@@ -187,6 +187,7 @@ Paths are relative to the repo root. `.devnet/` and `.env` are gitignored.
 | Owner wallet | `.devnet/payer.json` by default | `FEE_PAYER_KEYPAIR`, `OWNER_KEYPAIR` |
 | Owner log key | `.devnet/owner-mlkem.json` | `OWNER_MLKEM_FILE` |
 | Log data key | `.devnet/fleet/<id>/seal.json` | |
+| E2E test fleet keys | `.devnet/e2e-fleet/<id>/` (`onchain.json`, `seal.json`), register files in `.devnet/e2e-agents/<id>.json` (`setup --e2e`) | `FLEET_DIR` (the tests set it) |
 | Telegram bot token | `.env` | `TELEGRAM_BOT_TOKEN` |
 | Program keypair | `onchain/.devnet/program-keypair.json` | |
 

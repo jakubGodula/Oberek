@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { MIN_PAYER_LAMPORTS, preflightProblems, type PreflightFacts } from './preflight-checks';
+import { agentsServing, MIN_PAYER_LAMPORTS, preflightProblems, type PreflightFacts } from './preflight-checks';
+
+const TEST_SERVER = 'http://localhost:5174';
 
 const ready: PreflightFacts = {
 	keypairs: [
@@ -7,7 +9,8 @@ const ready: PreflightFacts = {
 		{ variable: 'OWNER_KEYPAIR', path: 'keys/payer.json', exists: true }
 	],
 	missingAgents: [],
-	payerLamports: MIN_PAYER_LAMPORTS
+	payerLamports: MIN_PAYER_LAMPORTS,
+	leftoverAgentPids: []
 };
 
 test('finds nothing when the keys, the test fleet and the funds are there', () => {
@@ -38,4 +41,21 @@ test('points a missing test fleet at the setup command', () => {
 test('reports a payer below the minimum, and only then', () => {
 	expect(preflightProblems({ ...ready, payerLamports: MIN_PAYER_LAMPORTS - 1n })).toHaveLength(1);
 	expect(preflightProblems({ ...ready, payerLamports: null })).toEqual([]);
+});
+
+test('points agent processes left by an earlier run at the command that stops them', () => {
+	const problems = preflightProblems({ ...ready, leftoverAgentPids: [4100, 4200] });
+	expect(problems).toEqual([
+		'agent processes of an earlier run still use the test server (pids 4100, 4200): stop them with kill 4100 4200'
+	]);
+});
+
+test('finds the agent processes pointed at the test server, by their environment', () => {
+	const processes = [
+		{ pid: 1, environ: `PATH=/bin\0TICK_API_URL=${TEST_SERVER}\0` },
+		{ pid: 2, environ: `SENTINEL_API_URL=${TEST_SERVER}` },
+		{ pid: 3, environ: 'TICK_API_URL=http://localhost:5173' },
+		{ pid: 4, environ: `NOTE=TICK_API_URL=${TEST_SERVER}` }
+	];
+	expect(agentsServing(processes, TEST_SERVER)).toEqual([1, 2]);
 });

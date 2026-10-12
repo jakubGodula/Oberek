@@ -4,6 +4,8 @@ import type { Locator, Page } from '@playwright/test';
 const FEED_HEADING = /On-Chain Observability Log/;
 /** The page's first request from the browser: the selected agent's feed, loaded by an effect once it has hydrated. */
 const FEED_REQUEST = /\/api\/agents\/[^/]+\/decisions/;
+const SHOCK_REQUEST = /\/api\/agents\/[^/]+\/shock$/;
+const APPROVAL_PANEL_TITLE = /waiting for your verdict · step #\d+/;
 
 function numberIn(text: string, pattern: RegExp): number {
 	const match = text.match(pattern);
@@ -14,10 +16,17 @@ function numberIn(text: string, pattern: RegExp): number {
 export class Dashboard {
 	constructor(private readonly page: Page) {}
 
-	/** Resolves once the page has hydrated: until then a click on a card reaches no handler. */
+	/**
+	 * Resolves once the page has hydrated: until then a click on a card reaches no handler. With no agent there is no
+	 * feed to load, so an empty fleet fails here instead of at the test's timeout.
+	 */
 	async open(): Promise<void> {
 		const hydrated = this.page.waitForResponse((response) => FEED_REQUEST.test(response.url()));
 		await this.page.goto('/');
+		if ((await this.cards().count()) === 0) {
+			hydrated.catch(() => {});
+			throw new Error('the page shows no agents: is the test fleet set up (bun scripts/setup.ts --e2e)?');
+		}
 		await hydrated;
 	}
 
@@ -62,21 +71,33 @@ export class Dashboard {
 		return this.page.getByRole('button', { name: 'Resume agent' });
 	}
 
-	/** Arms Sentinel's −3% shock in the Simulate panel, then closes the panel (it covers the fleet column). */
+	/**
+	 * Arms Sentinel's −3% shock in the Simulate panel, then closes the panel (it covers the fleet column). Waits for the
+	 * server's answer, not the button's "Shock armed" label: Sentinel's next cycle may claim the shock before it shows.
+	 */
 	async armPriceShock(): Promise<void> {
 		await this.page.getByRole('button', { name: 'Simulate', exact: true }).click();
+		const armed = this.page.waitForResponse(
+			(response) => SHOCK_REQUEST.test(response.url()) && response.request().method() === 'POST'
+		);
 		await this.page.getByRole('button', { name: 'Simulate a price shock (−3%)' }).click();
-		await this.page.getByRole('button', { name: 'Shock armed, applied in the next cycle' }).waitFor();
+		const response = await armed;
+		if (!response.ok()) throw new Error(`arming the shock: ${response.status()} ${await response.text()}`);
 		await this.page.getByRole('button', { name: 'Hide', exact: true }).click();
 	}
 
 	/** The approval panel's title, which names the waiting proposal ("… waiting for your verdict · step #221"). */
 	approvalPanelTitle(): Locator {
-		return this.page.getByText(/waiting for your verdict · step #\d+/);
+		return this.page.getByText(APPROVAL_PANEL_TITLE);
 	}
 
-	/** The approval panel's button: it comes before the console's "Approve Step" / "Reject" in the page. */
+	/** The approval panel: the innermost block holding its title. */
+	approvalPanel(): Locator {
+		return this.page.locator('div').filter({ has: this.approvalPanelTitle() }).last();
+	}
+
+	/** The approval panel's button, not the console's "Approve Step" / "Reject" below it. */
 	verdictButton(label: 'Approve' | 'Reject'): Locator {
-		return this.page.getByRole('button', { name: label, exact: true }).first();
+		return this.approvalPanel().getByRole('button', { name: label, exact: true });
 	}
 }

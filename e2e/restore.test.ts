@@ -1,13 +1,15 @@
 import { expect, test } from 'bun:test';
 import { queuedAgents, restoreRequests, unavailable, type FleetCard } from './restore';
 
-function card(id: string, status: FleetCard['status'], pendingCounter: number | null = null, queued = 0): FleetCard {
-	return {
-		id,
-		status,
-		currentTask: 'TICK',
-		fleet: { pendingProposal: pendingCounter === null ? null : { counter: pendingCounter, decision: {} }, queued }
-	};
+function card(
+	id: string,
+	status: FleetCard['status'],
+	pendingCounter: number | null = null,
+	queued = 0,
+	shockArmed = false
+): FleetCard {
+	const pendingProposal = pendingCounter === null ? null : { counter: pendingCounter, decision: {} };
+	return { id, name: `E2E ${id}`, status, currentTask: 'TICK', fleet: { pendingProposal, queued, shockArmed } };
 }
 
 test('asks for nothing when every agent is active with nothing waiting', () => {
@@ -30,6 +32,12 @@ test('resumes a killed agent before rejecting its waiting proposal', () => {
 	expect(restoreRequests([card('sentinel-01', 'PAUSED', 7)]).map((request) => request.path)).toEqual([
 		'/api/agents/sentinel-01/control',
 		'/api/agents/sentinel-01/approval'
+	]);
+});
+
+test('disarms an armed price shock, so it does not reach the next test', () => {
+	expect(restoreRequests([card('sentinel-01', 'ACTIVE', null, 0, true)])).toEqual([
+		{ path: '/api/agents/sentinel-01/shock/claim', body: {} }
 	]);
 });
 

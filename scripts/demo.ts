@@ -9,6 +9,7 @@ import { createInterface } from 'node:readline';
 import { batchPolicyFrom } from '../src/lib/server/modules/fleet/decision-batcher';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
+import { DEMO_PACE } from './demo-pace';
 import { stopInOrder, type DemoProcess } from './demo-stop';
 import { runLogged } from './run-log';
 
@@ -19,7 +20,6 @@ const SERVER_POLL_MS = 500;
 /** A devnet step can take a while to land; the agents get that long to finish it. */
 const AGENT_GRACE_MS = 30_000;
 const SERVER_GRACE_MS = 10_000;
-const DEMO_PACE = { SENTINEL_SCHEDULE_MIN: '2', SENTINEL_INTERVAL_MS: '10000' };
 /** The ids the agents run as: their defaults unless .env overrides them. */
 const AGENT_IDS = [
 	process.env.SENTINEL_AGENT_ID ?? 'sentinel-01',

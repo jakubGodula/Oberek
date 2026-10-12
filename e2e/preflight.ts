@@ -1,12 +1,13 @@
 // Runs before the e2e tests (bun run e2e): stops the run, with what to do, when something outside the code under test
 // would make it fail. Bun loads .env, so the keypair paths are the ones the server will use.
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createSolanaRpc, devnet } from '@solana/kit';
 import { loadKeypairSigner } from 'pq-agent-guard';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { E2E_PROFILE } from '../scripts/setup-plan';
-import { preflightProblems, type KeypairFact } from './preflight-checks';
+import { agentsServing, preflightProblems, type KeypairFact, type ProcessFact } from './preflight-checks';
+import { TEST_SERVER_URL } from './test-server';
 
 process.env.FLEET_DIR = E2E_PROFILE.fleetDir;
 
@@ -25,6 +26,18 @@ async function payerLamports(rpcUrl: string, payer: KeypairFact): Promise<bigint
 	return (await createSolanaRpc(devnet(rpcUrl)).getBalance(address).send()).value;
 }
 
+/** Every process of this user /proc lets us read; none where there is no /proc (not Linux). */
+function processes(): ProcessFact[] {
+	const pids = existsSync('/proc') ? readdirSync('/proc').filter((entry) => /^\d+$/.test(entry)) : [];
+	return pids.flatMap((pid) => {
+		try {
+			return [{ pid: Number(pid), environ: readFileSync(`/proc/${pid}/environ`, 'utf8') }];
+		} catch {
+			return [];
+		}
+	});
+}
+
 function loadConfigOrFail(): ReturnType<typeof loadConfig> {
 	try {
 		return loadConfig(process.env);
@@ -38,7 +51,8 @@ const payer = keypairFact('FEE_PAYER_KEYPAIR', config.feePayerPath);
 const problems = preflightProblems({
 	keypairs: [payer, keypairFact('OWNER_KEYPAIR', config.ownerPath)],
 	missingAgents: E2E_PROFILE.agents.map((agent) => agent.id).filter((id) => !existsSync(onchainIdentityPath(id))),
-	payerLamports: await payerLamports(config.rpcUrl, payer)
+	payerLamports: await payerLamports(config.rpcUrl, payer),
+	leftoverAgentPids: agentsServing(processes(), TEST_SERVER_URL)
 });
 if (problems.length > 0) fail(problems);
 console.log('e2e preflight: ok');

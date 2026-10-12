@@ -2,7 +2,7 @@
 // checks that every step and resume is on-chain and that each on-chain hash is backed by a log record that still
 // hashes to it. Sealed log lines are opened with the owner's ML-KEM-768 secret key (OWNER_MLKEM_FILE), not with the
 // server's copy of the key. Read-only: sends no transactions, costs no fees. Run from the repo root.
-// Usage: bun scripts/audit.ts <agent id>
+// Usage: [FLEET_DIR=<fleet dir>] bun scripts/audit.ts <agent id>   (FLEET_DIR: another fleet, e.g. .devnet/e2e-fleet)
 // Exit code: 0 history OK, 1 problems found, 2 usage error.
 import type { Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
@@ -20,7 +20,10 @@ import { loadOwnerKemKey, recoverDataKey } from '../src/lib/server/modules/fleet
 import { guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 
-const USAGE = 'Usage: bun scripts/audit.ts <agent id>   (a directory in .devnet/fleet, e.g. sentinel-01)';
+const USAGE = [
+	'Usage: [FLEET_DIR=<fleet dir>] bun scripts/audit.ts <agent id>',
+	'  <agent id>: a directory in .devnet/fleet, or in FLEET_DIR, e.g. sentinel-01'
+].join('\n');
 const EXIT_OK = 0;
 const EXIT_PROBLEMS = 1;
 const EXIT_USAGE = 2;
