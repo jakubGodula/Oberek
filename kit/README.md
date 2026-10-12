@@ -75,12 +75,17 @@ owner's Solana key alone cannot bring a killed agent back.
 ## What it protects, and what it does not
 
 - **Protected:** the agent's decisions, as an on-chain record no one can forge without the ML-DSA-44 key, and the
-  owner's kill switch, which the agent cannot get around through `step`.
+  owner's kill switch, which the agent cannot get around through `step` (but see the last point).
 - **Not protected:** the agent's own Solana wallet. It is still an Ed25519 key, as quantum-vulnerable as any wallet
   today.
 - **Only what goes through `step`.** An action the agent runs without `step` is neither recorded nor stopped by a kill.
 - **Ask before acting.** `step` stops an action only because it runs first. Recording after the action gives an audit
   trail but no kill switch.
+- **An agent that resumes itself.** `openGuardedAgent` gives the agent's process both keys a resume needs: the owner's
+  wallet and the agent's ML-DSA-44 key. Code that calls `agent.resume()` undoes your kill, and the process can spend
+  that wallet. So kill from your own process (`bun scripts/agent.ts kill`), not from the agent's, and keep only a small
+  balance in the wallet you give it. A fee payer separate from the owner, so that the agent cannot resume itself, is
+  not built yet.
 
 ## Gating your own on-chain program
 
