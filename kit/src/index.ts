@@ -4,6 +4,7 @@ export * from './files';
 export * from './guard';
 export * from './guard-client';
 export * from './guard-errors';
+export * from './guarded-agent';
 export * from './instructions';
 export * from './message';
 export * from './onchain-guard';
