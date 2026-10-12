@@ -41,7 +41,7 @@ describe('DecisionBatcher', () => {
 	test('flushes at once when the buffer is full', async () => {
 		const { flushed, flush } = recordingFlush();
 		const batcher = new DecisionBatcher(policy({ flushMs: 60_000 }), flush);
-		[1, 2, 3].forEach((n) => batcher.enqueue(AGENT, decision(n)));
+		for (const n of [1, 2, 3]) batcher.enqueue(AGENT, decision(n));
 		await batcher.serially(AGENT, async () => undefined);
 		expect(flushed).toEqual([[1, 2, 3]]);
 	});

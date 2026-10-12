@@ -33,7 +33,9 @@ describe('merkleProof', () => {
 	test.each([1, 2, 3, 5, 16, 17])('every decision of %i proves against the root', (count) => {
 		const all = hashes(count);
 		const root = merkleRoot(all);
-		all.forEach((hash, index) => expect(verifyProof(hash, merkleProof(all, index), root)).toBe(true));
+		all.forEach((hash, index) => {
+			expect(verifyProof(hash, merkleProof(all, index), root)).toBe(true);
+		});
 	});
 
 	test('a proof does not hold for another decision or another root', () => {
