@@ -4,6 +4,8 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { createInterface } from 'readline';
+import { Fleet } from '../src/lib/server/modules/fleet/fleet';
+import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
 import { stopInOrder, type DemoProcess } from './demo-stop';
 
 const PORT = 5173;
@@ -14,9 +16,20 @@ const SERVER_POLL_MS = 500;
 const AGENT_GRACE_MS = 30_000;
 const SERVER_GRACE_MS = 10_000;
 const DEMO_PACE = { SENTINEL_SCHEDULE_MIN: '2', SENTINEL_INTERVAL_MS: '10000' };
+/** The ids the agents run as: their defaults unless .env overrides them. */
+const AGENT_IDS = [process.env.SENTINEL_AGENT_ID ?? 'sentinel-01', process.env.TICK_AGENT_ID ?? 'tick-01'];
 
 if (!existsSync('.env')) {
 	console.error('No .env in the current directory: run from the repo root after the setup in README.md');
+	process.exit(1);
+}
+const notInFleet = AGENT_IDS.filter((id) => !new Fleet(FLEET_DIR).get(id));
+if (notInFleet.length > 0) {
+	console.error(`Not in the fleet: ${notInFleet.join(', ')}; run bun scripts/setup.ts first (safe to re-run)`);
+	process.exit(1);
+}
+if (await listening(SERVER_URL)) {
+	console.error(`Port ${PORT} is busy (an earlier \`bun run dev\`?): stop whatever listens there, then re-run`);
 	process.exit(1);
 }
 
@@ -82,6 +95,16 @@ async function serverReady(): Promise<boolean> {
 		await Bun.sleep(SERVER_POLL_MS);
 	}
 	return false;
+}
+
+/** Any HTTP answer, even an error, means something already listens there. */
+async function listening(url: string): Promise<boolean> {
+	try {
+		await fetch(url);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 async function answers(url: string): Promise<boolean> {
