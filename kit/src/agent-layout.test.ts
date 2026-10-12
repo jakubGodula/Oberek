@@ -29,7 +29,7 @@ describe('Agent account bytes in kit/README.md', () => {
 		[0, 'Active'],
 		[1, 'Killed'],
 		[2, 'Pending']
-	])('reads status byte %d at offset 72 as %s', (statusByte, status) => {
+	] as const)('reads status byte %d at offset 72 as %s', (statusByte, status) => {
 		const agent = decodeAgent(agentAccount(statusByte));
 
 		expect(agent.status).toBe(status);
