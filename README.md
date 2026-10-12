@@ -43,7 +43,7 @@ kills the agent no further step goes through. No Oberek server needed; the app i
   it.
 - **Not quantum-resistant yet (WIP):** the devnet program is still upgradeable by an Ed25519 key (fixable by deploying
   it immutable). Agents registered before owner activation existed stay `Active` on chain without it (decision 005).
-- **No DMS:** the Dual-Mode Signature scheme from `spec/ARCHITECTURE.md` §4.3 is not implemented. No verifier for its
+- **No DMS:** the Dual-Mode Signature scheme from the original plan ([archived](docs/output/ARCHITECTURE-aegis-mercato-plan.md) §4.3) is not implemented. No verifier for its
   proof exists on Solana, the 5.4 MB proof does not fit a Solana program, and it is only needed after Q-day. The page shows only what exists: the agent's key account
   and the SHA-256 of its last decision, with no SHA3 commitments; a Merkle root appears only for batched agents (below).
   ML-KEM-768 is used only off-chain, to seal each agent's decision log for the owner ([decision 006](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md)).
