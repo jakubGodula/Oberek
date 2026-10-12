@@ -7,7 +7,7 @@
     agents,
     onChange
   }: {
-    agents: { id: string; fleet?: { proposalArmed: Direction | null; shockArmed: boolean } }[];
+    agents: { id: string; fleet: { proposalArmed: Direction | null; shockArmed: boolean } }[];
     onChange: () => Promise<void>;
   } = $props();
 
@@ -24,10 +24,10 @@
   let message = $state<string | null>(null);
   let ok = $state<boolean | null>(null);
 
-  const steward = $derived(agents.find((agent) => agent.id === JITO_ID && agent.fleet));
-  const sentinel = $derived(agents.find((agent) => agent.id === SENTINEL_ID && agent.fleet));
-  const armed = $derived(steward?.fleet?.proposalArmed ?? null);
-  const shockArmed = $derived(sentinel?.fleet?.shockArmed ?? false);
+  const steward = $derived(agents.find((agent) => agent.id === JITO_ID));
+  const sentinel = $derived(agents.find((agent) => agent.id === SENTINEL_ID));
+  const armed = $derived(steward?.fleet.proposalArmed ?? null);
+  const shockArmed = $derived(sentinel?.fleet.shockArmed ?? false);
 
   async function post(url: string, body: object, done: string) {
     busy = true;

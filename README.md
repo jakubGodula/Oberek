@@ -1,4 +1,4 @@
-# SolanaHackaton01
+# Oberek
 
 AI agents whose every step is guarded on Solana with a post-quantum signature. The `onchain_agent_guard` program
 holds each agent's ML-DSA-44 public key, records a step only with a valid ML-DSA-44 signature over it, and lets the
@@ -57,7 +57,7 @@ Decision: [spec/decisions/007-korzen-merkle-dla-paczki-decyzji.md](spec/decision
 
 ## Run
 
-Needs [Bun](https://bun.sh). Without `.env` the page shows only the two built-in mock agents, labelled MOCK.
+Needs [Bun](https://bun.sh). Without `.env` the page shows no agents; `bun scripts/setup.ts` below sets them up.
 
 ```sh
 bun install

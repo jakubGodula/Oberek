@@ -1,5 +1,4 @@
-import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
-import { GuardError, NO_DECISION, type GuardStatus } from 'pq-agent-guard';
+import { NO_DECISION, type GuardStatus } from 'pq-agent-guard';
 import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, proposalStore, quietStore, shockStore } from '../fleet/app-runtime';
 import { quietSummary } from '../fleet/quiet-store';
@@ -15,7 +14,7 @@ export interface AgentStatusRecord {
    * UNAVAILABLE: a fleet agent whose guard account could not be read (e.g. the Solana RPC failed).
    * AWAITING_APPROVAL: a fleet agent stopped on its own proposal until the owner's verdict.
    */
-  status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
+  status: 'ACTIVE' | 'PAUSED' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
   currentTask: string;
   /** Address of the account holding the agent's ML-DSA-44 public key; null when the guard could not be read. */
   pqcKeyAccount: string | null;
@@ -25,8 +24,7 @@ export interface AgentStatusRecord {
   lastUpdated: number;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   actionsExecuted: number;
-  /** Only on fleet agents. */
-  fleet?: FleetDetails;
+  fleet: FleetDetails;
 }
 
 export interface FleetDetails {
@@ -45,48 +43,6 @@ export interface FleetDetails {
   /** The pause between ticks picked on the speed wheel; null while the agent keeps its own. */
   paceMs: number | null;
 }
-
-function genPqcHash(): string {
-  return Buffer.from(pqcCrypto.computePubkeyHash(pqcCrypto.generateDsaKeys().publicKey)).toString('hex');
-}
-
-function genRoot(payload: Record<string, unknown>): string {
-  return pqcCrypto.computeStateCommitment(payload).hexRoot;
-}
-
-// In-memory store: the two mock agents not yet replaced by fleet agents
-const agentsStore: Map<string, AgentStatusRecord> = new Map([
-  [
-    'arbiter-02',
-    {
-      id: 'arbiter-02',
-      name: 'Arbiter Beta — DeFi Optimizer',
-      status: 'ACTIVE',
-      currentTask: 'Cross-DEX arbitrage: Raydium ↔ Orca, spread 0.34%',
-      pqcKeyAccount: genPqcHash(),
-      lastCommitmentRoot: genRoot({ agentId: 'arbiter-02', task: 'ARB_SCAN', timestamp: Date.now() }),
-      lastBatchSize: null,
-      lastUpdated: Date.now() - 30_000,
-      riskLevel: 'HIGH',
-      actionsExecuted: 182
-    }
-  ],
-  [
-    'guardian-03',
-    {
-      id: 'guardian-03',
-      name: 'Guardian Gamma — Risk Monitor',
-      status: 'IDLE',
-      currentTask: 'Portfolio exposure monitoring, no active alerts',
-      pqcKeyAccount: genPqcHash(),
-      lastCommitmentRoot: genRoot({ agentId: 'guardian-03', task: 'MONITOR', timestamp: Date.now() }),
-      lastBatchSize: null,
-      lastUpdated: Date.now() - 120_000,
-      riskLevel: 'LOW',
-      actionsExecuted: 9
-    }
-  ]
-]);
 
 // Agents registered in the fleet (scripts/fleet.ts) run as their own processes; their state comes from the guard.
 /**
@@ -155,15 +111,13 @@ export class BlinkService {
   async getAgent(agentId: string): Promise<AgentStatusRecord | undefined> {
     const runtime = await findFleetRuntime();
     const fleetEntry = runtime?.fleet.get(agentId);
-    return runtime && fleetEntry ? toAgentStatusRecord(runtime, fleetEntry) : agentsStore.get(agentId);
+    return runtime && fleetEntry ? toAgentStatusRecord(runtime, fleetEntry) : undefined;
   }
 
   async listAgents(): Promise<AgentStatusRecord[]> {
     const runtime = await findFleetRuntime();
-    if (!runtime) return [...agentsStore.values()];
-    const fleetAgents = await Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
-    // Real agents first; the mocks follow until Arbiter and Guardian replace them.
-    return [...fleetAgents, ...agentsStore.values()];
+    if (!runtime) return [];
+    return Promise.all(runtime.fleet.list().map((entry) => toAgentStatusRecord(runtime, entry)));
   }
 
   /**
@@ -175,27 +129,9 @@ export class BlinkService {
     return { counter: record.counter };
   }
 
-  /** The owner's kill switch. A fleet agent goes through the guard; a mock agent only changes its card. */
+  /** The owner's kill switch, through the guard. */
   async controlAgent(agentId: string, action: ControlAction): Promise<{ counter: number }> {
-    const runtime = await findFleetRuntime();
-    if (runtime?.fleet.get(agentId)) return { counter: (await controlFleetAgent(runtime, agentId, action)).counter };
-    return { counter: this.controlMockAgent(agentId, action) };
-  }
-
-  /** Arbiter and Guardian: kill pauses the card, resume activates it and counts one more step. */
-  private controlMockAgent(agentId: string, action: ControlAction): number {
-    const agent = agentsStore.get(agentId);
-    if (!agent) throw new GuardError('AgentNotFound', `no agent ${agentId}`);
-    agent.status = action === 'kill' ? 'PAUSED' : 'ACTIVE';
-    if (action === 'resume') agent.actionsExecuted += 1;
-    agent.lastUpdated = Date.now();
-    agent.lastCommitmentRoot = pqcCrypto.computeStateCommitment({
-      agentId,
-      action,
-      status: agent.status,
-      timestamp: agent.lastUpdated
-    }).hexRoot;
-    return agent.actionsExecuted;
+    return { counter: (await controlFleetAgent(await getFleetRuntime(), agentId, action)).counter };
   }
 }
 

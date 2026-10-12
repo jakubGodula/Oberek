@@ -19,7 +19,6 @@ function agent(overrides: Partial<AgentView> = {}): AgentView {
 const awaiting = (counter = 41, summary = SUMMARY) =>
 	agent({ status: 'AWAITING_APPROVAL', actionsExecuted: counter, fleet: { pendingProposal: { counter, summary } } });
 const paused = () => agent({ status: 'PAUSED' });
-const mock = () => agent({ id: 'arbiter-02', name: 'Arbiter Beta', status: 'PAUSED', fleet: undefined });
 const unavailable = () => agent({ status: 'UNAVAILABLE', currentTask: 'Unavailable: RPC down' });
 const buttons = (notice: { keyboard?: { text: string }[][] }) => notice.keyboard?.[0].map((button) => button.text);
 
@@ -90,10 +89,6 @@ describe('changeNotices', () => {
 		expect(notices.map((notice) => notice.text)).toEqual([PROPOSAL_TEXT]);
 	});
 
-	test('mock agents are ignored', () => {
-		expect(changeNotices([], [mock()])).toEqual([]);
-	});
-
 	test('an agent turning unavailable sends nothing', () => {
 		expect(changeNotices([awaiting()], [unavailable()])).toEqual([]);
 	});
@@ -120,7 +115,7 @@ describe('changeNotices', () => {
 describe('agentsAnswer', () => {
 	test('one message per fleet agent, with the buttons its state allows', () => {
 		const unavailable = agent({ id: 'tick-01', name: 'Oberek Tick One', status: 'UNAVAILABLE', currentTask: 'Unavailable: RPC down' });
-		const notices = agentsAnswer([agent(), paused(), awaiting(), unavailable, mock()]);
+		const notices = agentsAnswer([agent(), paused(), awaiting(), unavailable]);
 		expect(notices.map((notice) => notice.text)).toEqual([
 			'▶ Oberek Sentinel Alpha · running · step 40\nHOLD @ $152.10',
 			'⏸ Oberek Sentinel Alpha · killed · step 40',
@@ -131,6 +126,6 @@ describe('agentsAnswer', () => {
 	});
 
 	test('says so when the fleet is empty', () => {
-		expect(agentsAnswer([mock()])).toEqual([{ text: 'No fleet agents on the server.' }]);
+		expect(agentsAnswer([])).toEqual([{ text: 'No fleet agents on the server.' }]);
 	});
 });

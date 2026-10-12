@@ -1,5 +1,5 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadConfig, type AgentConfig } from '../agent/config';
 import {
 	connect,
@@ -38,7 +38,7 @@ export function guardClientFrom(config: AgentConfig): GuardClient {
 	return { connection: connect(config.rpcUrl, config.rpcSubscriptionsUrl), programAddress: config.programAddress };
 }
 
-/** The server has no usable fleet configuration (a variable or a keypair file is missing); the mock agents still work. */
+/** The server has no usable fleet configuration (a variable or a keypair file is missing). */
 export class FleetNotConfiguredError extends Error {}
 
 export async function createFleetRuntime(env: Env): Promise<FleetRuntime> {
