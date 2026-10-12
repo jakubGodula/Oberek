@@ -3,12 +3,12 @@
 // Ctrl+C stops it gracefully: the agents finish the step in flight and exit, and only then the server stops.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, with .env set up as in README): bun scripts/demo.ts
-import { spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { createInterface } from 'readline';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { batchPolicyFrom } from '../src/lib/server/modules/fleet/decision-batcher';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
-import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
+import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 import { stopInOrder, type DemoProcess } from './demo-stop';
 import { runLogged } from './run-log';
 
@@ -38,7 +38,7 @@ if (!existsSync('.env')) {
 	console.error('No .env in the current directory: run from the repo root after the setup in README.md');
 	process.exit(1);
 }
-const notInFleet = AGENT_IDS.filter((id) => !new Fleet(FLEET_DIR).get(id));
+const notInFleet = AGENT_IDS.filter((id) => !new Fleet(fleetDir()).get(id));
 if (notInFleet.length > 0) {
 	console.error(`Not in the fleet: ${notInFleet.join(', ')}; run bun scripts/setup.ts first (safe to re-run)`);
 	process.exit(1);

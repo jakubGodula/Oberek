@@ -4,8 +4,8 @@
 //              `bun scripts/agent.ts register`; copies its keys into .devnet/fleet/<id>/onchain.json and seals its
 //              decision log to the owner's key.
 //   seal:      seals the decision log of an agent imported before logs were sealed.
-import { existsSync } from 'fs';
-import { parseArgs } from 'util';
+import { existsSync } from 'node:fs';
+import { parseArgs } from 'node:util';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { fetchAgent, loadAgentFile, saveAgentFile } from 'pq-agent-guard';
 import { Fleet, type RiskLevel } from '../src/lib/server/modules/fleet/fleet';
@@ -16,7 +16,8 @@ import {
 	saveOwnerKemKey,
 	type LogSeal
 } from '../src/lib/server/modules/fleet/log-seal';
-import { FLEET_DIR, guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 
 const USAGE = [
 	'Usage: bun scripts/fleet.ts owner-key',
@@ -32,7 +33,7 @@ const { positionals, values } = parseArgs({
 });
 const [command, argument] = positionals;
 const config = loadConfig(process.env);
-const fleet = new Fleet(FLEET_DIR);
+const fleet = new Fleet(fleetDir());
 
 function fail(message: string): never {
 	console.error(`${message}\n${USAGE}`);

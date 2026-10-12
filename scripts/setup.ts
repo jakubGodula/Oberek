@@ -11,7 +11,8 @@ import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } 
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { decodeAgent, loadAgentFile, loadKeypairSigner, saveAgentFile } from 'pq-agent-guard';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
-import { FLEET_DIR, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 import { runLogged } from './run-log';
 import { lamportsNeeded, predatesActivation, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
@@ -130,7 +131,7 @@ function retireAgents(): void {
 	const dir = join(RETIRED_DIR, `reregister-${new Date().toISOString().replace(/[:.]/g, '-')}`);
 	for (const agent of AGENTS) {
 		moveIfPresent(agentFile(agent), join(dir, 'agents', `${agent.id}.json`));
-		moveIfPresent(join(FLEET_DIR, agent.id), join(dir, 'fleet', agent.id));
+		moveIfPresent(join(fleetDir(), agent.id), join(dir, 'fleet', agent.id));
 	}
 	log(`old agents moved to ${dir}`);
 }
@@ -153,7 +154,7 @@ function setUpAgent(agent: SetupAgent, progress: AgentProgress): void {
 }
 
 function alignName(agent: SetupAgent): void {
-	const fleet = new Fleet(FLEET_DIR);
+	const fleet = new Fleet(fleetDir());
 	const entry = fleet.get(agent.id);
 	if (!entry || entry.name === agent.name) return;
 	fleet.rename(agent.id, agent.name);
@@ -188,12 +189,12 @@ function restoreIdentity(agent: SetupAgent): void {
 
 async function progressOf(agent: SetupAgent): Promise<AgentProgress> {
 	const registered = existsSync(agentFile(agent));
-	const imported = existsSync(join(FLEET_DIR, agent.id));
+	const imported = existsSync(join(fleetDir(), agent.id));
 	return {
 		registered,
 		pending: registered && (await isPending(agentFile(agent))),
 		imported,
-		sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id),
+		sealed: imported && new Fleet(fleetDir()).isSealed(agent.id),
 		identified: imported && existsSync(onchainIdentityPath(agent.id))
 	};
 }
