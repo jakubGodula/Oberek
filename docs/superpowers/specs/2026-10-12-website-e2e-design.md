@@ -88,7 +88,10 @@ in the UI and `Killed` on chain.
 
 ## Error handling
 
-- A missing test fleet, a busy port 5174 or an unfunded payer stops the run before any test, with the command to fix it.
+- A missing test fleet, a busy port 5174, a keypair file named in `.env` that does not exist, or an unfunded payer
+  stops the run before any test, with the command to fix it. (Without the keypair check the server quietly shows an
+  empty fleet: `.env` points `FEE_PAYER_KEYPAIR` into `spikes/falcon-noble-compat/.devnet/`, which a fresh worktree
+  lacks.)
 - Every test that changes an agent's status restores it in `afterEach`, through the API, checked on chain.
 - Agent processes are stopped in fixture teardown even when the test fails.
 
