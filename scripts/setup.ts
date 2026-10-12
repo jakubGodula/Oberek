@@ -1,5 +1,6 @@
 // First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the two agents (registered on
 // chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
 // Usage (from the repo root, after bun install): bun scripts/setup.ts
 import { spawnSync } from 'child_process';
 import { copyFileSync, existsSync } from 'fs';
@@ -9,6 +10,7 @@ import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
+import { runLogged } from './run-log';
 import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
 const ENV_FILE = '.env';
@@ -25,6 +27,7 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 type SetupAgent = (typeof AGENTS)[number];
 type Rpc = ReturnType<typeof createSolanaRpc<ReturnType<typeof devnet>>>;
 
+await runLogged('setup');
 if (createdEnvFile()) restart();
 const config = loadConfig(process.env);
 ensurePayer(config.feePayerPath);
