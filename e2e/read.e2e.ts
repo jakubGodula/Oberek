@@ -8,7 +8,7 @@ test('shows the test fleet as the chain has it', async ({ dashboard, page }) => 
 
 	const chain = await readChain(E2E_TICK.id);
 	await dashboard.select(E2E_TICK.name);
-	await expect(dashboard.card(E2E_TICK.name)).toContainText(`${chain.counter} tx`);
+	await expect.poll(() => dashboard.counterOf(E2E_TICK.name)).toBe(chain.counter);
 	await expect(page.getByText(chain.agentKey, { exact: true })).toBeVisible();
 	await expect(page.getByText(chain.lastDecision, { exact: true })).toBeVisible();
 	await expect(dashboard.feed()).toContainText(E2E_TICK.id);

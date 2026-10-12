@@ -1,14 +1,12 @@
 // Before and after every e2e test the test fleet goes back to its starting state: every agent active, no proposal
-// waiting. A run stopped half-way (after a kill, or with a proposal open) is cleaned up by the next one. Pure: the
-// fixture sends the requests.
+// waiting, no price shock armed. A run stopped half-way (after a kill, or with a proposal open) is cleaned up by the
+// next one. Pure: the fixture sends the requests.
+import type { AgentStatusRecord, FleetDetails } from '../src/lib/server/modules/solana-blink/blink.service';
 import type { PendingProposal } from './proposals';
 
-export interface FleetCard {
-	id: string;
-	status: 'ACTIVE' | 'PAUSED' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
-	currentTask: string;
-	/** `queued`: decisions in the server's buffer, waiting for the agent's next batch. */
-	fleet: { pendingProposal: PendingProposal | null; queued: number };
+/** The part of a card in GET /api/agents the tests use. */
+export interface FleetCard extends Pick<AgentStatusRecord, 'id' | 'name' | 'status' | 'currentTask'> {
+	fleet: Pick<FleetDetails, 'queued' | 'shockArmed'> & { pendingProposal: PendingProposal | null };
 }
 
 export interface RestoreRequest {
@@ -18,7 +16,7 @@ export interface RestoreRequest {
 
 /** A killed agent shows PAUSED even with a proposal waiting, so it is resumed first. */
 export function restoreRequests(cards: readonly FleetCard[]): RestoreRequest[] {
-	return cards.flatMap((card) => [...resumeIfKilled(card), ...rejectIfWaiting(card)]);
+	return cards.flatMap((card) => [...resumeIfKilled(card), ...rejectIfWaiting(card), ...disarmShock(card)]);
 }
 
 /** Agents the server could not read, with its reason: no test can rely on them. */
@@ -43,4 +41,9 @@ function rejectIfWaiting(card: FleetCard): RestoreRequest[] {
 	return pending
 		? [{ path: `/api/agents/${card.id}/approval`, body: { verdict: 'reject', counter: pending.counter } }]
 		: [];
+}
+
+/** Claimed as the agent claims it, which disarms it: the server has no other way to drop an armed shock. */
+function disarmShock(card: FleetCard): RestoreRequest[] {
+	return card.fleet.shockArmed ? [{ path: `/api/agents/${card.id}/shock/claim`, body: {} }] : [];
 }
