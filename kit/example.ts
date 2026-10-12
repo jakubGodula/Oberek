@@ -1,5 +1,5 @@
 // Three guarded steps of one agent on devnet. Run from the repo root (Bun reads .env):
-//   AGENT_FILE=.devnet/my-agent.json bun kit/example.ts
+//   AGENT_FILE=.devnet/my-agent.json FEE_PAYER_KEYPAIR=.devnet/agent-payer.json bun kit/example.ts
 // The agent comes from `bun scripts/agent.ts register`; FEE_PAYER_KEYPAIR pays the steps (use a wallet that is not the
 // owner's, so the agent cannot resume itself after a kill).
 import { GuardError, openGuardedAgent } from 'pq-agent-guard';
