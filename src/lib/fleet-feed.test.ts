@@ -86,7 +86,10 @@ describe('toTimeline', () => {
 		landedAt: 0
 	});
 	const labels = (rows: ReturnType<typeof toTimeline>) =>
-		rows.map((row) => (row.type === 'decision' ? `step ${row.row.counter}` : `${row.event} ${row.counter}`));
+		rows.map((row) => {
+			if (row.type === 'decision') return `step ${row.row.counter}`;
+			return row.type === 'batch' ? `batch ${row.counter}` : `${row.event} ${row.counter}`;
+		});
 
 	test('puts a kill right above the step whose counter it keeps, and the resume above the kill', () => {
 		const rows = toTimeline([hold(8), hold(7), hold(5)], [action('AgentKilled', 5), action('AgentResumed', 6)], null);
