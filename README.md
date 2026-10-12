@@ -26,7 +26,9 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
   signature, verified on-chain, so the decision history can't be forged even with every Ed25519 key broken.
 - **Quantum-resistant:** a new agent's start. `register_agent` creates the agent `Pending`, and only the owner's
   ML-DSA-44 signature, verified on-chain against the owner's key registered once per wallet, makes it `Active`
-  ([decision 005](spec/decisions/005-klucz-pq-wlasciciela-aktywuje-agenta.md)).
+  ([decision 005](spec/decisions/005-klucz-pq-wlasciciela-aktywuje-agenta.md)). This closes the gap where
+  `register_agent` took only the owner's Ed25519 signature, so a quantum attacker could have started a fake agent with
+  its own key under the owner's address.
 - **Not quantum-resistant, on purpose:** `kill` takes only the owner's Ed25519 signature, so the owner can stop an
   agent from an ordinary wallet even when its server is down. A quantum attacker could only stop an agent, not resume
   it.
