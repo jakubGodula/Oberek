@@ -14,6 +14,7 @@ import {
 	type AgentState
 } from './instructions';
 import { parseGuardEvents, type GuardEvent } from './events';
+import { GuardError } from './guard';
 import { sendV1, type SendResult, type SolanaConnection } from './transaction';
 
 /** Preparing a 1,312 B key (agent or owner) costs ~1.09M CU. */
@@ -36,9 +37,12 @@ export async function fetchBalance(client: GuardClient, account: Address): Promi
 
 export async function fetchAgent(client: GuardClient, agent: Address): Promise<AgentState> {
 	const account = await fetchEncodedAccount(client.connection.rpc, agent);
-	if (!account.exists) throw new Error(`agent account ${agent} not found (not registered, or wrong cluster)`);
+	if (!account.exists) {
+		throw new GuardError('AgentNotFound', `agent account ${agent} not found (not registered, or wrong cluster)`);
+	}
 	if (account.programAddress !== client.programAddress) {
-		throw new Error(`account ${agent} belongs to ${account.programAddress}, not to GUARD_PROGRAM_ID ${client.programAddress}`);
+		const owner = `belongs to ${account.programAddress}, not to GUARD_PROGRAM_ID ${client.programAddress}`;
+		throw new GuardError('AgentNotFound', `account ${agent} ${owner}`);
 	}
 	return decodeAgent(new Uint8Array(account.data));
 }
