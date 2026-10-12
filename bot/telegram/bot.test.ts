@@ -92,8 +92,8 @@ describe('buttons', () => {
 	test("the owner's press goes to the server and the message shows the result, without buttons", async () => {
 		const { telegram, edited, answered } = fakeTelegram();
 		const { oberek, posted } = fakeOberek([]);
-		await createBot({ telegram, oberek, ownerChatId: OWNER }).handleUpdate(press(OWNER, 'accept:sentinel-01'));
-		expect(posted).toEqual([{ path: '/api/agents/sentinel-01/approval', body: { verdict: 'accept' } }]);
+		await createBot({ telegram, oberek, ownerChatId: OWNER }).handleUpdate(press(OWNER, 'accept:sentinel-01:40'));
+		expect(posted).toEqual([{ path: '/api/agents/sentinel-01/approval', body: { verdict: 'accept', counter: 40 } }]);
 		expect(answered).toEqual([{ id: 'q1', text: undefined }]);
 		expect(edited).toEqual([{ chatId: OWNER, messageId: 9, text: 'Oberek Sentinel Alpha\n\n✅ Approved · step 41' }]);
 	});

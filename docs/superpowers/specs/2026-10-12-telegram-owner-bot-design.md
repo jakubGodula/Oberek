@@ -57,7 +57,7 @@ the Bot API.
 | `index.ts` | Reads env, runs two loops: Telegram updates (long poll) and agent polling. |
 | `telegram-api.ts` | `getUpdates`, `sendMessage`, `editMessageText`, `answerCallbackQuery`. |
 | `notices.ts` | Pure: previous and current agent lists → messages with buttons; one agent → its `/agents` message. |
-| `buttons.ts` | Pure: button ↔ callback data (`accept:sentinel-01`), button → server request. |
+| `buttons.ts` | Pure: button ↔ callback data (`accept:sentinel-01:41`, `kill:sentinel-01`), button → server request. |
 | `oberek-api.ts` | The server over HTTP: `GET /api/agents`, `POST` of a button's request. |
 | `bot.ts` | Handles one Telegram update and one agent poll, given the two APIs; tested with fakes. |
 
@@ -103,10 +103,16 @@ No fleet agents, or the server not answering, gets one message saying so.
 
 ### Buttons
 
-- Callback data `<action>:<agentId>`, action ∈ `accept`, `reject`, `kill`, `resume`. Telegram allows 64 bytes; an
-  agent whose data would be longer gets the message without buttons and a note to use the page. Data that does not
-  parse is answered "unknown button".
-- `accept` / `reject` → `POST /api/agents/<id>/approval`; `kill` / `resume` → `POST /api/agents/<id>/control`.
+- Callback data `<action>:<agentId>:<counter>` for `accept` / `reject`, where `counter` is the step counter of the
+  proposal the message shows (`step #N`, a positive integer); `<action>:<agentId>` for `kill` / `resume`. Telegram
+  allows 64 bytes; an agent whose data would be longer gets the message without buttons and a note to use the page.
+  Data that does not parse (a verdict without its counter, `kill` / `resume` with one) is answered "unknown button".
+- `accept` / `reject` → `POST /api/agents/<id>/approval` with `{ verdict, counter }`; `kill` / `resume` →
+  `POST /api/agents/<id>/control`.
+- The approval endpoint takes an optional `counter`. When given and the waiting proposal has another counter, the
+  verdict is refused with 409 ("proposal #41 is no longer waiting (now #43)") and nothing is recorded, so an old
+  message's Accept never decides a proposal the owner has not seen. The page sends the counter of the proposal on
+  screen too.
 - After the call the bot edits the message: the original text plus the result ("✅ Approved, step 42" or "Refused (409):
   no proposal waiting"), with no buttons left, so a second press cannot fire.
 

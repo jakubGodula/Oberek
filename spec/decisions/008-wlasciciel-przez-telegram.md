@@ -14,7 +14,9 @@ gotowy, ale nikt nie mógł go zobaczyć.
   `GET /api/agents` i wysyła właścicielowi: propozycję z treścią i przyciskami Accept, Reject, Kill; zabicie z Resume;
   wznowienie z Kill. `/agents` wypisuje flotę z przyciskami pasującymi do stanu agenta.
 - Przyciski wołają te same endpointy co strona: `POST /api/agents/<id>/approval` i nowy `POST /api/agents/<id>/control`
-  (`kill` / `resume`).
+  (`kill` / `resume`). Accept i Reject niosą licznik kroku propozycji z wiadomości (`accept:<id>:<licznik>`), a serwer
+  odrzuca werdykt kodem 409, gdy czeka już inna propozycja; stara wiadomość nie zatwierdzi propozycji, której właściciel
+  nie widział. Strona wysyła licznik tak samo.
 - Działać może tylko czat `TELEGRAM_OWNER_CHAT_ID`; `/start` podaje każdemu jego id czatu.
 - Ścieżka Blinks znika: `/api/actions/agent-action`, `actions.json`, transakcja Memo i zależność `@solana/actions`.
 

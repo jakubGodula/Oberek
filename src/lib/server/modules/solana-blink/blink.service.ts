@@ -1,6 +1,6 @@
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
 import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
-import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
+import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
 import { controlAgent as controlFleetAgent, type ControlAction } from '../fleet/control';
@@ -155,9 +155,12 @@ export class BlinkService {
     return [...fleetAgents, ...agentsStore.values()];
   }
 
-  /** The owner's verdict on a fleet agent's proposal: recorded on chain as the agent's next step and in its log. */
-  async decideProposal(agentId: string, verdict: Verdict): Promise<{ counter: number }> {
-    const { record } = await recordVerdict(await getFleetRuntime(), agentId, verdict);
+  /**
+   * The owner's verdict on a fleet agent's proposal: recorded on chain as the agent's next step and in its log. A
+   * verdict naming another proposal than the waiting one is refused.
+   */
+  async decideProposal(agentId: string, { verdict, counter }: VerdictRequest): Promise<{ counter: number }> {
+    const { record } = await recordVerdict(await getFleetRuntime(), agentId, verdict, counter);
     return { counter: record.counter };
   }
 

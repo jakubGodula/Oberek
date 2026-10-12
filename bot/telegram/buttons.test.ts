@@ -2,42 +2,66 @@ import { describe, expect, test } from 'bun:test';
 import { keyboardFor, parseCallbackData, requestFor, resultLine } from './buttons';
 
 describe('keyboardFor', () => {
-	test('one row of labelled buttons carrying action and agent', () => {
-		expect(keyboardFor('sentinel-01', ['accept', 'reject', 'kill'])).toEqual([
+	test('one row of labelled buttons; a verdict also carries the proposal it decides', () => {
+		expect(keyboardFor('sentinel-01', ['accept', 'reject', 'kill'], 41)).toEqual([
 			[
-				{ text: '✅ Accept', callback_data: 'accept:sentinel-01' },
-				{ text: '❌ Reject', callback_data: 'reject:sentinel-01' },
+				{ text: '✅ Accept', callback_data: 'accept:sentinel-01:41' },
+				{ text: '❌ Reject', callback_data: 'reject:sentinel-01:41' },
 				{ text: '🛑 Kill', callback_data: 'kill:sentinel-01' }
 			]
 		]);
 	});
 
+	test('a verdict button without the proposal counter is a programming error', () => {
+		expect(() => keyboardFor('sentinel-01', ['accept'])).toThrow('a verdict button needs the proposal counter');
+	});
+
 	test('is null when the callback data would pass 64 bytes', () => {
 		expect(keyboardFor('a'.repeat(58), ['resume'])).toBeNull();
 		expect(keyboardFor('a'.repeat(57), ['resume'])).not.toBeNull();
+		expect(keyboardFor('a'.repeat(55), ['accept'], 41)).toBeNull();
+		expect(keyboardFor('a'.repeat(54), ['accept'], 41)).not.toBeNull();
 	});
 });
 
 describe('parseCallbackData', () => {
 	test('reads back what keyboardFor wrote', () => {
-		for (const action of ['accept', 'reject', 'kill', 'resume'] as const) {
+		for (const action of ['kill', 'resume'] as const) {
 			const data = keyboardFor('tick-01', [action])?.[0][0].callback_data ?? '';
 			expect(parseCallbackData(data)).toEqual({ action, agentId: 'tick-01' });
+		}
+		for (const action of ['accept', 'reject'] as const) {
+			const data = keyboardFor('tick-01', [action], 41)?.[0][0].callback_data ?? '';
+			expect(parseCallbackData(data)).toEqual({ action, agentId: 'tick-01', proposalCounter: 41 });
 		}
 	});
 
 	test('refuses anything else', () => {
-		for (const data of ['', 'kill', 'pause:tick-01', 'kill:', 'kill:../etc', 'kill:tick 01']) {
-			expect(parseCallbackData(data)).toBeNull();
-		}
+		const refused = [
+			'',
+			'kill',
+			'pause:tick-01',
+			'kill:',
+			'kill:../etc',
+			'kill:tick 01',
+			'kill:tick-01:41',
+			'accept:tick-01',
+			'accept:tick-01:',
+			'accept:tick-01:0',
+			'accept:tick-01:041',
+			'accept:tick-01:-1',
+			'accept:tick-01:4.1',
+			'accept:tick-01:41:1'
+		];
+		for (const data of refused) expect(parseCallbackData(data)).toBeNull();
 	});
 });
 
 describe('requestFor', () => {
-	test('a verdict goes to the approval endpoint', () => {
-		expect(requestFor({ action: 'reject', agentId: 'sentinel-01' })).toEqual({
+	test('a verdict goes to the approval endpoint, naming the proposal', () => {
+		expect(requestFor({ action: 'reject', agentId: 'sentinel-01', proposalCounter: 41 })).toEqual({
 			path: '/api/agents/sentinel-01/approval',
-			body: { verdict: 'reject' }
+			body: { verdict: 'reject', counter: 41 }
 		});
 	});
 

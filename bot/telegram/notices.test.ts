@@ -37,6 +37,15 @@ describe('changeNotices', () => {
 		expect(buttons(notice)).toEqual(['✅ Accept', '❌ Reject', '🛑 Kill']);
 	});
 
+	test('the verdict buttons name the proposal the message shows', () => {
+		const [notice] = changeNotices([agent()], [awaiting(43)]);
+		expect(notice.keyboard?.[0].map((button) => button.callback_data)).toEqual([
+			'accept:sentinel-01:43',
+			'reject:sentinel-01:43',
+			'kill:sentinel-01'
+		]);
+	});
+
 	test('a killed agent, with Resume', () => {
 		const notices = changeNotices([agent()], [paused()]);
 		expect(notices).toHaveLength(1);

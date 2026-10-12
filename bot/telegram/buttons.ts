@@ -3,12 +3,16 @@ import type { Keyboard } from './telegram-api';
 
 // The owner's buttons: what each one carries, which server request it makes and how its result reads.
 
-export type ButtonAction = 'accept' | 'reject' | 'kill' | 'resume';
+type VerdictAction = 'accept' | 'reject';
+export type ButtonAction = VerdictAction | 'kill' | 'resume';
 
-export interface Press {
-	action: ButtonAction;
-	agentId: string;
-}
+/**
+ * A verdict carries the step counter of the proposal its message shows, so an old message cannot decide a later
+ * proposal.
+ */
+export type Press =
+	| { action: VerdictAction; agentId: string; proposalCounter: number }
+	| { action: Exclude<ButtonAction, VerdictAction>; agentId: string };
 
 const LABELS: Record<ButtonAction, string> = {
 	accept: '✅ Accept',
@@ -28,31 +32,46 @@ const DONE: Record<ButtonAction, string> = {
 const MAX_CALLBACK_BYTES = 64;
 /** The server's agent id pattern (isAgentId). */
 const AGENT_ID = /^[A-Za-z0-9-]{1,64}$/;
+/** A proposal's step counter in callback data: a positive integer, digits only. */
+const PROPOSAL_COUNTER = /^[1-9][0-9]*$/;
 const SEPARATOR = ':';
 const HTTP_OK_MIN = 200;
 const HTTP_OK_MAX = 299;
 
 const isButtonAction = (value: string): value is ButtonAction => Object.hasOwn(LABELS, value);
-const callbackData = ({ action, agentId }: Press) => `${action}${SEPARATOR}${agentId}`;
+const isVerdict = (action: ButtonAction): action is VerdictAction => action === 'accept' || action === 'reject';
 
-export function parseCallbackData(data: string): Press | null {
-	const at = data.indexOf(SEPARATOR);
-	const action = data.slice(0, at);
-	const agentId = data.slice(at + 1);
-	return at > 0 && isButtonAction(action) && AGENT_ID.test(agentId) ? { action, agentId } : null;
+/** `<action>:<agentId>`, and `:<proposalCounter>` after a verdict. */
+function callbackData(action: ButtonAction, agentId: string, proposalCounter: number | undefined): string {
+	if (!isVerdict(action)) return [action, agentId].join(SEPARATOR);
+	if (proposalCounter === undefined) throw new Error('a verdict button needs the proposal counter');
+	return [action, agentId, proposalCounter].join(SEPARATOR);
 }
 
-export function keyboardFor(agentId: string, actions: ButtonAction[]): Keyboard | null {
-	const row = actions.map((action) => ({ text: LABELS[action], callback_data: callbackData({ action, agentId }) }));
+export function parseCallbackData(data: string): Press | null {
+	const [action = '', agentId = '', counter, ...rest] = data.split(SEPARATOR);
+	if (!isButtonAction(action) || !AGENT_ID.test(agentId) || rest.length > 0) return null;
+	if (!isVerdict(action)) return counter === undefined ? { action, agentId } : null;
+	return counter !== undefined && PROPOSAL_COUNTER.test(counter)
+		? { action, agentId, proposalCounter: Number(counter) }
+		: null;
+}
+
+/** `proposalCounter` is required when `actions` hold Accept or Reject. */
+export function keyboardFor(agentId: string, actions: ButtonAction[], proposalCounter?: number): Keyboard | null {
+	const row = actions.map((action) => ({
+		text: LABELS[action],
+		callback_data: callbackData(action, agentId, proposalCounter)
+	}));
 	const fits = row.every((button) => Buffer.byteLength(button.callback_data) <= MAX_CALLBACK_BYTES);
 	return fits ? [row] : null;
 }
 
-export function requestFor({ action, agentId }: Press): ServerRequest {
-	const agentPath = `/api/agents/${encodeURIComponent(agentId)}`;
-	return action === 'accept' || action === 'reject'
-		? { path: `${agentPath}/approval`, body: { verdict: action } }
-		: { path: `${agentPath}/control`, body: { action } };
+export function requestFor(press: Press): ServerRequest {
+	const agentPath = `/api/agents/${encodeURIComponent(press.agentId)}`;
+	return 'proposalCounter' in press
+		? { path: `${agentPath}/approval`, body: { verdict: press.action, counter: press.proposalCounter } }
+		: { path: `${agentPath}/control`, body: { action: press.action } };
 }
 
 export function resultLine(action: ButtonAction, answer: Answer): string {

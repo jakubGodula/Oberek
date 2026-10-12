@@ -20,7 +20,7 @@ export interface AgentView {
 
 export interface ServerRequest {
 	path: string;
-	body: Record<string, string>;
+	body: Record<string, string | number>;
 }
 
 export type Answer = { kind: 'answered'; status: number; body: unknown } | { kind: 'unreachable'; reason: string };

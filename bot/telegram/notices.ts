@@ -21,15 +21,15 @@ const isFleetAgent = (agent: AgentView) => agent.fleet !== undefined;
 const proposalOf = (agent: AgentView): PendingProposal | null =>
 	agent.status === 'AWAITING_APPROVAL' ? (agent.fleet?.pendingProposal ?? null) : null;
 
-function notice(text: string, agentId: string, actions: ButtonAction[]): Notice {
+function notice(text: string, agentId: string, actions: ButtonAction[], proposalCounter?: number): Notice {
 	if (actions.length === 0) return { text };
-	const keyboard = keyboardFor(agentId, actions);
+	const keyboard = keyboardFor(agentId, actions, proposalCounter);
 	return keyboard ? { text, keyboard } : { text: `${text}\n\n${NO_BUTTONS_NOTE}` };
 }
 
 function proposalNotice(agent: AgentView, proposal: PendingProposal): Notice {
 	const text = `⚠️ ${agent.name} waits for your verdict · step #${proposal.counter}\n${proposal.summary}\n\n${PROPOSAL_FOOTER}`;
-	return notice(text, agent.id, ['accept', 'reject', 'kill']);
+	return notice(text, agent.id, ['accept', 'reject', 'kill'], proposal.counter);
 }
 
 /** What changed for one agent since the previous read; null when nothing worth a message. */

@@ -103,7 +103,9 @@
     const done = verdict === 'accept'
       ? 'Proposal approved: the verdict is on-chain, the agent executes the trade in its next cycle.'
       : 'Proposal rejected: the verdict is on-chain, the treasury is unchanged.';
-    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict }, done);
+    // The counter names the proposal on screen: the server refuses the verdict if another one waits by now.
+    const counter = selectedAgent.fleet?.pendingProposal?.counter;
+    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict, counter }, done);
   }
 
   async function armShock() {
