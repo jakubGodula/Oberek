@@ -118,10 +118,27 @@ The bot sends each proposal to your Telegram chat with **Accept** and **Reject**
 agent's status changes; `/agents` lists the fleet with the buttons each agent's state allows. It runs as its own
 process and talks to the server over HTTP, so it works from localhost.
 
-1. In Telegram, send `/newbot` to @BotFather; put the token it gives in `.env` as `TELEGRAM_BOT_TOKEN`.
-2. `bun bot/telegram`, then send `/start` to your bot: it answers with your chat id. Put it in `.env` as
-   `TELEGRAM_OWNER_CHAT_ID` and restart the bot. Only that chat can press buttons. Use your private chat with the bot:
-   in a group every member could press them.
+The bot has no dependencies of its own: the `bun install` from [Run](#run) covers it. A checkout from before the bot
+needs that `bun install` again, because the lockfile changed (the Blinks package `@solana/actions` is gone).
+
+**Create the bot (once).**
+
+1. In Telegram, open **@BotFather** (the verified one) and send `/newbot`.
+2. Give it a display name (e.g. `Oberek Owner`) and a username ending in `bot` (e.g. `oberek_owner_bot`).
+3. BotFather answers with a token like `123456789:AAH…`. It controls the bot, so keep it out of git and chats: put it
+   in `.env` in the repository root as `TELEGRAM_BOT_TOKEN=…` (`.env` is gitignored). If it leaks, send `/revoke` to
+   @BotFather for a new one.
+
+**Connect your chat (once).**
+
+4. Start the server (`bun run dev`) and the bot (`bun bot/telegram`, from the repository root: Bun reads `.env` there).
+5. Open your bot in Telegram and send `/start`. It answers with your chat id; put it in `.env` as
+   `TELEGRAM_OWNER_CHAT_ID=…` and restart the bot. Only that chat can press buttons. Use your private chat with the
+   bot: in a group every member could press them.
+
+**Use it.** Send `/agents` for one message per fleet agent with its buttons. Proposals, kills and resumes arrive on
+their own, every 3 s at most. Accept and Reject act only on the proposal their message shows: if a newer one is waiting,
+the server refuses (409) and the message says so.
 
 ```bash
 bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_URL if not on :5173
