@@ -70,10 +70,9 @@ export class Dashboard {
 		await this.page.getByRole('button', { name: 'Hide', exact: true }).click();
 	}
 
-	/** The step number of the proposal in the approval panel ("… waiting for your verdict · step #221"). */
-	async pendingProposalCounter(): Promise<number> {
-		const panelTitle = this.page.getByText(/waiting for your verdict · step #\d+/);
-		return numberIn(await panelTitle.innerText(), /#(\d+)/);
+	/** The approval panel's title, which names the waiting proposal ("… waiting for your verdict · step #221"). */
+	approvalPanelTitle(): Locator {
+		return this.page.getByText(/waiting for your verdict · step #\d+/);
 	}
 
 	/** The approval panel's button: it comes before the console's "Approve Step" / "Reject" in the page. */
