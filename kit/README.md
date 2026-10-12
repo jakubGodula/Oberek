@@ -1,12 +1,25 @@
 # pq-agent-guard
 
-Puts an existing agent behind the `onchain_agent_guard` program on Solana. Before each action, the agent's decision is
-signed with its ML-DSA-44 key (post-quantum), and the program verifies that signature on chain and records it. Only
-then does the action run. Once the owner kills the agent, every further step is refused, so no further action runs,
-whatever the agent's code: a resume needs the owner's wallet, and `openGuardedAgent` refuses it as the agent's payer.
+A reusable building block: a small TypeScript library that hardens an agent you already have, in a few lines. It fits
+AI agents (an LLM picks the next action) and ordinary ones (a trading bot, a keeper, a cron script) alike. You wrap each
+action in `agent.step(decision, act)`, and the agent's own logic stays as it is:
+
+```ts
+const agent = await openGuardedAgent({ agentFile, payer });
+await agent.step(JSON.stringify(decision), () => act()); // act runs only after the decision is recorded on chain
+```
+
+What the agent gains:
+
+- **A record no one can forge.** Each decision is signed with the agent's post-quantum ML-DSA-44 key, verified by the
+  `onchain_agent_guard` program on Solana and recorded there, before the action runs.
+- **A kill switch the agent cannot undo.** Once the owner kills the agent, every further `step` is refused, so no
+  further action that goes through it runs. A resume needs the owner's wallet, and `openGuardedAgent` refuses it as the
+  agent's payer.
 
 The kit talks to the program directly; you do not need the Oberek server. Oberek itself
-(`src/lib/server/modules/fleet/`) runs its agents on this package and is the larger worked example.
+(`src/lib/server/modules/fleet/`) runs its agents on this package and is the larger worked example. The package runs on
+Bun and lives in this repo as a workspace package (`"pq-agent-guard": "workspace:*"`).
 
 ## Setup, once
 
@@ -59,7 +72,8 @@ A refused step throws `GuardError`, and the action does not run. `error.code`:
 | `PayerUnfunded` | the payer (or, for kill and resume, the owner) cannot pay the fee; nothing was sent |
 | `AgentNotFound` | no such agent on this cluster |
 
-Runnable: `AGENT_FILE=.devnet/my-agent.json bun kit/example.ts` records three steps and prints the status.
+Runnable: `AGENT_FILE=.devnet/my-agent.json FEE_PAYER_KEYPAIR=.devnet/agent-payer.json bun kit/example.ts` records
+three steps and prints the status.
 
 To test your agent without the network, use the in-memory guard:
 
