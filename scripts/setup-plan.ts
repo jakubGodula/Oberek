@@ -36,3 +36,8 @@ export function lamportsNeeded(agents: readonly AgentProgress[], ownerKeyRegiste
 	const forAgents = BigInt(agents.filter((agent) => stepsFor(agent).includes('register')).length) * LAMPORTS_PER_AGENT;
 	return ownerKeyRegistered ? forAgents : forAgents + LAMPORTS_FOR_OWNER_KEY;
 }
+
+/** Agents set up before the owner key existed were never activated by it: activation needs that key. */
+export function predatesActivation(agents: readonly AgentProgress[], ownerKeyRegistered: boolean): boolean {
+	return !ownerKeyRegistered && agents.some((agent) => agent.registered || agent.imported);
+}

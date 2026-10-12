@@ -81,8 +81,14 @@ yet, such as `jito-01`, is registered, which needs about 0.2 SOL. It creates `.e
 payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
 first; that is often rate-limited, so it may print the address and wait until you send SOL from
 https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it creates the owner's ML-KEM-768
-key (`OWNER_MLKEM_FILE`), registers `sentinel-01`, `tick-01` and `jito-01` (agent files in `.devnet/agents/`), imports them into
-the fleet and seals their decision logs.
+key (`OWNER_MLKEM_FILE`), registers the owner's ML-DSA-44 key once per wallet (`OWNER_MLDSA_FILE`, ~0.2 SOL; back it up,
+it can't be registered again), registers and activates `sentinel-01`, `tick-01` and `jito-01` (agent files in
+`.devnet/agents/`), imports them into the fleet and seals their decision logs.
+
+Agents set up before the owner key existed keep running, but that key never activated them, and setup says so. To
+replace them with activated agents, stop the demo and run `bun scripts/setup.ts --reregister`: it moves their files to
+`.devnet/retired/reregister-<time>/` and registers new ones (~0.2 SOL each). The new agents start with an empty history;
+the old accounts stay on chain.
 
 Something broke? Each run of `setup.ts` and `demo.ts` writes its whole output, children included, to
 `.devnet/logs/<script>-<time>.log` and prints the path at the end. The log is timestamped and redacted: tokens, secrets,

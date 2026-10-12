@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test';
-import { LAMPORTS_FOR_OWNER_KEY, LAMPORTS_PER_AGENT, lamportsNeeded, stepsFor, type AgentProgress } from './setup-plan';
+import {
+	LAMPORTS_FOR_OWNER_KEY,
+	LAMPORTS_PER_AGENT,
+	lamportsNeeded,
+	predatesActivation,
+	stepsFor,
+	type AgentProgress
+} from './setup-plan';
 
 const fresh: AgentProgress = { registered: false, pending: false, imported: false, sealed: false, identified: false };
 const registered: AgentProgress = { registered: true, pending: false, imported: false, sealed: false, identified: false };
@@ -80,4 +87,14 @@ test('a set-up machine needs no funding', () => {
 test('funding also covers the owner key until it is registered', () => {
 	expect(lamportsNeeded([fresh], false)).toBe(LAMPORTS_PER_AGENT + LAMPORTS_FOR_OWNER_KEY);
 	expect(lamportsNeeded([done], false)).toBe(LAMPORTS_FOR_OWNER_KEY);
+});
+
+test('agents set up before the owner key existed predate activation', () => {
+	expect(predatesActivation([done, fresh], false)).toBe(true);
+	expect(predatesActivation([{ ...fresh, registered: true }], false)).toBe(true);
+});
+
+test('agents set up after the owner key, or no agents at all, do not predate activation', () => {
+	expect(predatesActivation([done], true)).toBe(false);
+	expect(predatesActivation([fresh, fresh], false)).toBe(false);
 });

@@ -2,10 +2,11 @@
 // (registered and activated on chain, imported into the fleet, their logs sealed). Every step is skipped when already
 // done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
-// Usage (from the repo root, after bun install): bun scripts/setup.ts
+// Usage (from the repo root, after bun install): bun scripts/setup.ts [--reregister]
+// --reregister moves the agents' files aside and registers new, activated ones (stop the demo first).
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { loadAgentFile, loadKeypairSigner, saveAgentFile } from '../src/lib/server/modules/agent/files';
@@ -13,11 +14,13 @@ import { decodeAgent } from '../src/lib/server/modules/agent/instructions';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { runLogged } from './run-log';
-import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
+import { lamportsNeeded, predatesActivation, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
 const ENV_FILE = '.env';
 const ENV_EXAMPLE = '.env.example';
 const AGENTS_DIR = '.devnet/agents';
+const RETIRED_DIR = '.devnet/retired';
+const REREGISTER_FLAG = '--reregister';
 const AGENTS = [
 	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
 	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' },
@@ -38,12 +41,17 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 /** A plain RPC, without the server's rate-limit retries: a refused airdrop should go to the faucet hint at once. */
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
+if (process.argv.includes(REREGISTER_FLAG)) retireAgents();
 const progress = await Promise.all(AGENTS.map(progressOf));
-await ensureFunded(rpc, payer, lamportsNeeded(progress, existsSync(config.ownerMldsaPath)));
+const ownerKeyRegistered = existsSync(config.ownerMldsaPath);
+await ensureFunded(rpc, payer, lamportsNeeded(progress, ownerKeyRegistered));
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
 ensureOwnerKey();
 for (const [index, agent] of AGENTS.entries()) setUpAgent(agent, progress[index]);
+if (predatesActivation(progress, ownerKeyRegistered)) {
+	log(`these agents predate the owner key, so it never activated them; to replace them: bun scripts/setup.ts ${REREGISTER_FLAG}`);
+}
 log('ready: bun scripts/demo.ts');
 log(telegramHint());
 
@@ -115,6 +123,23 @@ function ensureOwnerKey(): void {
 		return;
 	}
 	runBun(['scripts/agent.ts', 'register-owner']);
+	log(`back up ${config.ownerMldsaPath}: a wallet registers its owner key once, so without it no new agent can be activated`);
+}
+
+/** The old accounts stay on chain and the server stops running them; their files are kept for the audit. */
+function retireAgents(): void {
+	const dir = join(RETIRED_DIR, `reregister-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+	for (const agent of AGENTS) {
+		moveIfPresent(agentFile(agent), join(dir, 'agents', `${agent.id}.json`));
+		moveIfPresent(join(FLEET_DIR, agent.id), join(dir, 'fleet', agent.id));
+	}
+	log(`old agents moved to ${dir}`);
+}
+
+function moveIfPresent(from: string, to: string): void {
+	if (!existsSync(from)) return;
+	mkdirSync(dirname(to), { recursive: true });
+	renameSync(from, to);
 }
 
 function setUpAgent(agent: SetupAgent, progress: AgentProgress): void {
