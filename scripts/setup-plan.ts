@@ -1,5 +1,9 @@
 // What setup still has to do for each agent, and how much SOL the payer needs for it. Pure, so a re-run can skip
 // whatever an earlier run already did.
+// Also which fleet to set up: the demo's, or the e2e tests' own (--e2e).
+
+import type { RiskLevel } from '../src/lib/server/modules/fleet/fleet';
+import { DEMO_FLEET_DIR, E2E_FLEET_DIR } from '../src/lib/server/modules/fleet/fleet-dir';
 
 /** ~0.15 SOL of rent locked by the registration, plus room for the agent's first steps (15,000 lamports each). */
 export const LAMPORTS_PER_AGENT = 200_000_000n;
@@ -40,4 +44,46 @@ export function lamportsNeeded(agents: readonly AgentProgress[], ownerKeyRegiste
 /** Agents set up before the owner key existed were never activated by it: activation needs that key. */
 export function predatesActivation(agents: readonly AgentProgress[], ownerKeyRegistered: boolean): boolean {
 	return !ownerKeyRegistered && agents.some((agent) => agent.registered || agent.imported);
+}
+
+export interface SetupAgent {
+	readonly id: string;
+	readonly name: string;
+	readonly risk: RiskLevel;
+}
+
+/** Which fleet setup builds: its directories, its agents and what to run once it is ready. */
+export interface SetupProfile {
+	readonly fleetDir: string;
+	readonly agentsDir: string;
+	readonly agents: readonly SetupAgent[];
+	readonly nextStep: string;
+}
+
+export const E2E_FLAG = '--e2e';
+
+/** The page's Simulate panel names sentinel-01, so the test fleet keeps the demo's ids in its own directory. */
+export const E2E_SENTINEL: SetupAgent = { id: 'sentinel-01', name: 'E2E Sentinel', risk: 'MEDIUM' };
+export const E2E_TICK: SetupAgent = { id: 'tick-01', name: 'E2E Tick', risk: 'LOW' };
+
+export const DEMO_PROFILE: SetupProfile = {
+	fleetDir: DEMO_FLEET_DIR,
+	agentsDir: '.devnet/agents',
+	agents: [
+		{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
+		{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' },
+		{ id: 'jito-01', name: 'JitoSOL Steward', risk: 'MEDIUM' }
+	],
+	nextStep: 'bun scripts/demo.ts'
+};
+
+export const E2E_PROFILE: SetupProfile = {
+	fleetDir: E2E_FLEET_DIR,
+	agentsDir: '.devnet/e2e-agents',
+	agents: [E2E_SENTINEL, E2E_TICK],
+	nextStep: 'bun run e2e'
+};
+
+export function profileFor(argv: readonly string[]): SetupProfile {
+	return argv.includes(E2E_FLAG) ? E2E_PROFILE : DEMO_PROFILE;
 }

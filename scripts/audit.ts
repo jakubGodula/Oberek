@@ -2,7 +2,7 @@
 // checks that every step and resume is on-chain and that each on-chain hash is backed by a log record that still
 // hashes to it. Sealed log lines are opened with the owner's ML-KEM-768 secret key (OWNER_MLKEM_FILE), not with the
 // server's copy of the key. Read-only: sends no transactions, costs no fees. Run from the repo root.
-// Usage: bun scripts/audit.ts <agent id>
+// Usage: [FLEET_DIR=<fleet dir>] bun scripts/audit.ts <agent id>   (FLEET_DIR: another fleet, e.g. .devnet/e2e-fleet)
 // Exit code: 0 history OK, 1 problems found, 2 usage error.
 import type { Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
@@ -17,9 +17,13 @@ import {
 import { auditHistory, type AuditReport } from '../src/lib/server/modules/fleet/audit';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { loadOwnerKemKey, recoverDataKey } from '../src/lib/server/modules/fleet/log-seal';
-import { FLEET_DIR, guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 
-const USAGE = 'Usage: bun scripts/audit.ts <agent id>   (a directory in .devnet/fleet, e.g. sentinel-01)';
+const USAGE = [
+	'Usage: [FLEET_DIR=<fleet dir>] bun scripts/audit.ts <agent id>',
+	'  <agent id>: a directory in .devnet/fleet, or in FLEET_DIR, e.g. sentinel-01'
+].join('\n');
 const EXIT_OK = 0;
 const EXIT_PROBLEMS = 1;
 const EXIT_USAGE = 2;
@@ -41,9 +45,9 @@ process.exitCode = report.problems.length ? EXIT_PROBLEMS : EXIT_OK;
  * never taken from the server's stored copy. The owner key is loaded only when a sealed line needs it.
  */
 function ownerFleet(): Fleet {
-	const stored = new Fleet(FLEET_DIR);
+	const stored = new Fleet(fleetDir());
 	const ownerSecretKey = () => loadOwnerKemKey(config.ownerKemPath).secretKey;
-	return new Fleet(FLEET_DIR, (id) => recoverDataKey(stored.seal(id).kemCiphertext, ownerSecretKey()));
+	return new Fleet(fleetDir(), (id) => recoverDataKey(stored.seal(id).kemCiphertext, ownerSecretKey()));
 }
 
 function agentIdFromArgs(): string {
@@ -65,7 +69,7 @@ async function fetchEventsShowingProgress(guard: GuardClient, account: Address):
 function printReport(account: Address, agentState: AgentState, audit: AuditReport): void {
 	console.log(`agent ${agentId} (${account}), ${agentState.status}, counter ${agentState.counter}`);
 	console.log(`on-chain: ${audit.steps} steps, ${audit.batches} batches, ${audit.resumes} resumes, ${audit.kills} kills; log: ${audit.logEntries} entries`);
-	const lines = new Fleet(FLEET_DIR).decisionLineCounts(agentId);
+	const lines = new Fleet(fleetDir()).decisionLineCounts(agentId);
 	console.log(`log file: ${lines.sealed} lines sealed (opened with the owner's ML-KEM key), ${lines.legacy} plaintext from before sealing`);
 	if (audit.newer > 0) console.log(`${audit.newer} events and log entries newer than the account read, not audited`);
 	for (const problem of audit.problems) console.log(`  ✗ ${problem}`);

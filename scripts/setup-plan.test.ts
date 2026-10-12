@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test';
 import {
+	DEMO_PROFILE,
+	E2E_FLAG,
+	E2E_PROFILE,
 	LAMPORTS_FOR_OWNER_KEY,
 	LAMPORTS_PER_AGENT,
 	lamportsNeeded,
 	predatesActivation,
+	profileFor,
 	stepsFor,
 	type AgentProgress
 } from './setup-plan';
@@ -97,4 +101,28 @@ test('agents set up before the owner key existed predate activation', () => {
 test('agents set up after the owner key, or no agents at all, do not predate activation', () => {
 	expect(predatesActivation([done], true)).toBe(false);
 	expect(predatesActivation([fresh, fresh], false)).toBe(false);
+});
+
+test('sets up the demo fleet by default', () => {
+	expect(profileFor(['bun', 'scripts/setup.ts'])).toBe(DEMO_PROFILE);
+	expect(DEMO_PROFILE.agents.map((agent) => agent.id)).toEqual(['sentinel-01', 'tick-01', 'jito-01']);
+});
+
+test('sets up the test fleet with --e2e, also next to --reregister', () => {
+	expect(profileFor(['bun', 'scripts/setup.ts', E2E_FLAG])).toBe(E2E_PROFILE);
+	expect(profileFor(['bun', 'scripts/setup.ts', '--reregister', E2E_FLAG])).toBe(E2E_PROFILE);
+	expect(E2E_PROFILE.agents.map((agent) => agent.id)).toEqual(['sentinel-01', 'tick-01']);
+});
+
+test("keeps the test fleet out of the demo fleet's directories", () => {
+	expect(E2E_PROFILE.fleetDir).not.toBe(DEMO_PROFILE.fleetDir);
+	expect(E2E_PROFILE.agentsDir).not.toBe(DEMO_PROFILE.agentsDir);
+});
+
+test('names the test agents so the page shows which fleet it serves', () => {
+	const demoNames = new Set(DEMO_PROFILE.agents.map((agent) => agent.name));
+	for (const agent of E2E_PROFILE.agents) {
+		expect(agent.name.startsWith('E2E ')).toBe(true);
+		expect(demoNames.has(agent.name)).toBe(false);
+	}
 });

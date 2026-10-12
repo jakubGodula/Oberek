@@ -1,11 +1,11 @@
-// Manages the fleet (.devnet/fleet/<id>/). Run from the repo root.
+// Manages the fleet (.devnet/fleet/<id>/, or another fleet named by FLEET_DIR). Run from the repo root.
 //   owner-key: creates the owner's ML-KEM-768 key file (OWNER_MLKEM_FILE) if it is missing.
 //   import:    puts an agent registered on devnet into the fleet, e.g. .devnet/agent.json from
 //              `bun scripts/agent.ts register`; copies its keys into .devnet/fleet/<id>/onchain.json and seals its
 //              decision log to the owner's key.
 //   seal:      seals the decision log of an agent imported before logs were sealed.
-import { existsSync } from 'fs';
-import { parseArgs } from 'util';
+import { existsSync } from 'node:fs';
+import { parseArgs } from 'node:util';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { fetchAgent, loadAgentFile, saveAgentFile } from 'pq-agent-guard';
 import { Fleet, type RiskLevel } from '../src/lib/server/modules/fleet/fleet';
@@ -16,12 +16,14 @@ import {
 	saveOwnerKemKey,
 	type LogSeal
 } from '../src/lib/server/modules/fleet/log-seal';
-import { FLEET_DIR, guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { guardClientFrom, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { fleetDir } from '../src/lib/server/modules/fleet/fleet-dir';
 
 const USAGE = [
 	'Usage: bun scripts/fleet.ts owner-key',
 	'       bun scripts/fleet.ts import <agent file> --as <id> --name "<name>" [--risk LOW (default)|MEDIUM|HIGH|CRITICAL]',
-	'       bun scripts/fleet.ts seal <id>'
+	'       bun scripts/fleet.ts seal <id>',
+	'FLEET_DIR=<fleet dir> in front of any of them works on another fleet, e.g. .devnet/e2e-fleet.'
 ].join('\n');
 const RISK_LEVELS: readonly RiskLevel[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const DEFAULT_RISK: RiskLevel = 'LOW';
@@ -32,7 +34,7 @@ const { positionals, values } = parseArgs({
 });
 const [command, argument] = positionals;
 const config = loadConfig(process.env);
-const fleet = new Fleet(FLEET_DIR);
+const fleet = new Fleet(fleetDir());
 
 function fail(message: string): never {
 	console.error(`${message}\n${USAGE}`);

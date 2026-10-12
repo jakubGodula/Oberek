@@ -242,4 +242,10 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ```sh
 bun test                         # server, fleet, agents, scripts, the Telegram bot and the kit, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
+bun scripts/setup.ts --e2e       # once: the e2e tests' own fleet on devnet (E2E Sentinel, E2E Tick); payer needs 0.4 SOL, spends ~0.25
+bun run e2e                      # the website in a real browser against that fleet on devnet; --headed to watch
 ```
+
+The e2e tests start their own server on port 5174 and their own agent processes, check the chain as well as the page,
+and leave the demo fleet alone. They drive the installed Google Chrome. A failed run's trace and screenshots are in
+`playwright-report/`.

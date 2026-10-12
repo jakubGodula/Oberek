@@ -2,8 +2,9 @@
 // (registered and activated on chain, imported into the fleet, their logs sealed). Every step is skipped when already
 // done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
-// Usage (from the repo root, after bun install): bun scripts/setup.ts [--reregister]
+// Usage (from the repo root, after bun install): bun scripts/setup.ts [--reregister] [--e2e]
 // --reregister moves the agents' files aside and registers new, activated ones (stop the demo first).
+// --e2e sets up the e2e tests' own fleet (E2E Sentinel, E2E Tick in .devnet/e2e-fleet/) instead of the demo's.
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -11,26 +12,31 @@ import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } 
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { decodeAgent, loadAgentFile, loadKeypairSigner, saveAgentFile } from 'pq-agent-guard';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
-import { FLEET_DIR, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
+import { onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { runLogged } from './run-log';
-import { lamportsNeeded, predatesActivation, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
+import {
+	lamportsNeeded,
+	predatesActivation,
+	profileFor,
+	stepsFor,
+	type AgentProgress,
+	type AgentStep,
+	type SetupAgent
+} from './setup-plan';
 
 const ENV_FILE = '.env';
 const ENV_EXAMPLE = '.env.example';
-const AGENTS_DIR = '.devnet/agents';
 const RETIRED_DIR = '.devnet/retired';
 const REREGISTER_FLAG = '--reregister';
-const AGENTS = [
-	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
-	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' },
-	{ id: 'jito-01', name: 'JitoSOL Steward', risk: 'MEDIUM' }
-] as const;
 const FAUCET_URL = 'https://faucet.solana.com';
 const BALANCE_POLL_MS = 10_000;
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
-type SetupAgent = (typeof AGENTS)[number];
 type Rpc = ReturnType<typeof createSolanaRpc<ReturnType<typeof devnet>>>;
+
+const profile = profileFor(process.argv);
+// fleetDir() here and in every script setup runs (they inherit the environment) points at the profile's fleet.
+process.env.FLEET_DIR = profile.fleetDir;
 
 await runLogged('setup');
 if (createdEnvFile()) restart();
@@ -41,17 +47,17 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
 if (process.argv.includes(REREGISTER_FLAG)) retireAgents();
-const progress = await Promise.all(AGENTS.map(progressOf));
+const progress = await Promise.all(profile.agents.map(progressOf));
 const ownerKeyRegistered = existsSync(config.ownerMldsaPath);
 await ensureFunded(rpc, payer, lamportsNeeded(progress, ownerKeyRegistered));
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
 ensureOwnerKey();
-for (const [index, agent] of AGENTS.entries()) setUpAgent(agent, progress[index]);
+for (const [index, agent] of profile.agents.entries()) setUpAgent(agent, progress[index]);
 if (predatesActivation(progress, ownerKeyRegistered)) {
 	log(`these agents predate the owner key, so it never activated them; to replace them: bun scripts/setup.ts ${REREGISTER_FLAG}`);
 }
-log('ready: bun scripts/demo.ts');
+log(`ready: ${profile.nextStep}`);
 log(telegramHint());
 
 /** The owner bot is optional: its token comes from @BotFather, so setup can only point the way. */
@@ -128,9 +134,9 @@ function ensureOwnerKey(): void {
 /** The old accounts stay on chain and the server stops running them; their files are kept for the audit. */
 function retireAgents(): void {
 	const dir = join(RETIRED_DIR, `reregister-${new Date().toISOString().replace(/[:.]/g, '-')}`);
-	for (const agent of AGENTS) {
+	for (const agent of profile.agents) {
 		moveIfPresent(agentFile(agent), join(dir, 'agents', `${agent.id}.json`));
-		moveIfPresent(join(FLEET_DIR, agent.id), join(dir, 'fleet', agent.id));
+		moveIfPresent(join(profile.fleetDir, agent.id), join(dir, 'fleet', agent.id));
 	}
 	log(`old agents moved to ${dir}`);
 }
@@ -153,7 +159,7 @@ function setUpAgent(agent: SetupAgent, progress: AgentProgress): void {
 }
 
 function alignName(agent: SetupAgent): void {
-	const fleet = new Fleet(FLEET_DIR);
+	const fleet = new Fleet(profile.fleetDir);
 	const entry = fleet.get(agent.id);
 	if (!entry || entry.name === agent.name) return;
 	fleet.rename(agent.id, agent.name);
@@ -188,12 +194,12 @@ function restoreIdentity(agent: SetupAgent): void {
 
 async function progressOf(agent: SetupAgent): Promise<AgentProgress> {
 	const registered = existsSync(agentFile(agent));
-	const imported = existsSync(join(FLEET_DIR, agent.id));
+	const imported = existsSync(join(profile.fleetDir, agent.id));
 	return {
 		registered,
 		pending: registered && (await isPending(agentFile(agent))),
 		imported,
-		sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id),
+		sealed: imported && new Fleet(profile.fleetDir).isSealed(agent.id),
 		identified: imported && existsSync(onchainIdentityPath(agent.id))
 	};
 }
@@ -205,7 +211,7 @@ async function isPending(path: string): Promise<boolean> {
 }
 
 function agentFile(agent: SetupAgent): string {
-	return join(AGENTS_DIR, `${agent.id}.json`);
+	return join(profile.agentsDir, `${agent.id}.json`);
 }
 
 /** Runs one of the repo's scripts; setup stops at the first one that fails. */
