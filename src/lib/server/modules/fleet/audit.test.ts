@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { address, getBase16Encoder } from '@solana/kit';
-import type { GuardEvent } from '../agent/events';
-import type { AgentState } from '../agent/instructions';
+import type { AgentState, GuardEvent } from 'pq-agent-guard';
 import { auditHistory } from './audit';
 import { merkleProof, merkleRoot } from './merkle';
 import type { DecisionLogEntry } from './fleet';

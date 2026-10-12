@@ -3,6 +3,7 @@
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
+	"workspaces": ["kit"],
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -38,6 +39,7 @@
 		"@solana/web3.js": "^1.95.8",
 		"awilix": "^13.0.5",
 		"bs58": "^6.0.0",
-		"lucide-svelte": "^1.0.1"
+		"lucide-svelte": "^1.0.1",
+		"pq-agent-guard": "workspace:*"
 	}
 }

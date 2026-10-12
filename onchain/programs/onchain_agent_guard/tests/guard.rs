@@ -17,7 +17,7 @@ use solana_transaction_error::TransactionError;
 const CU_LIMIT: u32 = 1_400_000;
 const WALLET_LAMPORTS: u64 = 10_000_000_000;
 const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
-/// AGENT_KEY_ACCOUNT_SIZE in src/lib/server/modules/agent/instructions.ts.
+/// AGENT_KEY_ACCOUNT_SIZE in kit/src/instructions.ts.
 const AGENT_KEY_ACCOUNT_LEN: usize = 20_552;
 const REGISTER_INSTRUCTION_INDEX: u8 = 1; // after the System Program create_account
 
@@ -32,7 +32,7 @@ const BATCH_ROOT: [u8; 32] = [0xb7; 32];
 const BATCH_SIZE: u32 = 5;
 const OWNER_PUBLIC_KEY: &[u8] = include_bytes!("fixtures/owner-key.pk");
 const ACTIVATE_SIGNATURE: &[u8] = include_bytes!("fixtures/activate.sig");
-/// OWNER_KEY_ACCOUNT_SIZE in src/lib/server/modules/agent/instructions.ts.
+/// OWNER_KEY_ACCOUNT_SIZE in kit/src/instructions.ts.
 const OWNER_KEY_ACCOUNT_LEN: usize = 20_552;
 const SIGNED_INSTRUCTION_INDEX: u8 = 0;
 /// SystemError::AccountAlreadyInUse: what `init` hits when the owner record already exists.

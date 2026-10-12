@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { LandedTransaction } from '../agent-guard/guard';
+import type { LandedTransaction } from 'pq-agent-guard';
 import type { DecisionLogEntry, LoggedTransaction } from './fleet';
 import { withTransactions } from './onchain-feed';
 

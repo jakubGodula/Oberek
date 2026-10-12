@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { GuardError, type GuardAccount } from '../agent-guard/guard';
+import { GuardError, type GuardAccount } from 'pq-agent-guard';
 import type { DecisionLogEntry, DecisionRecord } from './fleet';
 import { AwaitingApprovalError, proposalAwaiting } from './approval';
 import { merkleProof, merkleRoot } from './merkle';

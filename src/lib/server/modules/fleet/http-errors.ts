@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { GuardError, HTTP_STATUS_BY_GUARD_ERROR } from '../agent-guard/guard';
+import { GuardError, type GuardErrorCode } from 'pq-agent-guard';
 import { AwaitingApprovalError, NoPendingProposalError } from './approval';
 import { LogNotSealedError } from './fleet';
 import { DecisionNotInLogError } from './latest-decision';
@@ -10,6 +10,16 @@ const CONFLICT = 409;
 const BAD_GATEWAY = 502;
 const SERVICE_UNAVAILABLE = 503;
 const GUARD_UNAVAILABLE = 'GuardUnavailable';
+const HTTP_STATUS_BY_GUARD_ERROR: Record<GuardErrorCode, number> = {
+	AgentNotFound: 404,
+	NotOwner: 403,
+	AgentKilled: 409,
+	AgentPending: 409,
+	AgentNotKilled: 409,
+	AgentNotActive: 409,
+	CounterMismatch: 409,
+	PayerUnfunded: 503
+};
 
 /** The answer to a fleet request that failed; an unexpected failure is logged with the request's context. */
 export function fleetErrorResponse(error: unknown, context: string): Response {

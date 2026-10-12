@@ -1,4 +1,4 @@
-import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount, type GuardStatus } from '../../agent-guard/guard';
+import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount, type GuardStatus } from '../guard';
 
 const MEMORY_AGENT_KEY = 'memory-agent-key';
 

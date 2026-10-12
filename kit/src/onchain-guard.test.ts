@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getBase16Encoder, type Signature, type TransactionSigner } from '@solana/kit';
-import type { AgentFile } from '../agent/files';
-import type { GuardClient } from '../agent/guard-client';
-import { GUARD_ERROR_CODES } from '../agent/guard-errors';
-import type { AgentState } from '../agent/instructions';
-import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
-import type { SendResult } from '../agent/transaction';
+import type { AgentFile } from './files';
+import type { GuardClient } from './guard-client';
+import { GUARD_ERROR_CODES } from './guard-errors';
+import type { AgentState } from './instructions';
+import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from './message';
+import type { SendResult } from './transaction';
 import { GuardError, type LandedTransaction } from './guard';
 import { OnchainGuard, type ChainCalls } from './onchain-guard';
 
@@ -58,6 +58,19 @@ function fakeChain(initial: Partial<AgentState> = {}) {
 		calls,
 		sent,
 		failOnChainWith: (err: unknown) => (landedError = err),
+		/** Another sender's step lands first: the counter moves before this transaction is processed. */
+		loseNextSendToAnotherSender: () => {
+			const land = calls.recordStep;
+			const landBatch = calls.recordBatch;
+			calls.recordStep = async (client, step) => {
+				state.counter += 1n;
+				return land(client, step);
+			};
+			calls.recordBatch = async (client, batch) => {
+				state.counter += 1n;
+				return landBatch(client, batch);
+			};
+		},
 		empty: (account: string) => balances.set(account, 0n)
 	};
 }
@@ -74,6 +87,11 @@ function guardOver(chain: ReturnType<typeof fakeChain>, serverOwner = signer(OWN
 		chain: chain.calls,
 		onLanded: (transaction) => landed.push(transaction)
 	});
+}
+
+/** A guard in the agent's own process: it pays for steps but holds no owner key. */
+function guardWithoutOwner(chain: ReturnType<typeof fakeChain>) {
+	return new OnchainGuard({ client: {} as GuardClient, feePayer: FEE_PAYER, identityOf: () => IDENTITY, chain: chain.calls });
 }
 
 async function guardErrorCode(action: Promise<unknown>): Promise<string> {
@@ -182,6 +200,20 @@ describe('recordStep', () => {
 		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 12, DECISION_HASH))).toBe('AgentKilled');
 	});
 
+	test('reports a step whose counter another sender took first as CounterMismatch', async () => {
+		const chain = fakeChain();
+		chain.loseNextSendToAnotherSender();
+		chain.failOnChainWith(PROGRAM_ERROR(GUARD_ERROR_CODES.VerifyFailed));
+		expect(await guardErrorCode(guardOver(chain).recordStep(AGENT_ID, 12, DECISION_HASH))).toBe('CounterMismatch');
+	});
+
+	test('reports a batch whose counter another sender took first as CounterMismatch', async () => {
+		const chain = fakeChain();
+		chain.loseNextSendToAnotherSender();
+		chain.failOnChainWith(PROGRAM_ERROR(GUARD_ERROR_CODES.VerifyFailed));
+		expect(await guardErrorCode(guardOver(chain).recordBatch(AGENT_ID, 12, ROOT, 5))).toBe('CounterMismatch');
+	});
+
 	test('reports any other on-chain failure as a plain error naming the program error', async () => {
 		const chain = fakeChain();
 		chain.failOnChainWith(PROGRAM_ERROR(6006));
@@ -190,6 +222,12 @@ describe('recordStep', () => {
 });
 
 describe('kill', () => {
+	test('refuses without sending when it holds no owner key', async () => {
+		const chain = fakeChain();
+		expect(await guardErrorCode(guardWithoutOwner(chain).kill(AGENT_ID))).toBe('NotOwner');
+		expect(chain.sent).toEqual([]);
+	});
+
 	test("sends kill signed with the server's owner key", async () => {
 		const chain = fakeChain();
 		expect((await guardOver(chain).kill(AGENT_ID)).status).toBe('Killed');
@@ -230,6 +268,12 @@ describe('kill', () => {
 });
 
 describe('resume', () => {
+	test('refuses without sending when it holds no owner key', async () => {
+		const chain = fakeChain({ status: 'Killed' });
+		expect(await guardErrorCode(guardWithoutOwner(chain).resume(AGENT_ID))).toBe('NotOwner');
+		expect(chain.sent).toEqual([]);
+	});
+
 	test("signs the resume for the next counter with the agent's key and sends it with the owner's key", async () => {
 		const chain = fakeChain({ status: 'Killed' });
 		expect(await guardOver(chain).resume(AGENT_ID)).toMatchObject({ status: 'Active', counter: 12 });

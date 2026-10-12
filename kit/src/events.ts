@@ -7,7 +7,7 @@ import {
 	getU64Decoder,
 	type Address
 } from '@solana/kit';
-import { DISCRIMINATORS, equalBytes } from './instructions';
+import { DISCRIMINATOR_LENGTH, DISCRIMINATORS, equalBytes } from './instructions';
 import { DECISION_HASH_LENGTH } from './message';
 
 // The events of onchain/programs/onchain_agent_guard (state.rs), read back from transaction logs. Anchor's emit! logs
@@ -20,7 +20,6 @@ export type GuardEvent =
 	| { name: 'AgentResumed'; agent: Address; counter: bigint }
 	| { name: 'AgentActivated'; agent: Address; counter: bigint };
 
-const DISCRIMINATOR_LENGTH = 8;
 const DATA_PREFIX = 'Program data: ';
 const INVOKE_LINE = /^Program (\w+) invoke \[\d+\]$/;
 const EXIT_LINE = /^Program (\w+) (success|failed)/;
@@ -61,24 +60,34 @@ export function parseGuardEvents(logs: readonly string[], programAddress: Addres
 	return events;
 }
 
+/** An event that carries only the agent and its counter. */
+function counterEvent(name: 'AgentKilled' | 'AgentResumed' | 'AgentActivated') {
+	return (body: Uint8Array): GuardEvent => ({ name, ...counterEventDecoder.decode(body) });
+}
+
+/** Decodes the event body, which follows the discriminator. */
+const EVENT_DECODERS: { discriminator: Uint8Array; decode: (body: Uint8Array) => GuardEvent }[] = [
+	{
+		discriminator: DISCRIMINATORS.stepRecorded,
+		decode: (body) => {
+			const event = stepRecordedDecoder.decode(body);
+			return { name: 'StepRecorded', ...event, decisionHash: new Uint8Array(event.decisionHash) };
+		}
+	},
+	{
+		discriminator: DISCRIMINATORS.batchRecorded,
+		decode: (body) => {
+			const event = batchRecordedDecoder.decode(body);
+			return { name: 'BatchRecorded', ...event, root: new Uint8Array(event.root) };
+		}
+	},
+	{ discriminator: DISCRIMINATORS.agentKilled, decode: counterEvent('AgentKilled') },
+	{ discriminator: DISCRIMINATORS.agentResumed, decode: counterEvent('AgentResumed') },
+	{ discriminator: DISCRIMINATORS.agentActivated, decode: counterEvent('AgentActivated') }
+];
+
 function decodeEvent(data: Uint8Array): GuardEvent | undefined {
 	const discriminator = data.subarray(0, DISCRIMINATOR_LENGTH);
-	if (equalBytes(discriminator, DISCRIMINATORS.stepRecorded)) {
-		const event = stepRecordedDecoder.decode(data, DISCRIMINATOR_LENGTH);
-		return { name: 'StepRecorded', ...event, decisionHash: new Uint8Array(event.decisionHash) };
-	}
-	if (equalBytes(discriminator, DISCRIMINATORS.batchRecorded)) {
-		const event = batchRecordedDecoder.decode(data, DISCRIMINATOR_LENGTH);
-		return { name: 'BatchRecorded', ...event, root: new Uint8Array(event.root) };
-	}
-	if (equalBytes(discriminator, DISCRIMINATORS.agentKilled)) {
-		return { name: 'AgentKilled', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };
-	}
-	if (equalBytes(discriminator, DISCRIMINATORS.agentResumed)) {
-		return { name: 'AgentResumed', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };
-	}
-	if (equalBytes(discriminator, DISCRIMINATORS.agentActivated)) {
-		return { name: 'AgentActivated', ...counterEventDecoder.decode(data, DISCRIMINATOR_LENGTH) };
-	}
-	return undefined;
+	const decoder = EVENT_DECODERS.find((candidate) => equalBytes(discriminator, candidate.discriminator));
+	return decoder?.decode(data.subarray(DISCRIMINATOR_LENGTH));
 }

@@ -10,6 +10,7 @@ owner kill and resume the agent.
 - `agents/`: the agents, each its own process that talks to the server over HTTP and holds no keys:
   `agents/tick` (the simplest one), `agents/sentinel` (rebalances a virtual SOL/USDC treasury from the live price)
   and `agents/jito` (JitoSOL Steward; a quiet cycle stays on the page, a simulated proposal is a vote).
+- `kit/`: `pq-agent-guard`, the reusable library the server is built on (next section).
 
 Program design: [docs/superpowers/specs/2026-10-10-pq-agent-program-design.md](docs/superpowers/specs/2026-10-10-pq-agent-program-design.md).
 
@@ -20,6 +21,13 @@ log (`seal.json`) to show the decisions, so this protects neither a compromised 
 directory.
 Design: [docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md](docs/superpowers/specs/2026-10-11-sealed-decision-log-design.md),
 decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md).
+
+## Guard your own agent
+
+The guard is not tied to Oberek. [kit/README.md](kit/README.md): the package `pq-agent-guard` is a building block that
+hardens an agent you already have, AI or not, in a few lines. Wrap each action in `agent.step(decision, act)`: the
+decision is signed with the agent's ML-DSA-44 key and recorded on chain before the action runs, and once the owner
+kills the agent no further step goes through. No Oberek server needed; the app in this repo is its first user.
 
 ## What is post-quantum here
 
@@ -232,6 +240,6 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ## Test
 
 ```sh
-bun test                         # server, fleet, agents, scripts and the Telegram bot, no network
+bun test                         # server, fleet, agents, scripts, the Telegram bot and the kit, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```

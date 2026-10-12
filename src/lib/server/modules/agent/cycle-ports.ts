@@ -1,8 +1,6 @@
 import type { TransactionSigner } from '@solana/kit';
 import type { CyclePorts, DecisionLogEntry } from './agent-loop';
-import type { AgentFile } from './files';
-import { fetchAgent, recordStep, type GuardClient } from './guard-client';
-import { signGuardMessage } from './message';
+import { fetchAgent, recordStep, signGuardMessage, type AgentFile, type GuardClient } from 'pq-agent-guard';
 
 export function createCyclePorts(input: {
 	client: GuardClient;

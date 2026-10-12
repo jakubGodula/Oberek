@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { GuardError } from '../agent-guard/guard';
+import { GuardError } from 'pq-agent-guard';
 import { AwaitingApprovalError, NoPendingProposalError } from './approval';
 import { LogNotSealedError } from './fleet';
 import { fleetErrorResponse } from './http-errors';
