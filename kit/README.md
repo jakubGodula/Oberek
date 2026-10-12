@@ -99,6 +99,15 @@ ML-DSA-44 key) cannot undo a kill, and the owner's Solana key alone cannot eithe
   payer's balance. Kill it, and keep that balance small. `openGuardedAgent` refuses the owner's wallet as the payer;
   code that loads the owner's wallet into the agent's process anyway gives the agent a way to resume itself.
 
+- **Ed25519 keys taken over** (stolen today, or derived from the public address by a future quantum computer). Every
+  Solana fee payer is an Ed25519 key, so this kit cannot change it. What each one gives the attacker:
+  - the agent's payer: its balance, so the agent stops (`PayerUnfunded`) until you give it a new payer. The payer is not
+    registered anywhere, so a new wallet is all it takes. No step can be forged without the agent's ML-DSA-44 key.
+  - the owner's wallet: a kill, which only stops the agent. Not a resume, which also needs the agent's ML-DSA-44 key,
+    and not a new working agent, whose activation needs the owner's ML-DSA-44 key.
+
+  So these keys protect only liveness. Who decides, and whether a kill can be undone, rest on ML-DSA-44.
+
 ## Gating your own on-chain program
 
 An agent that skips `step` is not stopped. To stop it, keep the funds behind your own program and have that program
