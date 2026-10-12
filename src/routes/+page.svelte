@@ -171,15 +171,18 @@
   }
 </script>
 
+<svelte:head>
+  <meta property="og:image" content="{data.origin}/brand/social/oberek-og-1200x630.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+</svelte:head>
+
 <div class="min-h-screen bg-[#080b14] text-slate-100 flex flex-col font-sans selection:bg-purple-500/40 selection:text-white">
 
   <!-- Top Navigation -->
   <header class="border-b border-white/[0.06] bg-[#0c101e]/80 backdrop-blur-xl sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
     <div class="flex items-center gap-3.5">
-      <div class="relative">
-        <img src="/logo.svg" alt="" class="h-10 w-auto" />
-        <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0c101e] animate-pulse"></span>
-      </div>
+      <img src="/logo.svg" alt="" class="h-10 w-auto" />
       <div>
         <h1 class="text-[17px] font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent leading-none">
           Oberek
