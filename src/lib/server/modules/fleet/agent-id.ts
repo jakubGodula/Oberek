@@ -1,4 +1,4 @@
-import { GuardError } from '../agent-guard/guard';
+import { GuardError } from 'pq-agent-guard';
 
 const AGENT_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
 

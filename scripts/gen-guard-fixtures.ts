@@ -5,8 +5,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getAddressDecoder } from '@solana/kit';
-import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
-import { activateMessage, batchMessage, resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import {
+	activateMessage,
+	batchMessage,
+	findAgentAddress,
+	resumeMessage,
+	signGuardMessage,
+	stepMessage
+} from 'pq-agent-guard';
 
 // Must match OWNER, AGENT_KEY and decision_hash() in guard.rs.
 const OWNER = getAddressDecoder().decode(new Uint8Array(32).fill(2));

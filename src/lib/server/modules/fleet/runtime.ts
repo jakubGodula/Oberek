@@ -1,12 +1,17 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { loadConfig, type AgentConfig } from '../agent/config';
-import { loadAgentFile, loadKeypairSigner, type AgentFile } from '../agent/files';
-import type { GuardClient } from '../agent/guard-client';
-import { connect } from '../agent/transaction';
-import { GuardError, type LandedTransaction } from '../agent-guard/guard';
+import {
+	connect,
+	GuardError,
+	loadAgentFile,
+	loadKeypairSigner,
+	OnchainGuard,
+	type AgentFile,
+	type GuardClient,
+	type LandedTransaction
+} from 'pq-agent-guard';
 import { assertAgentId } from './agent-id';
-import { OnchainGuard } from '../agent-guard/onchain-guard';
 import { batchPolicyFrom, DecisionBatcher } from './decision-batcher';
 import { Fleet } from './fleet';
 import { flushBatch } from './record-decision';

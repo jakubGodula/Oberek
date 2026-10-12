@@ -1,4 +1,4 @@
-//! The bytes the agent's ML-DSA-44 key signs. Must match src/lib/server/modules/agent/message.ts; both sides are
+//! The bytes the agent's ML-DSA-44 key signs. Must match kit/src/message.ts; both sides are
 //! checked against onchain/fixtures/message-vector.json.
 use anchor_lang::prelude::Pubkey;
 

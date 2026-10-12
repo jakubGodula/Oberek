@@ -7,21 +7,27 @@ import { generateKeyPairSigner, getBase16Decoder } from '@solana/kit';
 import { runCycle, type DecisionLogEntry } from '../src/lib/server/modules/agent/agent-loop';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { createCyclePorts } from '../src/lib/server/modules/agent/cycle-ports';
-import { loadKeypairSigner, loadOwnerKeyFile, type AgentFile } from '../src/lib/server/modules/agent/files';
-import { customErrorCode, GUARD_ERROR_CODES } from '../src/lib/server/modules/agent/guard-errors';
 import {
 	activateAgent,
+	activateMessage,
+	connect,
+	customErrorCode,
 	fetchAgent,
+	findAgentAddress,
+	findOwnerRecordAddress,
+	GUARD_ERROR_CODES,
 	killAgent,
+	loadKeypairSigner,
+	loadOwnerKeyFile,
 	recordStep,
 	registerAgent,
 	resumeAgent,
+	signGuardMessage,
+	signResume,
+	stepMessage,
+	type AgentFile,
 	type GuardClient
-} from '../src/lib/server/modules/agent/guard-client';
-import { activateMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
-import { findAgentAddress, findOwnerRecordAddress } from '../src/lib/server/modules/agent/instructions';
-import { signResume } from '../src/lib/server/modules/agent/resume';
-import { connect } from '../src/lib/server/modules/agent/transaction';
+} from 'pq-agent-guard';
 import { reportSend } from './report';
 
 const STEPS_BEFORE_KILL = 3;

@@ -1,4 +1,4 @@
-import type { GuardAccount } from '../agent-guard/guard';
+import type { GuardAccount } from 'pq-agent-guard';
 import { assertInFleet } from './record-decision';
 import type { FleetRuntime } from './submit-decision';
 

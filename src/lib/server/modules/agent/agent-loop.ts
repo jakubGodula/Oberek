@@ -1,8 +1,6 @@
 import { getBase16Decoder, type Address } from '@solana/kit';
 import { hashDecision, tickDecision, type DecisionRecord } from './decision';
-import { describeTransactionError } from './guard-errors';
-import type { AgentState, AgentStatus } from './instructions';
-import { stepMessage } from './message';
+import { describeTransactionError, stepMessage, type AgentState, type AgentStatus } from 'pq-agent-guard';
 
 const PAUSE_REASONS: Record<Exclude<AgentStatus, 'Active'>, string> = {
 	Killed: 'paused: agent is killed',

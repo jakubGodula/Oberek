@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { getAddressDecoder, getBase16Encoder } from '@solana/kit';
-import vector from '../../../../../onchain/fixtures/message-vector.json';
+import vector from '../../onchain/fixtures/message-vector.json';
 import { activateMessage, batchMessage, GUARD_CONTEXT, resumeMessage, signGuardMessage, stepMessage } from './message';
 
 const bytes = (hex: string) => new Uint8Array(getBase16Encoder().encode(hex));

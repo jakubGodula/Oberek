@@ -7,29 +7,29 @@ import { runLoop } from '../src/lib/server/modules/agent/agent-loop';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
 import { createCyclePorts } from '../src/lib/server/modules/agent/cycle-ports';
 import {
+	activateAgent,
+	activateMessage,
 	appendJsonLine,
 	assertAgentFileAbsent,
 	assertOwnerKeyFileAbsent,
+	connect,
+	fetchAgent,
+	findAgentAddress,
+	findOwnerRecordAddress,
+	killAgent,
 	loadAgentFile,
 	loadKeypairSigner,
 	loadOwnerKeyFile,
-	sendWithAgentFileWriteAhead,
-	sendWithOwnerKeyFileWriteAhead,
-	type OwnerKeyFile
-} from '../src/lib/server/modules/agent/files';
-import {
-	activateAgent,
-	fetchAgent,
-	killAgent,
 	registerAgent,
 	registerOwner,
 	resumeAgent,
-	type GuardClient
-} from '../src/lib/server/modules/agent/guard-client';
-import { findAgentAddress, findOwnerRecordAddress } from '../src/lib/server/modules/agent/instructions';
-import { activateMessage, signGuardMessage } from '../src/lib/server/modules/agent/message';
-import { signResume } from '../src/lib/server/modules/agent/resume';
-import { connect } from '../src/lib/server/modules/agent/transaction';
+	sendWithAgentFileWriteAhead,
+	sendWithOwnerKeyFileWriteAhead,
+	signGuardMessage,
+	signResume,
+	type GuardClient,
+	type OwnerKeyFile
+} from 'pq-agent-guard';
 import { reportSend } from './report';
 
 const USAGE = 'Usage: bun scripts/agent.ts <register-owner|register|activate|run|kill|resume|status>';

@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { GuardError, type GuardErrorCode } from '../agent-guard/guard';
+import { GuardError, type GuardErrorCode } from 'pq-agent-guard';
 import { AwaitingApprovalError, NoPendingProposalError } from './approval';
 import { LogNotSealedError } from './fleet';
 import { DecisionNotInLogError } from './latest-decision';

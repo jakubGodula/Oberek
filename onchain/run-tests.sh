@@ -5,7 +5,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/toolchain.sh"
 
 FIXTURES_DIR="$ONCHAIN_DIR/programs/onchain_agent_guard/tests/fixtures"
-IDL_COPY="$REPO_DIR/src/lib/server/modules/agent/onchain_agent_guard.idl.json"
+IDL_COPY="$REPO_DIR/kit/src/onchain_agent_guard.idl.json"
 PROGRAM_ID=$(sed -n 's/^onchain_agent_guard = "\(.*\)"$/\1/p' "$ONCHAIN_DIR/Anchor.toml" | head -1)
 
 build_images

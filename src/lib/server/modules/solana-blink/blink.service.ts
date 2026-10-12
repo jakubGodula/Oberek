@@ -1,5 +1,5 @@
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
-import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { GuardError, NO_DECISION, type GuardStatus } from 'pq-agent-guard';
 import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, proposalStore, quietStore, shockStore } from '../fleet/app-runtime';
 import { quietSummary } from '../fleet/quiet-store';

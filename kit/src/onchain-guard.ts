@@ -1,11 +1,11 @@
 import { getBase16Decoder, getBase16Encoder, type Address, type TransactionSigner } from '@solana/kit';
-import type { AgentFile } from '../agent/files';
-import { fetchAgent, fetchBalance, killAgent, recordBatch, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
-import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from '../agent/guard-errors';
-import type { AgentState } from '../agent/instructions';
-import { batchMessage, signGuardMessage, stepMessage } from '../agent/message';
-import { signResume } from '../agent/resume';
-import { TRANSACTION_FEE_LAMPORTS, type SendResult } from '../agent/transaction';
+import type { AgentFile } from './files';
+import { fetchAgent, fetchBalance, killAgent, recordBatch, recordStep, resumeAgent, type GuardClient } from './guard-client';
+import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from './guard-errors';
+import type { AgentState } from './instructions';
+import { batchMessage, signGuardMessage, stepMessage } from './message';
+import { signResume } from './resume';
+import { TRANSACTION_FEE_LAMPORTS, type SendResult } from './transaction';
 import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode, type LandedTransaction } from './guard';
 
 /** The program calls the guard makes; injected so tests run without a network. */

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getBase16Encoder, type Signature, type TransactionSigner } from '@solana/kit';
-import type { AgentFile } from '../agent/files';
-import type { GuardClient } from '../agent/guard-client';
-import { GUARD_ERROR_CODES } from '../agent/guard-errors';
-import type { AgentState } from '../agent/instructions';
-import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
-import type { SendResult } from '../agent/transaction';
+import type { AgentFile } from './files';
+import type { GuardClient } from './guard-client';
+import { GUARD_ERROR_CODES } from './guard-errors';
+import type { AgentState } from './instructions';
+import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from './message';
+import type { SendResult } from './transaction';
 import { GuardError, type LandedTransaction } from './guard';
 import { OnchainGuard, type ChainCalls } from './onchain-guard';
 

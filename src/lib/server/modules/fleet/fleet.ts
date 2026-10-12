@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { LandedTransaction } from '../agent-guard/guard';
+import type { LandedTransaction } from 'pq-agent-guard';
 import { assertAgentId, isAgentId } from './agent-id';
 import { loadLogSeal, saveLogSeal, type LogSeal } from './log-seal';
 import { isSealedLine, openLine, sealEntry, type SealedLine } from './sealed-log';

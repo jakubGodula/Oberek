@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { GuardError, type AgentGuard } from '../agent-guard/guard';
+import { GuardError, type AgentGuard } from 'pq-agent-guard';
 import { Fleet } from './fleet';
 import { merkleRoot, verifyProof } from './merkle';
 import { AwaitingApprovalError } from './approval';
 import { flushBatch, hashDecisionRecord, recordDecision, type QueuedDecision } from './record-decision';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
-import { MemoryGuard } from './testing/memory-guard';
+import { MemoryGuard } from 'pq-agent-guard/testing';
 import { TEST_SEAL } from './testing/test-seal';
 
 const OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';

@@ -1,4 +1,4 @@
-import { GuardError, NO_DECISION } from '../agent-guard/guard';
+import { GuardError, NO_DECISION } from 'pq-agent-guard';
 import type { DecisionLogEntry, Fleet } from './fleet';
 import type { FleetRuntime } from './submit-decision';
 
