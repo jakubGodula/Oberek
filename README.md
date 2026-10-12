@@ -62,7 +62,11 @@ bun run dev                      # http://localhost:5173
 bun install
 bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
 bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo in one command"
+bun bot/telegram                 # optional, second terminal: needs TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_CHAT_ID in .env
 ```
+
+The two Telegram values can't be generated: the token comes from @BotFather and the chat id from your bot's answer to
+`/start`. See [The owner on Telegram](#the-owner-on-telegram); setup ends with a hint on which one is still missing.
 
 `setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
 payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
