@@ -30,13 +30,13 @@ export function getFleetRuntime(): Promise<FleetRuntime> {
 	return runtime;
 }
 
-/** The runtime, or null while the fleet is not configured (reported once): the page then shows only the mock agents. */
+/** The runtime, or null while the fleet is not configured (reported once): the page then shows no agents. */
 export async function findFleetRuntime(): Promise<FleetRuntime | null> {
 	try {
 		return await getFleetRuntime();
 	} catch (error) {
 		if (!(error instanceof FleetNotConfiguredError)) throw error;
-		if (!reportedNotConfigured) console.warn(`fleet not configured, showing only the mock agents: ${error.message}`);
+		if (!reportedNotConfigured) console.warn(`fleet not configured, showing no agents: ${error.message}`);
 		reportedNotConfigured = true;
 		return null;
 	}

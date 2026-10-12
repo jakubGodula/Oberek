@@ -7,7 +7,6 @@
     entries,
     operatorActions,
     pendingCounter,
-    mock,
     quiet
   }: {
     agentId: string;
@@ -15,8 +14,6 @@
     operatorActions: OperatorAction[];
     /** The counter of the proposal waiting for a verdict, if any. */
     pendingCounter: number | null;
-    /** A demo agent: it never reaches the chain. */
-    mock: boolean;
     /** Quiet cycles since the last recorded decision. One line, no transaction. */
     quiet: { count: number; at: number } | null;
   } = $props();
@@ -159,7 +156,7 @@
     {:else}
       {#if !quiet}
         <p class="text-[12px] text-slate-500 py-6 text-center">
-          {mock ? 'Mock agent: sends no transactions on-chain' : 'No decisions yet: the agent has not run'}
+          No decisions yet: the agent has not run
         </p>
       {/if}
     {/each}

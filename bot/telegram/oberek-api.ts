@@ -1,13 +1,13 @@
 // The bot's link to the Oberek server: the same HTTP API the page uses. Nothing here comes from the server's code.
 
-export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'IDLE' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
+export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'UNAVAILABLE' | 'AWAITING_APPROVAL';
 
 export interface PendingProposal {
 	counter: number;
 	summary: string;
 }
 
-/** An agent card as GET /api/agents returns it, only the fields the bot reads. Mock agents have no `fleet`. */
+/** An agent card as GET /api/agents returns it, only the fields the bot reads. */
 export interface AgentView {
 	id: string;
 	name: string;
@@ -15,7 +15,7 @@ export interface AgentView {
 	currentTask: string;
 	/** The agent's step counter on chain. */
 	actionsExecuted: number;
-	fleet?: { pendingProposal: PendingProposal | null };
+	fleet: { pendingProposal: PendingProposal | null };
 }
 
 export interface ServerRequest {

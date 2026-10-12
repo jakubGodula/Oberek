@@ -26,12 +26,6 @@
   /** Room for a full batch (BATCH_MAX_DECISIONS, 16 by default) and the rows around it. */
   const FEED_LIMIT = 40;
 
-  /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
-  const fleetAgents = $derived(agents.filter((a) => a.fleet));
-
-  /** Mock agents are demo data, not real agents: the page says so on every card. */
-  const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
-
   const riskColors: Record<string, string> = {
     LOW: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
     MEDIUM: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
@@ -42,7 +36,6 @@
   const statusColors: Record<string, string> = {
     ACTIVE: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
     PAUSED: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
-    IDLE: 'text-slate-400 bg-slate-500/15 border-slate-500/30',
     UNAVAILABLE: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
     AWAITING_APPROVAL: 'text-amber-300 bg-amber-500/15 border-amber-500/40'
   };
@@ -77,15 +70,9 @@
     return () => clearInterval(timer);
   });
 
-  // The selected fleet agent's feed follows the page refresh, which replaces selectedAgent every 5 s. Mock agents send
-  // no transactions and log no decisions.
+  // The selected agent's feed follows the page refresh, which replaces selectedAgent every 5 s.
   $effect(() => {
-    if (selectedAgent?.fleet) {
-      loadFeed(selectedAgent.id);
-    } else {
-      feedEntries = [];
-      feedActions = [];
-    }
+    if (selectedAgent) loadFeed(selectedAgent.id);
   });
 
   async function loadFeed(agentId: string) {
@@ -106,13 +93,13 @@
       ? 'Proposal approved: the verdict is on-chain, the agent executes the trade in its next cycle.'
       : 'Proposal rejected: the verdict is on-chain, the treasury is unchanged.';
     // The counter names the proposal on screen: the server refuses the verdict if another one waits by now.
-    const counter = selectedAgent.fleet?.pendingProposal?.counter;
+    const counter = selectedAgent.fleet.pendingProposal?.counter;
     await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict, counter }, done);
   }
 
   /** Approve and Reject belong to Sentinel: it is the only agent that stops for a verdict. */
   function awaitsVerdict(agent: AgentCard): boolean {
-    return Boolean(agent.fleet?.pendingProposal) || acceptsShock(agent.fleet?.lastDecisionKind ?? null);
+    return Boolean(agent.fleet.pendingProposal) || acceptsShock(agent.fleet.lastDecisionKind);
   }
 
   const CONTROL_DONE = {
@@ -122,8 +109,7 @@
 
   async function control(action: 'kill' | 'resume') {
     if (!selectedAgent) return;
-    const done = selectedAgent.fleet ? CONTROL_DONE[action] : 'Mock agent: only this card changed.';
-    await postAndReport(`/api/agents/${selectedAgent.id}/control`, { action }, done);
+    await postAndReport(`/api/agents/${selectedAgent.id}/control`, { action }, CONTROL_DONE[action]);
   }
 
   async function setPace(intervalMs: number) {
@@ -234,19 +220,18 @@
               </div>
               <p class="text-[11px] text-slate-400 line-clamp-2 mb-2.5">{agent.currentTask}</p>
               <div class="flex items-center justify-between">
-                <span class="flex items-center gap-1.5">
-                  <span class="px-1.5 py-0.5 rounded text-[9px] font-mono border {riskColors[agent.riskLevel]}">
-                    RISK: {agent.riskLevel}
-                  </span>
-                  {#if !agent.fleet}
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
-                  {/if}
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-mono border {riskColors[agent.riskLevel]}">
+                  RISK: {agent.riskLevel}
                 </span>
                 <span class="text-[10px] text-slate-500 font-mono">
-                  {agent.actionsExecuted} tx{#if agent.fleet?.queued}<span class="text-violet-300"> · {agent.fleet.queued} queued</span>{/if}
+                  {agent.actionsExecuted} tx{#if agent.fleet.queued}<span class="text-violet-300"> · {agent.fleet.queued} queued</span>{/if}
                 </span>
               </div>
             </button>
+          {:else}
+            <p class="text-[11px] text-slate-500 py-4 text-center">
+              No agents: run <code class="text-violet-400">bun scripts/setup.ts</code>
+            </p>
           {/each}
         </div>
       </div>
@@ -260,13 +245,13 @@
           <div class="flex justify-between items-center">
             <span class="text-[11px] text-slate-400">Active agents on-chain</span>
             <span class="text-[13px] font-mono font-bold text-emerald-400">
-              {fleetAgents.filter((a: any) => a.status === 'ACTIVE').length}/{fleetAgents.length}
+              {agents.filter((a: any) => a.status === 'ACTIVE').length}/{agents.length}
             </span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-[11px] text-slate-400">Total on-chain counter</span>
             <span class="text-[13px] font-mono font-bold text-violet-300">
-              {fleetAgents.reduce((sum: number, a: any) => sum + a.actionsExecuted, 0)}
+              {agents.reduce((sum: number, a: any) => sum + a.actionsExecuted, 0)}
             </span>
           </div>
           <div class="flex justify-between items-center">
@@ -303,9 +288,6 @@
                     <Shield class="w-5 h-5 text-slate-400" />
                   {/if}
                   <h2 class="text-lg font-bold text-white">{selectedAgent.name}</h2>
-                  {#if !selectedAgent.fleet}
-                    <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border {MOCK_LABEL_STYLE}">MOCK</span>
-                  {/if}
                 </div>
                 <p class="text-[12px] text-slate-400 max-w-lg">{selectedAgent.currentTask}</p>
               </div>
@@ -387,7 +369,7 @@
               <p class="text-[10px] text-slate-500 mt-1.5">
                 Stored when the agent was registered in <code class="text-violet-400">onchain_agent_guard</code>; every step and resume is verified against it
               </p>
-              {#if selectedAgent.fleet && selectedAgent.pqcKeyAccount}
+              {#if selectedAgent.pqcKeyAccount}
                 <a
                   href={explorerAddressUrl(selectedAgent.pqcKeyAccount)}
                   target="_blank"
@@ -398,7 +380,7 @@
                 </a>
               {/if}
             </div>
-            {#if selectedAgent.fleet && acceptsPace(selectedAgent.fleet.lastDecisionKind)}
+            {#if acceptsPace(selectedAgent.fleet.lastDecisionKind)}
               {@const steps = paceStepsFor(selectedAgent.fleet.batched)}
               {@const paceMs = selectedAgent.fleet.paceMs}
               <div class="mt-3 px-4 py-3 rounded-xl border border-violet-500/30 bg-violet-950/20">
@@ -440,7 +422,7 @@
           </div>
         </div>
 
-        {#if selectedAgent.fleet?.pendingProposal}
+        {#if selectedAgent.fleet.pendingProposal}
           <ApprovalPanel pending={selectedAgent.fleet.pendingProposal} busy={isSimulating} onVerdict={sendVerdict} />
         {/if}
 
@@ -497,11 +479,9 @@
             <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
               This agent does not stop for a human verdict. Nothing in its decision process needs an operator.
             </p>
-            {#if selectedAgent.fleet}
-              <div class="mb-4">
-                {@render fleetStop(false)}
-              </div>
-            {/if}
+            <div class="mb-4">
+              {@render fleetStop(false)}
+            </div>
           {/if}
 
           {#if simulationMessage}
@@ -538,9 +518,8 @@
             agentId={selectedAgent.id}
             entries={feedEntries}
             operatorActions={feedActions}
-            pendingCounter={selectedAgent.fleet?.pendingProposal?.counter ?? null}
-            mock={!selectedAgent.fleet}
-            quiet={selectedAgent.fleet?.quiet ?? null}
+            pendingCounter={selectedAgent.fleet.pendingProposal?.counter ?? null}
+            quiet={selectedAgent.fleet.quiet}
           />
         </div>
       {/if}
