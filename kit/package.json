@@ -1,0 +1,16 @@
+{
+	"name": "pq-agent-guard",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Post-quantum guard for any agent: ML-DSA-44 signed steps and an owner kill switch, enforced by the onchain_agent_guard program on Solana.",
+	"exports": {
+		".": "./src/index.ts",
+		"./testing": "./src/testing/memory-guard.ts"
+	},
+	"dependencies": {
+		"@noble/post-quantum": "^0.7.1",
+		"@solana-program/system": "0.15.0",
+		"@solana/kit": "8.4.0"
+	}
+}
