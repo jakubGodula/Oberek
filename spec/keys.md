@@ -93,6 +93,8 @@ Green is post-quantum, orange is Ed25519, and grey holds no cryptographic key.
   leaves a new agent `Pending`, and the program refuses its steps until this signature makes it `Active`.
 - **Signed by** the server, right after `register_agent`, because no wallet signs ML-DSA yet and on devnet the owner is
   the server's wallet anyway.
+- **No backup means no new agents.** The key cannot be registered again for the same wallet, so without the file that
+  wallet can activate no agent; it would take a new owner wallet. Agents already active keep working.
 
 ### Owner wallet: Ed25519
 
@@ -170,7 +172,7 @@ A quantum attacker who can forge any Ed25519 signature:
 
 Two limits remain. The first `register_owner` for a wallet decides its key, so it has to happen before Q-day; after
 that a forged Ed25519 signature cannot replace it. Agents registered before the program learned activation stay
-`Active` without it, so the demo agents are registered again after the upgrade.
+`Active` without it; `bun scripts/setup.ts --reregister` replaces them with new, activated agents.
 
 The rationale, and why there is no DMS seed proof, is in [decision 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 
