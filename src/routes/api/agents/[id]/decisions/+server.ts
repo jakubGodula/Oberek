@@ -1,4 +1,5 @@
-import { json, type RequestHandler } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { getFleetRuntime, quietStore } from '#lib/server/modules/fleet/app-runtime';
 import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
 import { withTransactions } from '#lib/server/modules/fleet/onchain-feed';
@@ -24,8 +25,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'BadRequest', message }, { status: BAD_REQUEST });
 	}
 	try {
-		const result = await submitDecision(await getFleetRuntime(), params.id!, submission);
-		quietStore.clear(params.id!);
+		const result = await submitDecision(await getFleetRuntime(), params.id, submission);
+		quietStore.clear(params.id);
 		return json(result, { status: 'queued' in result ? ACCEPTED : OK });
 	} catch (error) {
 		if (error instanceof RateLimitedError) {
@@ -47,9 +48,9 @@ const MAX_FEED_LIMIT = 50;
 export const GET: RequestHandler = async ({ params, url }) => {
 	try {
 		const runtime = await getFleetRuntime();
-		assertInFleet(runtime, params.id!);
-		const entries = runtime.fleet.recentDecisions(params.id!, feedLimit(url.searchParams.get('limit')));
-		return json(withTransactions(entries, runtime.fleet.transactions(params.id!)));
+		assertInFleet(runtime, params.id);
+		const entries = runtime.fleet.recentDecisions(params.id, feedLimit(url.searchParams.get('limit')));
+		return json(withTransactions(entries, runtime.fleet.transactions(params.id)));
 	} catch (error) {
 		return fleetErrorResponse(error, `decisions of agent ${params.id}`);
 	}

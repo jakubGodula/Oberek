@@ -1,4 +1,5 @@
-import { json, type RequestHandler } from '@sveltejs/kit';
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 import { getFleetRuntime, proposalStore } from '#lib/server/modules/fleet/app-runtime';
 import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
 import { assertInFleet } from '#lib/server/modules/fleet/record-decision';
@@ -14,8 +15,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		return json({ error: 'BadRequest', message }, { status: BAD_REQUEST });
 	}
 	try {
-		assertInFleet(await getFleetRuntime(), params.id!);
-		proposalStore.arm(params.id!, direction);
+		assertInFleet(await getFleetRuntime(), params.id);
+		proposalStore.arm(params.id, direction);
 		return json({ armed: { direction } });
 	} catch (error) {
 		return fleetErrorResponse(error, `proposal for agent ${params.id}`);
