@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { GuardError } from '../agent-guard/guard';
-import { NoPendingProposalError, parseVerdict, proposalAwaiting, recordVerdict } from './approval';
+import { NoPendingProposalError, parseVerdict, parseVerdictRequest, proposalAwaiting, recordVerdict } from './approval';
 import { Fleet } from './fleet';
 import { TEST_SEAL } from './testing/test-seal';
 import { StepThrottle } from './step-throttle';
@@ -62,7 +62,7 @@ describe('proposalAwaiting', () => {
 describe('recordVerdict', () => {
 	test('records an accept as the next step, carrying the proposal and the owner', async () => {
 		await submitDecision(runtime, AGENT, PROPOSAL);
-		const proposalHash = runtime.fleet.lastDecision(AGENT)!.decisionHash;
+		const proposalHash = runtime.fleet.lastDecision(AGENT)?.decisionHash;
 
 		const { record, decisionHash } = await recordVerdict(runtime, AGENT, 'accept');
 
@@ -123,7 +123,7 @@ describe('recordVerdict', () => {
 		await runtime.guard.kill(AGENT, OWNER);
 		const error = await failure(recordVerdict(runtime, AGENT, 'accept'));
 		expect((error as GuardError).code).toBe('AgentKilled');
-		expect(runtime.fleet.lastDecision(AGENT)!.record.counter).toBe(1);
+		expect(runtime.fleet.lastDecision(AGENT)?.record.counter).toBe(1);
 	});
 
 	test('is not throttled: it is the owner acting, like kill and resume', async () => {
@@ -138,6 +138,26 @@ describe('recordVerdict', () => {
 	});
 });
 
+describe('recordVerdict on a named proposal', () => {
+	test('records the verdict when the named proposal is the one waiting', async () => {
+		await submitDecision(runtime, AGENT, PROPOSAL);
+		expect((await recordVerdict(runtime, AGENT, 'accept', 1)).record.decision.proposal).toMatchObject({ counter: 1 });
+	});
+
+	test('refuses a verdict on an older proposal, recording nothing', async () => {
+		await submitDecision(runtime, AGENT, PROPOSAL);
+		await recordVerdict(runtime, AGENT, 'reject');
+		await submitDecision(runtime, AGENT, PROPOSAL);
+
+		const error = await failure(recordVerdict(runtime, AGENT, 'accept', 1));
+
+		expect(error).toBeInstanceOf(NoPendingProposalError);
+		expect((error as Error).message).toBe(`agent ${AGENT}: proposal #1 is no longer waiting (now #3)`);
+		expect((await runtime.guard.readAgent(AGENT)).counter).toBe(3);
+		expect((await pending())?.record.counter).toBe(3);
+	});
+});
+
 describe('parseVerdict', () => {
 	test.each(['accept', 'reject'])('accepts %s', (verdict) => {
 		expect(parseVerdict({ verdict })).toBe(verdict as 'accept' | 'reject');
@@ -145,5 +165,25 @@ describe('parseVerdict', () => {
 
 	test.each([['no body', null], ['another word', { verdict: 'approve' }], ['no verdict', {}]])('rejects %s', (_, body) => {
 		expect(parseVerdict(body)).toBeNull();
+	});
+});
+
+describe('parseVerdictRequest', () => {
+	test('a verdict without a counter applies to whatever proposal waits', () => {
+		expect(parseVerdictRequest({ verdict: 'accept' })).toEqual({ verdict: 'accept' });
+	});
+
+	test('a verdict may name the proposal by its counter', () => {
+		expect(parseVerdictRequest({ verdict: 'reject', counter: 41 })).toEqual({ verdict: 'reject', counter: 41 });
+	});
+
+	test.each([
+		['no verdict', { counter: 41 }],
+		['a zero counter', { verdict: 'accept', counter: 0 }],
+		['a negative counter', { verdict: 'accept', counter: -1 }],
+		['a fractional counter', { verdict: 'accept', counter: 1.5 }],
+		['a counter as text', { verdict: 'accept', counter: '41' }]
+	])('rejects %s', (_, body) => {
+		expect(parseVerdictRequest(body)).toBeNull();
 	});
 });

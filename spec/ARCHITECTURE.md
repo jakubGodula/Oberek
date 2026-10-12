@@ -10,7 +10,8 @@
 ### Wizja
 Stworzenie platformy nowej generacji łączącej:
 - **Autonomicznych agentów AI na Solanie** z pełną obserwowalnością i audytowalnością.
-- **Interakcję z użytkownikiem w mediach społecznościowych** za pomocą protokołu **Solana Actions & Dialect Blinks** (Human-in-the-Loop bezpośrednio z Twittera/X, Discorda oraz Dialect Inspectora `dial.to`).
+- **Odpowiedź właściciela z Telegrama**: bot wysyła propozycje agentów i zmiany ich stanu z przyciskami Accept, Reject,
+  Kill i Resume (decyzja 008).
 - **Bezpieczeństwo post-kwantowe (PQC)** i **prywatność stanów (Zero-Knowledge Commitments)**: Ochrona wrażliwych danych agentów (strategie, klucze API, salda) przed złamaniem przez komputery kwantowe poprzez wykorzystanie algorytmów NIST PQC (ML-DSA-44 / Dilithium, ML-KEM-768 / Kyber) oraz kotwiczenie kwantowo-odpornych korzeni stanu (**Quantum-Safe Merkle State Root**) na Solanie w koncie PDA programu Anchor.
 
 ---
@@ -20,8 +21,7 @@ Stworzenie platformy nowej generacji łączącej:
 ```mermaid
 flowchart TB
     subgraph Client_Layer ["Warstwa Użytkownika / Social Media"]
-        X["Twitter / X / Discord (Dialect Blink UI)"]
-        DialTo["Dialect Inspector (dial.to)"]
+        TG["Telegram (owner bot, bot/telegram)"]
         Dash["Operator Dashboard (SvelteKit 5 + Tailwind)"]
     end
 
@@ -29,7 +29,7 @@ flowchart TB
         ServerAPI["SvelteKit Endpoints (+server.ts)"]
         
         subgraph Modules ["Moduły Domenowe (DI: Awilix)"]
-            M_Blink["module: solana-blink\n(Actions & Blinks Spec)"]
+            M_Blink["module: solana-blink\n(agent cards, kill & resume)"]
             M_Tracker["module: agent-tracker\n(Observability & Logs)"]
             M_ZKPQC["module: zk-pqc\n(ML-KEM & ML-DSA Engine)"]
             M_Vault["module: private-vault\n(Encrypted Off-chain Storage)"]
@@ -49,8 +49,7 @@ flowchart TB
         Helius["Solana RPC / Helius Webhooks"]
     end
 
-    X -->|1. GET/POST Blink Action| ServerAPI
-    DialTo -->|CORS Test & Actions Spec| ServerAPI
+    TG -->|1. GET agents, POST approval / control| ServerAPI
     ServerAPI --> M_Blink
     M_Blink -->|2. Emit Event| EventBus
     EventBus --> M_Tracker
@@ -93,19 +92,14 @@ solana-aegis-mercato/
 │   ├── Cargo.toml
 │   └── src/
 │       └── main.rs                    # Obwód weryfikujący stan i sygnaturę ML-DSA
+├── bot/
+│   └── telegram/                      # Bot Telegram właściciela (osobny proces, decyzja 008)
 └── src/
     ├── routes/                        # SvelteKit App Router
-    │   ├── actions.json/
-    │   │   └── +server.ts             # Główny routing Actions (standard Dialect Blinks)
     │   ├── (dashboard)/
     │   │   ├── +page.svelte           # Dashboard operatora w Svelte 5 (Runes)
     │   │   └── +page.server.ts        # Ładowanie danych agentów i telemetrii
     │   └── api/
-    │       ├── actions/
-    │       │   ├── actions.json/
-    │       │   │   └── +server.ts     # Alternatywny fallback dla actions.json
-    │       │   └── agent-action/
-    │       │       └── +server.ts     # GET (metadane Blinka) & POST (budowanie transakcji)
     │       └── webhooks/
     │           └── helius/
     │               └── +server.ts     # Ingestion transakcji on-chain z Helius
@@ -113,10 +107,7 @@ solana-aegis-mercato/
     │   ├── server/
     │   │   ├── modules/               # Moduły Domenowe (Modular Monolith)
     │   │   │   ├── solana-blink/
-    │   │   │   │   ├── services/
-    │   │   │   │   │   └── blink-generator.service.ts
-    │   │   │   │   └── controllers/
-    │   │   │   │       └── blink.controller.ts
+    │   │   │   │   └── blink.service.ts
     │   │   │   ├── agent-tracker/
     │   │   │   │   ├── entities/
     │   │   │   │   │   ├── Agent.entity.ts
@@ -151,11 +142,13 @@ solana-aegis-mercato/
 
 ## 4. Specyfikacja Techniczna Modułów
 
-### 4.1. Moduł: `solana-blink` (Solana Actions)
-Odpowiada za standard **Dialect Blinks** / **Solana Actions**:
-- `GET /actions.json` i `GET /api/actions.json` – deklaracja reguł routingu actions (CORS & Actions Spec).
-- `GET /api/actions/agent-action?agentId=...` – zwraca metadane akcji do wyrenderowania w feedzie na Twitterze/X oraz dial.to (ikona, opis stanu, przyciski autoryzacji akcji agenta, kill-switch).
-- `POST /api/actions/agent-action` – odbiera konto portfela użytkownika (`account`), przygotowuje i podpisuje transakcję Solana kierowaną do programu `aegis-registry`, zwracając zserializowaną transakcję w formacie base64.
+### 4.1. Moduł: `solana-blink` (karty agentów i sterowanie właściciela)
+Buduje karty agentów dla strony i dla `GET /api/agents` oraz przyjmuje odpowiedzi właściciela:
+- `GET /api/agents` – karty agentów (stan, ostatnia decyzja, oczekująca propozycja).
+- `POST /api/agents/<id>/control` – kill i resume agenta (`kill` / `resume`).
+- `POST /api/agents/<id>/approval` – werdykt właściciela dla propozycji (zatwierdzenie lub odrzucenie).
+
+Z tych samych endpointów korzysta bot Telegram właściciela (sekcja 5.2, decyzja 008); ścieżka Solana Actions / Blinks została usunięta.
 
 ### 4.2. Moduł: `agent-tracker` (Obserwowalność i Telemetria)
 - Pobiera zdarzenia on-chain (za pośrednictwem webhooków Helius lub dedykowanego serwisu indeksującego RPC).
@@ -254,68 +247,8 @@ export class PqcCryptoService {
 }
 ```
 
-### 5.2. Kontroler Solana Actions & Blinks (`src/lib/server/modules/solana-blink/controllers/blink.controller.ts`)
-```typescript
-import { ActionGetResponse, ActionPostRequest, ActionPostResponse, createPostResponse } from '@solana/actions';
-import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
-
-export class BlinkController {
-  constructor(
-    private readonly telemetryService: any,
-    private readonly solanaConnection: any
-  ) {}
-
-  async getActionMetadata(agentId: string): Promise<ActionGetResponse> {
-    const agent = await this.telemetryService.getAgentStatus(agentId);
-    
-    return {
-      type: 'action',
-      icon: 'https://aegis-mercato.app/icons/pqc-shield.png',
-      title: `Aegis Sentinel | Agent: ${agent.name}`,
-      description: `Stan: ${agent.status} | Aktywne zadanie: ${agent.currentTask}\nPQC State Root: ${agent.lastCommitment.slice(0, 14)}...`,
-      label: 'Autoryzacja Agenta',
-      actions: [
-        {
-          label: 'Autoryzuj kolejny krok',
-          href: `/api/actions/agent-action?agentId=${agentId}&decision=approve`
-        },
-        {
-          label: 'Emergency Kill-Switch (Wstrzymaj)',
-          href: `/api/actions/agent-action?agentId=${agentId}&decision=pause`
-        }
-      ]
-    };
-  }
-
-  async createActionTransaction(req: ActionPostRequest, agentId: string, decision: string): Promise<ActionPostResponse> {
-    const userPubkey = new PublicKey(req.account);
-    const tx = new Transaction();
-
-    const programId = new PublicKey(process.env.AEGIS_PROGRAM_ID!);
-    
-    // Instrukcja wzywająca smart kontrakt na Solanie
-    const instruction = new TransactionInstruction({
-      keys: [
-        { pubkey: userPubkey, isSigner: true, isWritable: true },
-      ],
-      programId,
-      data: Buffer.from(JSON.stringify({ agentId, decision }))
-    });
-
-    tx.add(instruction);
-    tx.feePayer = userPubkey;
-    const { blockhash } = await this.solanaConnection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-
-    return await createPostResponse({
-      fields: {
-        transaction: tx,
-        message: `Agent ${agentId} został zaktualizowany decyzją: ${decision.toUpperCase()}.`
-      }
-    });
-  }
-}
-```
+### 5.2. Bot Telegram właściciela (`bot/telegram/`)
+Bot jest osobnym procesem (`bun bot/telegram`) i rozmawia z serwerem tylko przez HTTP (decyzja 008). Co 3 s czyta `GET /api/agents` i porównuje stan z poprzednim odczytem. Nowa propozycja trafia do czatu właściciela z treścią i przyciskami Accept, Reject, Kill; zabicie agenta z przyciskiem Resume; wznowienie z Kill. Przycisk woła `POST /api/agents/<id>/approval` albo `POST /api/agents/<id>/control` (`kill` / `resume`), a wiadomość kończy się linią wyniku. `/agents` wypisuje flotę z przyciskami pasującymi do stanu agenta. Przyciski naciśnięte spoza czatu `TELEGRAM_OWNER_CHAT_ID` są ignorowane.
 
 ### 5.3. Smart Kontrakt Solana (Anchor: `programs/aegis-registry/src/lib.rs`)
 ```rust
@@ -435,10 +368,10 @@ pub enum AegisError {
 | Okres | Cel | Kluczowe Rezultaty |
 | :--- | :--- | :--- |
 | **0h – 6h** | **Infrastruktura & Środowisko** | Inicjalizacja Open Mercato monorepo, setup Postgres/MikroORM, konfiguracja Solana Devnet i Anchor CLI. |
-| **6h – 16h** | **Solana Blink & Kontrakt Anchor** | Kompilacja i wdrożenie `aegis-registry` na Solana Devnet. Oprogramowanie endpointów Solana Actions (`actions.json` + `agent-action`), test w Dialect Inspectorze (`dial.to`). |
+| **6h – 16h** | **Bot Telegram & Kontrakt Anchor** | Kompilacja i wdrożenie `aegis-registry` na Solana Devnet. Oprogramowanie endpointów właściciela (`approval`, `control`) i bota Telegram. |
 | **16h – 26h** | **Agent Tracking & Observability** | Integracja Event Busa Open Mercato, nasłuch transakcji z Helius Webhook, zapis historii akcji w MikroORM, widok w dashboardzie SvelteKit 5. |
 | **26h – 38h** | **PQC & ZK State Pipeline** | Integracja `@noble/post-quantum` (ML-DSA / ML-KEM). Generowanie solonych commitmentów SHA3/Poseidon dla danych prywatnych, generowanie dowodu i zapisywanie rootów on-chain. |
-| **38h – 48h** | **Testy E2E, Polishing & Demo** | Przejście pełnego scenariusza live: akcja agenta -> Blink na Twitterze -> podpis transakcji -> zapis PQC Roota na Solanie -> aktualizacja stanu w dashboardzie. |
+| **38h – 48h** | **Testy E2E, Polishing & Demo** | Przejście pełnego scenariusza live: akcja agenta -> wiadomość z przyciskami w Telegramie -> decyzja właściciela -> zapis PQC Roota na Solanie -> aktualizacja stanu w dashboardzie. |
 
 ---
 
@@ -450,4 +383,4 @@ pub enum AegisError {
    - Komputery kwantowe (algorytm Shora) nieodwracalnie łamią ECDSA (Ethereum/Bitcoin), niszcząc tożsamość kont.
    - Wskazujemy na **przełomową przewagę Solany (RFC 8032 / SLIP-0010)** udowodnioną w pracy *Baldimtsi et al. (FC 2026)*: klucz Solany to w istocie seed za hashem SHA-512, którego komputer kwantowy nie potrafi odwrócić.
    - Aegis Mercato jako pierwsze rozwiązanie na Solanie wdraża formalny model **Dual-Mode Signatures (DMS)** i jednorazową atestację klucza **ML-DSA-44 (NIST PQC)**, pozwalając agentom na bezpieczną migrację post-kwantową bez konieczności porzucania adresów portfeli.
-3. **Efekt "WOW" na żywo**: Bezpośrednia interakcja z agentem AI na Twitterze/X za pośrednictwem Blinka (Human-in-the-Loop i awaryjny Kill-Switch), bez konieczności opuszczania platformy społecznościowej.
+3. **Efekt "WOW" na żywo**: Bezpośrednia interakcja z agentem AI w Telegramie (Human-in-the-Loop i awaryjny Kill-Switch): propozycja agenta przychodzi na telefon z przyciskami.

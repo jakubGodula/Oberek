@@ -1,4 +1,5 @@
-// The whole demo in one terminal: the server, then Sentinel (at demo pace) and Tick, their output prefixed by name.
+// The whole demo in one terminal: the server, then Sentinel (at demo pace), Tick and, with TELEGRAM_BOT_TOKEN in .env,
+// the owner's Telegram bot, their output prefixed by name.
 // Ctrl+C stops it gracefully: the agents finish the step in flight and exit, and only then the server stops.
 // Usage (from the repo root, with .env set up as in README): bun scripts/demo.ts
 import { spawn } from 'child_process';
@@ -23,6 +24,8 @@ const TICK_ID = AGENT_IDS[1];
 /** Tick at a fast agent's pace when the server batches its decisions (BATCHED_AGENT_IDS in .env, which Bun loads). */
 const BATCHED_TICK_PACE = { TICK_INTERVAL_MS: '1000' };
 const tickBatched = batchPolicyFrom(process.env).agentIds.has(TICK_ID);
+/** The owner bot is optional: it runs only when .env has its token from @BotFather. */
+const telegramConfigured = Boolean(process.env.TELEGRAM_BOT_TOKEN);
 
 if (!existsSync('.env')) {
 	console.error('No .env in the current directory: run from the repo root after the setup in README.md');
@@ -50,8 +53,10 @@ if (await serverReady()) {
 		start('sentinel', process.execPath, ['agents/sentinel'], DEMO_PACE),
 		start('tick', process.execPath, ['agents/tick'], tickBatched ? BATCHED_TICK_PACE : {})
 	);
+	if (telegramConfigured) agents.push(start('telegram', process.execPath, ['bot/telegram'], { TELEGRAM_API_URL: SERVER_URL }));
 	log(`demo running at ${SERVER_URL}; Ctrl+C stops it`);
 	if (!tickBatched) log(`add BATCHED_AGENT_IDS=${TICK_ID} to .env to see Tick's decisions go on-chain in Merkle batches`);
+	if (!telegramConfigured) log('add TELEGRAM_BOT_TOKEN to .env to get proposals in Telegram (README: The owner on Telegram)');
 } else {
 	log(`the server did not answer within ${SERVER_READY_TIMEOUT_MS} ms`);
 	exitCode = 1;

@@ -1,9 +1,10 @@
 <script lang="ts">
   import {
-    Shield, ShieldAlert, ShieldCheck, Cpu, Terminal, Key, Copy, Check,
+    Shield, ShieldAlert, ShieldCheck, Cpu, Send, Key, Copy, Check,
     ExternalLink, RefreshCw, Zap, AlertTriangle,
     Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
+  import { untrack } from 'svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
   import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
@@ -11,8 +12,10 @@
 
   let { data } = $props();
 
-  let agents = $state(data.agents);
-  let selectedAgent = $state(data.agents[0] || null);
+  // The page starts from the server's list and then refreshes it itself (refreshAll).
+  let agents = $state(untrack(() => data.agents));
+  type AgentCard = (typeof agents)[number];
+  let selectedAgent = $state(untrack(() => data.agents[0] || null));
   let copiedId = $state<string | null>(null);
   let isSimulating = $state(false);
   let simulationMessage = $state<string | null>(null);
@@ -24,12 +27,8 @@
   /** The demo shock the card's button arms, in percent of the price. */
   const SHOCK_PCT = -3;
 
-  const blinkUrl = $derived(
-    selectedAgent ? `${data.origin}/api/actions/agent-action?agentId=${selectedAgent.id}` : ''
-  );
-
   /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
-  const fleetAgents = $derived(agents.filter((a: any) => a.fleet));
+  const fleetAgents = $derived(agents.filter((a) => a.fleet));
 
   /** Mock agents are demo data, not real agents: the page says so on every card. */
   const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
@@ -63,7 +62,7 @@
       if (agentsJson.success) {
         agents = agentsJson.agents;
         if (selectedAgent) {
-          const updated = agentsJson.agents.find((a: any) => a.id === selectedAgent.id);
+          const updated = agentsJson.agents.find((a: AgentCard) => a.id === selectedAgent.id);
           if (updated) selectedAgent = updated;
         }
       }
@@ -107,7 +106,9 @@
     const done = verdict === 'accept'
       ? 'Proposal approved: the verdict is on-chain, the agent executes the trade in its next cycle.'
       : 'Proposal rejected: the verdict is on-chain, the treasury is unchanged.';
-    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict }, done);
+    // The counter names the proposal on screen: the server refuses the verdict if another one waits by now.
+    const counter = selectedAgent.fleet?.pendingProposal?.counter;
+    await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict, counter }, done);
   }
 
   async function armShock() {
@@ -117,6 +118,17 @@
       { pct: SHOCK_PCT },
       'Price shock armed: the agent applies it in its next cycle.'
     );
+  }
+
+  const CONTROL_DONE = {
+    kill: 'Kill-Switch: the agent is stopped; the guard refuses its steps until you resume it.',
+    resume: "Resumed: the guard lets the agent's steps through again."
+  } as const;
+
+  async function control(action: 'kill' | 'resume') {
+    if (!selectedAgent) return;
+    const done = selectedAgent.fleet ? CONTROL_DONE[action] : 'Mock agent: only this card changed.';
+    await postAndReport(`/api/agents/${selectedAgent.id}/control`, { action }, done);
   }
 
   async function setPace(intervalMs: number) {
@@ -142,9 +154,9 @@
       simulationSuccess = res.ok;
       simulationMessage = res.ok ? successMessage : `Refused (${res.status}): ${result.message ?? res.statusText}`;
       await refreshAll();
-    } catch (err: any) {
+    } catch (err) {
       simulationSuccess = false;
-      simulationMessage = `Error: ${err.message}`;
+      simulationMessage = `Error: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
       isSimulating = false;
     }
@@ -156,30 +168,6 @@
     setTimeout(() => { copiedId = null; }, 2000);
   }
 
-  async function simulateAction(decision: 'approve' | 'pause') {
-    if (!selectedAgent) return;
-    isSimulating = true;
-    simulationMessage = null;
-    simulationSuccess = null;
-
-    try {
-      const demoAccount = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
-      const res = await fetch(`/api/actions/agent-action?agentId=${selectedAgent.id}&decision=${decision}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: demoAccount })
-      });
-      const result = await res.json();
-      simulationSuccess = res.ok;
-      simulationMessage = result.message || 'Transaction processed.';
-      await refreshAll();
-    } catch (err: any) {
-      simulationSuccess = false;
-      simulationMessage = `Error: ${err.message}`;
-    } finally {
-      isSimulating = false;
-    }
-  }
 </script>
 
 <svelte:head>
@@ -500,7 +488,7 @@
               </button>
               {#if selectedAgent.status === 'PAUSED'}
                 <button
-                  onclick={() => simulateAction('approve')}
+                  onclick={() => control('resume')}
                   disabled={isSimulating}
                   class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
@@ -508,7 +496,7 @@
                 </button>
               {:else}
                 <button
-                  onclick={() => simulateAction('pause')}
+                  onclick={() => control('kill')}
                   disabled={isSimulating}
                   class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
@@ -523,7 +511,7 @@
             </p>
             <div class="grid grid-cols-2 gap-3 mb-4">
               <button
-                onclick={() => simulateAction('approve')}
+                onclick={() => control('resume')}
                 disabled={isSimulating}
                 class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold shadow-lg shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
               >
@@ -536,7 +524,7 @@
                 Approve Step
               </button>
               <button
-                onclick={() => simulateAction('pause')}
+                onclick={() => control('kill')}
                 disabled={isSimulating}
                 class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold shadow-lg shadow-rose-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
               >
@@ -558,40 +546,16 @@
           {/if}
         </div>
 
-        <!-- Blinks Hub -->
+        <!-- Owner bot on Telegram -->
         <div class="bg-white/[0.03] border border-white/[0.07] rounded-2xl p-5 backdrop-blur-sm">
-          <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-            <Terminal class="w-3.5 h-3.5 text-sky-400" /> Solana Actions
+          <h3 class="text-[11px] font-semibold uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
+            <Send class="w-3.5 h-3.5 text-sky-400" /> Telegram
           </h3>
-
-          <div class="space-y-3">
-            <div>
-              <label for="blink-url" class="block text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">
-                Action URL (Solana Action Spec)
-              </label>
-              <div class="flex items-center gap-2">
-                <input
-                  id="blink-url"
-                  type="text"
-                  readonly
-                  value={blinkUrl}
-                  class="flex-1 bg-black/30 border border-white/[0.08] rounded-xl px-3 py-2.5 text-[11px] font-mono text-slate-300 focus:outline-none"
-                />
-                <button
-                  onclick={() => copyText(blinkUrl, 'blink')}
-                  class="px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white text-[11px] font-semibold border border-white/[0.08] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  {#if copiedId === 'blink'}
-                    <Check class="w-3.5 h-3.5 text-emerald-400" />
-                  {:else}
-                    <Copy class="w-3.5 h-3.5" />
-                  {/if}
-                  Copy
-                </button>
-              </div>
-            </div>
-
-          </div>
+          <p class="text-[12px] text-slate-400 leading-relaxed">
+            The owner bot sends each proposal to your Telegram chat with Accept and Reject, and Kill or Resume on every
+            status change; <code class="text-sky-300">/agents</code> lists the fleet. Start it with
+            <code class="text-sky-300">bun bot/telegram</code>.
+          </p>
         </div>
       {/if}
     </section>
@@ -640,6 +604,6 @@
   <!-- Footer -->
   <footer class="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between text-[10px] text-slate-600">
     <span>Oberek · Colosseum Crypto World's Fair 2026</span>
-    <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">@solana/actions</span></span>
+    <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">Telegram Bot API</span></span>
   </footer>
 </div>
