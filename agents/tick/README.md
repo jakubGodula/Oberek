@@ -10,7 +10,7 @@ kill-switch the server answers 409 and Tick keeps trying on the next tick.
 Put the agent in the fleet once (from the repo root), then start it next to the server (`bun run dev`):
 
 ```sh
-bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Tick One — on-chain heartbeat"
+bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Oberek Tick One — on-chain heartbeat"
 bun agents/tick
 ```
 
