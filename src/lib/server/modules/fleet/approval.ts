@@ -1,4 +1,4 @@
-import { NO_DECISION, type GuardAccount } from '../agent-guard/guard';
+import { NO_DECISION, type GuardAccount } from 'pq-agent-guard';
 import type { DecisionLogEntry, Fleet } from './fleet';
 import { assertInFleet, recordDecision } from './record-decision';
 import type { FleetRuntime } from './submit-decision';

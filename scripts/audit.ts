@@ -6,10 +6,14 @@
 // Exit code: 0 history OK, 1 problems found, 2 usage error.
 import type { Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
-import type { GuardEvent } from '../src/lib/server/modules/agent/events';
-import { loadAgentFile } from '../src/lib/server/modules/agent/files';
-import { fetchAgent, fetchGuardEvents, type GuardClient } from '../src/lib/server/modules/agent/guard-client';
-import type { AgentState } from '../src/lib/server/modules/agent/instructions';
+import {
+	fetchAgent,
+	fetchGuardEvents,
+	loadAgentFile,
+	type AgentState,
+	type GuardClient,
+	type GuardEvent
+} from 'pq-agent-guard';
 import { auditHistory, type AuditReport } from '../src/lib/server/modules/fleet/audit';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { loadOwnerKemKey, recoverDataKey } from '../src/lib/server/modules/fleet/log-seal';

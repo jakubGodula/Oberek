@@ -7,8 +7,7 @@
 import { existsSync } from 'fs';
 import { parseArgs } from 'util';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
-import { loadAgentFile, saveAgentFile } from '../src/lib/server/modules/agent/files';
-import { fetchAgent } from '../src/lib/server/modules/agent/guard-client';
+import { fetchAgent, loadAgentFile, saveAgentFile } from 'pq-agent-guard';
 import { Fleet, type RiskLevel } from '../src/lib/server/modules/fleet/fleet';
 import {
 	createLogSeal,

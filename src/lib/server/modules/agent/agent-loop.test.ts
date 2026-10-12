@@ -2,8 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { getAddressDecoder } from '@solana/kit';
 import { runCycle, runLoop, type CyclePorts, type DecisionLogEntry, type SentTransaction } from './agent-loop';
 import { hashDecision, tickDecision } from './decision';
-import type { AgentState, AgentStatus } from './instructions';
-import { stepMessage } from './message';
+import { stepMessage, type AgentState, type AgentStatus } from 'pq-agent-guard';
 
 const AGENT = getAddressDecoder().decode(new Uint8Array(32).fill(7));
 const NOW = new Date('2026-10-10T12:00:00.000Z');

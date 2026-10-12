@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { GuardError } from '../agent-guard/guard';
+import type { GuardError } from 'pq-agent-guard';
 import { NoPendingProposalError, parseVerdict, parseVerdictRequest, proposalAwaiting, recordVerdict } from './approval';
 import { Fleet } from './fleet';
 import { TEST_SEAL } from './testing/test-seal';
 import { StepThrottle } from './step-throttle';
 import { submitDecision, type FleetRuntime } from './submit-decision';
-import { MemoryGuard } from './testing/memory-guard';
+import { MemoryGuard } from 'pq-agent-guard/testing';
 
 const OWNER = 'ftbMowner1111111111111111111111111111111111';
 const AGENT = 'sentinel-01';

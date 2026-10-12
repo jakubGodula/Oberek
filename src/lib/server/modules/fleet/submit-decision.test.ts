@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GuardError, type AgentGuard } from '../agent-guard/guard';
+import { GuardError, type AgentGuard } from 'pq-agent-guard';
 import { AwaitingApprovalError } from './approval';
 import { DecisionBatcher } from './decision-batcher';
 import { Fleet, LogNotSealedError } from './fleet';
@@ -11,7 +11,7 @@ import { TEST_SEAL } from './testing/test-seal';
 import { RateLimitedError, StepThrottle } from './step-throttle';
 import { flushBatch } from './record-decision';
 import { parseSubmission, submitDecision, type FleetRuntime } from './submit-decision';
-import { MemoryGuard } from './testing/memory-guard';
+import { MemoryGuard } from 'pq-agent-guard/testing';
 
 const OWNER = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 const AGENT = 'test-agent';

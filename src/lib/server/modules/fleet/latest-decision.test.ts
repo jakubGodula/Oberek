@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { appendFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
+import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from 'pq-agent-guard';
 import { Fleet, type DecisionLogEntry } from './fleet';
 import { TEST_SEAL } from './testing/test-seal';
 import { batchSizeOf, DecisionNotInLogError, latestDecision } from './latest-decision';

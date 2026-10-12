@@ -1,6 +1,5 @@
 import { getBase16Decoder, type Address } from '@solana/kit';
-import type { GuardEvent } from '../agent/events';
-import type { AgentState } from '../agent/instructions';
+import type { AgentState, GuardEvent } from 'pq-agent-guard';
 import type { DecisionLogEntry } from './fleet';
 import { merkleRoot, verifyProof } from './merkle';
 import { hashDecisionRecord } from './record-decision';

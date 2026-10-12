@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { GuardError } from '../agent-guard/guard';
+import type { GuardError } from 'pq-agent-guard';
 import { controlAgent, parseControlAction } from './control';
 import { Fleet } from './fleet';
 import { StepThrottle } from './step-throttle';
 import type { FleetRuntime } from './submit-decision';
-import { MemoryGuard } from './testing/memory-guard';
+import { MemoryGuard } from 'pq-agent-guard/testing';
 import { TEST_SEAL } from './testing/test-seal';
 
 const OWNER = 'ftbMowner1111111111111111111111111111111111';

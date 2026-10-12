@@ -1,3 +1,5 @@
+import { stringifyWithBigints } from './json';
+
 /** GuardError codes from onchain/programs/onchain_agent_guard/src/error.rs (Anchor numbers custom errors from 6000). */
 export const GUARD_ERROR_CODES = {
 	AgentKilled: 6000,
@@ -26,5 +28,5 @@ export function customErrorCode(err: unknown): number | null {
 export function describeTransactionError(err: unknown): string {
 	const code = customErrorCode(err);
 	const name = code === null ? undefined : GUARD_ERROR_NAMES.get(code);
-	return name ?? JSON.stringify(err, (_, value) => (typeof value === 'bigint' ? Number(value) : value));
+	return name ?? stringifyWithBigints(err);
 }

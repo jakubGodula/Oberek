@@ -12,7 +12,7 @@ onchain/run-tests.sh    # Docker (x86_64) + Bun; append 2>/dev/null to hide carg
 ```
 
 Builds the program in Docker (the host's glibc 2.31 is too old for the Agave and Anchor CLIs), copies the IDL to
-`src/lib/server/modules/agent/onchain_agent_guard.idl.json`, writes fresh noble fixtures with
+`kit/src/onchain_agent_guard.idl.json`, writes fresh noble fixtures with
 `scripts/gen-guard-fixtures.ts` and runs the Mollusk tests in `programs/onchain_agent_guard/tests/`.
 
 The program keypair is `onchain/.devnet/program-keypair.json`: gitignored and the only copy, so back it up.
@@ -46,7 +46,7 @@ bun scripts/devnet-e2e.ts       # fresh agent: register → 3 steps → kill (st
 
 Costs ~0.15 SOL per run (key account rent). The public devnet RPC rate-limits each method (e.g. 10 `getTransaction`
 per window) and answers bursts with HTTP 429; the client retries those after 10 s (`withRateLimitRetry` in
-`src/lib/server/modules/agent/transaction.ts`).
+`kit/src/transaction.ts`).
 
 ### Result (2026-10-10 01:36 Europe/Warsaw: PASS)
 

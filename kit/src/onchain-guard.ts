@@ -1,11 +1,11 @@
 import { getBase16Decoder, getBase16Encoder, type Address, type TransactionSigner } from '@solana/kit';
-import type { AgentFile } from '../agent/files';
-import { fetchAgent, fetchBalance, killAgent, recordBatch, recordStep, resumeAgent, type GuardClient } from '../agent/guard-client';
-import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from '../agent/guard-errors';
-import type { AgentState } from '../agent/instructions';
-import { batchMessage, signGuardMessage, stepMessage } from '../agent/message';
-import { signResume } from '../agent/resume';
-import { TRANSACTION_FEE_LAMPORTS, type SendResult } from '../agent/transaction';
+import type { AgentFile } from './files';
+import { fetchAgent, fetchBalance, killAgent, recordBatch, recordStep, resumeAgent, type GuardClient } from './guard-client';
+import { customErrorCode, describeTransactionError, GUARD_ERROR_CODES } from './guard-errors';
+import type { AgentState } from './instructions';
+import { batchMessage, signGuardMessage, stepMessage } from './message';
+import { signResume } from './resume';
+import { TRANSACTION_FEE_LAMPORTS, type SendResult } from './transaction';
 import { GuardError, type AgentGuard, type GuardAccount, type GuardErrorCode, type LandedTransaction } from './guard';
 
 /** The program calls the guard makes; injected so tests run without a network. */
@@ -25,15 +25,31 @@ export interface OnchainGuardDeps {
 	/** Pays for the agents' steps. */
 	feePayer: TransactionSigner;
 	/**
-	 * The owner's key, held by the server so it can sign kill and resume (the page has no wallet yet). Whoever reaches
-	 * the server can therefore kill and resume; the owner address a caller claims is not used.
+	 * The owner's key, which signs kill and resume; the owner address a caller claims is not used. Leave it out in the
+	 * agent's own process: without it kill and resume are refused, and whoever takes that process cannot resume a kill.
+	 * The server holds it because the page has no wallet yet, so whoever reaches the server can kill and resume.
 	 */
-	owner: TransactionSigner;
+	owner?: TransactionSigner;
 	/** The agent's on-chain addresses and ML-DSA-44 secret key; throws AgentNotFound for an unknown agent. */
 	identityOf(agentId: string): AgentFile;
 	/** Told of every transaction that landed and succeeded, for the agent's transaction log. */
 	onLanded?(transaction: LandedTransaction): void;
 	chain?: ChainCalls;
+}
+
+/** What every signed step sends, whatever it records. */
+interface SignedStep {
+	feePayer: TransactionSigner;
+	agent: Address;
+	agentKey: Address;
+	signature: Uint8Array;
+}
+
+/** A step or a batch: the instruction's name for errors, the message the agent signs and how to send it. */
+interface SignedStepRequest {
+	instruction: string;
+	message(agent: Address): Uint8Array;
+	send(signed: SignedStep): Promise<SendResult>;
 }
 
 const GUARD_ERROR_BY_PROGRAM_CODE = new Map<number, GuardErrorCode>([
@@ -59,60 +75,62 @@ export class OnchainGuard implements AgentGuard {
 	}
 
 	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
-		const identity = this.deps.identityOf(agentId);
-		const state = await this.readStateForStep(agentId, counter);
-		const hash = new Uint8Array(getBase16Encoder().encode(decisionHash));
-		const signature = signGuardMessage(stepMessage(identity.agent, BigInt(counter), hash), identity.mldsaSecretKey);
-		const step = {
-			feePayer: this.deps.feePayer,
-			agent: identity.agent,
-			agentKey: identity.agentKey,
-			decisionHash: hash,
-			signature
-		};
-		const result = await this.chain.recordStep(this.deps.client, step);
-		assertLanded(result, 'record_step');
-		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature: result.signature, decisionHash });
+		const hash = hexToBytes(decisionHash);
+		const { state, signature } = await this.sendSignedStep(agentId, counter, {
+			instruction: 'record_step',
+			message: (agent) => stepMessage(agent, BigInt(counter), hash),
+			send: (signed) => this.chain.recordStep(this.deps.client, { ...signed, decisionHash: hash })
+		});
+		this.deps.onLanded?.({ agentId, event: 'StepRecorded', counter, signature, decisionHash });
 		return { ...toGuardAccount(state), counter, lastDecision: decisionHash };
 	}
 
 	async recordBatch(agentId: string, counter: number, root: string, size: number): Promise<GuardAccount> {
-		const identity = this.deps.identityOf(agentId);
-		const state = await this.readStateForStep(agentId, counter);
-		const rootBytes = new Uint8Array(getBase16Encoder().encode(root));
-		const signature = signGuardMessage(batchMessage(identity.agent, BigInt(counter), rootBytes, size), identity.mldsaSecretKey);
-		const batch = { feePayer: this.deps.feePayer, agent: identity.agent, agentKey: identity.agentKey, root: rootBytes, size, signature };
-		const result = await this.chain.recordBatch(this.deps.client, batch);
-		assertLanded(result, 'record_batch');
-		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature: result.signature, root, size });
+		const rootBytes = hexToBytes(root);
+		const { state, signature } = await this.sendSignedStep(agentId, counter, {
+			instruction: 'record_batch',
+			message: (agent) => batchMessage(agent, BigInt(counter), rootBytes, size),
+			send: (signed) => this.chain.recordBatch(this.deps.client, { ...signed, root: rootBytes, size })
+		});
+		this.deps.onLanded?.({ agentId, event: 'BatchRecorded', counter, signature, root, size });
 		return { ...toGuardAccount(state), counter, lastDecision: root };
 	}
 
 	async kill(agentId: string): Promise<GuardAccount> {
-		const state = await this.readOwnedState(agentId);
+		const { state, owner } = await this.readOwnedState(agentId);
 		if (state.status !== 'Active') {
 			throw new GuardError('AgentNotActive', `agent ${agentId} is ${state.status.toLowerCase()}, not active`);
 		}
-		await this.assertCanPay(this.deps.owner, `kill of agent ${agentId}`);
+		await this.assertCanPay(owner, `kill of agent ${agentId}`);
 		const { agent } = this.deps.identityOf(agentId);
-		const result = await this.chain.killAgent(this.deps.client, this.deps.owner, agent);
+		const result = await this.chain.killAgent(this.deps.client, owner, agent);
 		assertLanded(result, 'kill');
 		this.deps.onLanded?.({ agentId, event: 'AgentKilled', counter: Number(state.counter), signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Killed' };
 	}
 
 	async resume(agentId: string): Promise<GuardAccount> {
-		const state = await this.readOwnedState(agentId);
+		const { state, owner } = await this.readOwnedState(agentId);
 		if (state.status !== 'Killed') throw new GuardError('AgentNotKilled', `agent ${agentId} is not killed`);
-		await this.assertCanPay(this.deps.owner, `resume of agent ${agentId}`);
+		await this.assertCanPay(owner, `resume of agent ${agentId}`);
 		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
 		const signature = signResume(agent, state, mldsaSecretKey);
-		const resume = { owner: this.deps.owner, agent, agentKey, signature };
+		const resume = { owner, agent, agentKey, signature };
 		const result = await this.chain.resumeAgent(this.deps.client, resume);
 		assertLanded(result, 'resume');
 		const counter = Number(state.counter + 1n);
 		this.deps.onLanded?.({ agentId, event: 'AgentResumed', counter, signature: result.signature });
 		return { ...toGuardAccount(state), status: 'Active', counter };
+	}
+
+	/** Checks the agent may take step `counter`, signs the step's message with the agent's key and sends it. */
+	private async sendSignedStep(agentId: string, counter: number, step: SignedStepRequest) {
+		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
+		const state = await this.readStateForStep(agentId, counter);
+		const signature = signGuardMessage(step.message(agent), mldsaSecretKey);
+		const result = await step.send({ feePayer: this.deps.feePayer, agent, agentKey, signature });
+		await this.assertStepLanded(agentId, counter, result, step.instruction);
+		return { state, signature: result.signature };
 	}
 
 	/** The agent's state when it may take step `counter`: active, `counter` next, and the fee payer funded. */
@@ -125,6 +143,20 @@ export class OnchainGuard implements AgentGuard {
 		}
 		await this.assertCanPay(this.deps.feePayer, `step ${counter} of agent ${agentId}`);
 		return state;
+	}
+
+	/**
+	 * The program has no counter error: a step signed for a counter another sender took first fails its signature check
+	 * (VerifyFailed). Re-reading the agent tells that race apart from a bad signature.
+	 */
+	private async assertStepLanded(agentId: string, counter: number, result: SendResult, instruction: string): Promise<void> {
+		if (customErrorCode(result.err) === GUARD_ERROR_CODES.VerifyFailed) {
+			const { counter: current } = await this.readState(agentId);
+			if (current >= BigInt(counter)) {
+				throw new GuardError('CounterMismatch', `agent ${agentId} reached step ${current} before step ${counter} landed`);
+			}
+		}
+		assertLanded(result, instruction);
 	}
 
 	private async assertCanPay(payer: TransactionSigner, transaction: string): Promise<void> {
@@ -141,13 +173,20 @@ export class OnchainGuard implements AgentGuard {
 		return this.chain.fetchAgent(this.deps.client, this.deps.identityOf(agentId).agent);
 	}
 
-	private async readOwnedState(agentId: string): Promise<AgentState> {
+	/** The agent's state and the owner key that may kill or resume it. */
+	private async readOwnedState(agentId: string): Promise<{ state: AgentState; owner: TransactionSigner }> {
+		const { owner } = this.deps;
+		if (!owner) throw new GuardError('NotOwner', `no owner key here to kill or resume agent ${agentId}`);
 		const state = await this.readState(agentId);
-		if (state.owner !== this.deps.owner.address) {
-			throw new GuardError('NotOwner', `the server's owner key ${this.deps.owner.address} does not own agent ${agentId}`);
+		if (state.owner !== owner.address) {
+			throw new GuardError('NotOwner', `the owner key ${owner.address} does not own agent ${agentId}`);
 		}
-		return state;
+		return { state, owner };
 	}
+}
+
+function hexToBytes(hex: string): Uint8Array {
+	return new Uint8Array(getBase16Encoder().encode(hex));
 }
 
 function toGuardAccount(state: AgentState): GuardAccount {

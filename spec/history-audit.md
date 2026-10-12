@@ -67,14 +67,14 @@ fetched) are counted as `newer` and not audited, so they never show as problems.
 
 ### 2. Fetch the history
 
-`fetchGuardEvents` (`src/lib/server/modules/agent/guard-client.ts`):
+`fetchGuardEvents` (`kit/src/guard-client.ts`):
 
 - `getSignaturesForAddress(agent)` lists every transaction that touched the account, 1000 per page; failed ones are
   dropped, they changed nothing.
 - `getTransaction` fetches each transaction's logs, one at a time. The free-tier devnet RPC throttles this to about
   3 s per transaction, ~20 minutes for 400. A transaction or its logs missing from the RPC is an error, not a gap.
 
-`parseGuardEvents` (`src/lib/server/modules/agent/events.ts`) decodes the events from the logs. Anchor's `emit!`
+`parseGuardEvents` (`kit/src/events.ts`) decodes the events from the logs. Anchor's `emit!`
 logs each event as `Program data: <base64>`: 8 bytes of discriminator (`StepRecorded`, `AgentKilled` or
 `AgentResumed`), then the agent, the counter and, for a step, the hash.
 

@@ -71,7 +71,7 @@ export function withRateLimitRetry(transport: RpcTransport, backoffMs = RATE_LIM
 				return await transport(config);
 			} catch (error) {
 				if (attempt >= RATE_LIMIT_ATTEMPTS || !isRateLimited(error)) throw error;
-				await new Promise((resolve) => setTimeout(resolve, backoffMs));
+				await sleep(backoffMs);
 			}
 		}
 	}) as RpcTransport;
@@ -94,7 +94,26 @@ export async function sendV1(
 	instructions: readonly Instruction[],
 	computeUnitLimit: number
 ): Promise<SendResult> {
-	const { value: latestBlockhash } = await connection.rpc.getLatestBlockhash().send();
+	const transaction = await signV1Transaction(connection.rpc, feePayer, instructions, computeUnitLimit);
+	const signature = getSignatureFromTransaction(transaction);
+	const sendError = await sendAndConfirmOrError(connection, transaction);
+	const landed = await fetchLandedTransaction(connection.rpc, signature);
+	if (!landed) throw sendError ?? new Error(`transaction ${signature} not found`);
+	return {
+		signature,
+		err: landed.meta?.err ?? null,
+		computeUnits: landed.meta?.computeUnitsConsumed ?? null,
+		transactionBytes: getTransactionSize(transaction)
+	};
+}
+
+async function signV1Transaction(
+	rpc: Rpc<SolanaRpcApi>,
+	feePayer: TransactionSigner,
+	instructions: readonly Instruction[],
+	computeUnitLimit: number
+) {
+	const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
 	const message = pipe(
 		createTransactionMessage({ version: 1 }),
 		(m) => setTransactionMessageFeePayerSigner(feePayer, m),
@@ -107,30 +126,36 @@ export async function sendV1(
 	const transaction = await signTransactionMessageWithSigners(message);
 	assertIsSendableTransaction(transaction);
 	assertIsTransactionWithBlockhashLifetime(transaction);
-	const signature = getSignatureFromTransaction(transaction);
-	const sendError = await connection
-		.sendAndConfirm(transaction, { commitment: 'confirmed', skipPreflight: true })
-		.then(
-			() => null,
-			(error: unknown) => error
-		);
-	const landed = await fetchLandedTransaction(connection.rpc, signature);
-	if (!landed) throw sendError ?? new Error(`transaction ${signature} not found`);
-	return {
-		signature,
-		err: landed.meta?.err ?? null,
-		computeUnits: landed.meta?.computeUnitsConsumed ?? null,
-		transactionBytes: getTransactionSize(transaction)
-	};
+	return transaction;
+}
+
+/** The send's error, or null; the ledger, not the send, says whether the transaction landed. */
+function sendAndConfirmOrError(
+	connection: SolanaConnection,
+	transaction: Parameters<SolanaConnection['sendAndConfirm']>[0]
+): Promise<unknown> {
+	return connection.sendAndConfirm(transaction, { commitment: 'confirmed', skipPreflight: true }).then(
+		() => null,
+		(error: unknown) => error
+	);
 }
 
 async function fetchLandedTransaction(rpc: Rpc<SolanaRpcApi>, signature: Signature) {
 	for (let attempt = 0; attempt < LEDGER_POLL_ATTEMPTS; attempt++) {
-		const landed = await rpc
-			.getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
-			.send();
+		const landed = await fetchConfirmedTransaction(rpc, signature);
 		if (landed) return landed;
-		await new Promise((resolve) => setTimeout(resolve, LEDGER_POLL_INTERVAL_MS));
+		await sleep(LEDGER_POLL_INTERVAL_MS);
 	}
 	return null;
+}
+
+/** A confirmed transaction with its logs, or null while the RPC does not have it. */
+export function fetchConfirmedTransaction(rpc: Rpc<SolanaRpcApi>, signature: Signature) {
+	return rpc
+		.getTransaction(signature, { commitment: 'confirmed', encoding: 'json', maxSupportedTransactionVersion: 1 })
+		.send();
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }

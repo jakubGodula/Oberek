@@ -1,4 +1,4 @@
-import { GuardError, type AgentGuard, type GuardAccount } from '../agent-guard/guard';
+import { GuardError, type AgentGuard, type GuardAccount } from 'pq-agent-guard';
 import { AwaitingApprovalError, proposalAwaiting } from './approval';
 import type { DecisionBatcher } from './decision-batcher';
 import type { Fleet } from './fleet';
