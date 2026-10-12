@@ -46,7 +46,13 @@ test('runs no step when stopped before the start', async () => {
 	const stop = new AbortController();
 	stop.abort();
 	let steps = 0;
-	await runLoop(async () => void (steps += 1), 0, stop.signal);
+	await runLoop(
+		async () => {
+			steps += 1;
+		},
+		0,
+		stop.signal
+	);
 	expect(steps).toBe(0);
 });
 

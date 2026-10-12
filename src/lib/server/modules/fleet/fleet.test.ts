@@ -32,7 +32,7 @@ beforeEach(() => {
 afterEach(() => rmSync(rootDir, { recursive: true, force: true }));
 
 test('lists the newest decisions first, at most the limit', () => {
-	[1, 2, 3].forEach((counter) => fleet.appendDecision(AGENT, entry(counter)));
+	for (const counter of [1, 2, 3]) fleet.appendDecision(AGENT, entry(counter));
 	expect(fleet.recentDecisions(AGENT, 2)).toEqual([entry(3), entry(2)]);
 });
 
@@ -54,7 +54,7 @@ const kill = (counter: number): LoggedTransaction => ({
 });
 
 test("keeps the agent's landed transactions, oldest first, in a file that outlives the server", () => {
-	[1, 2].forEach((counter) => fleet.appendTransaction(kill(counter)));
+	for (const counter of [1, 2]) fleet.appendTransaction(kill(counter));
 	expect(new Fleet(join(rootDir, 'fleet')).transactions(AGENT)).toEqual([kill(1), kill(2)]);
 });
 
@@ -80,7 +80,7 @@ test('writes no decision in clear', () => {
 });
 
 test('reads back what an earlier instance sealed, as after a restart', () => {
-	[1, 2].forEach((counter) => fleet.appendDecision(AGENT, entry(counter)));
+	for (const counter of [1, 2]) fleet.appendDecision(AGENT, entry(counter));
 	expect(new Fleet(join(rootDir, 'fleet')).decisions(AGENT)).toEqual([entry(1), entry(2)]);
 });
 

@@ -39,7 +39,7 @@ describe('toFeedRow', () => {
 	test.each([
 		['accept', 'APPROVED'],
 		['reject', 'REJECTED']
-	])('a verdict %s shows as %s with the proposal trade', (verdict, chip) => {
+	] as const)('a verdict %s shows as %s with the proposal trade', (verdict, chip) => {
 		const row = toFeedRow(entry(8, 'approval', { verdict, proposal: { kind: 'sentinel', decision: PROPOSAL_DECISION } }), null);
 		expect(row.chip).toBe(chip);
 		expect(row.details?.trade?.usdc).toBe(1570.725);

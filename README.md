@@ -148,6 +148,6 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ## Test
 
 ```sh
-bun test src agents scripts      # server, fleet, agents and scripts, no network
+bun test                         # server, fleet, agents and scripts, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
