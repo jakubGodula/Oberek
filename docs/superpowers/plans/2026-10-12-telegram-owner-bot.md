@@ -1508,7 +1508,9 @@ console.log('Telegram bot stopped');
 
 - [ ] **Step 2: Smoke-test the process without a token**
 
-Run: `env -u TELEGRAM_BOT_TOKEN ~/.bun/bin/bun bot/telegram`
+Run: `TELEGRAM_BOT_TOKEN= ~/.bun/bin/bun bot/telegram`
+(Bun loads `.env` by itself, so `env -u` would let the real token back in; an empty value set in the shell wins over
+`.env`.)
 Expected: `TELEGRAM_BOT_TOKEN is not set: …`, exit code 1.
 
 - [ ] **Step 3: `.env.example`** — append:

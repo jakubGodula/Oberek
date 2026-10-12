@@ -120,7 +120,8 @@ process and talks to the server over HTTP, so it works from localhost.
 
 1. In Telegram, send `/newbot` to @BotFather; put the token it gives in `.env` as `TELEGRAM_BOT_TOKEN`.
 2. `bun bot/telegram`, then send `/start` to your bot: it answers with your chat id. Put it in `.env` as
-   `TELEGRAM_OWNER_CHAT_ID` and restart the bot. Only that chat can press buttons.
+   `TELEGRAM_OWNER_CHAT_ID` and restart the bot. Only that chat can press buttons. Use your private chat with the bot:
+   in a group every member could press them.
 
 ```bash
 bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_URL if not on :5173

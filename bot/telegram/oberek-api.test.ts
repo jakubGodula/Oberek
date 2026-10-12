@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createOberekApi } from './oberek-api';
+import { type AgentView, createOberekApi } from './oberek-api';
 
 const AGENT = {
 	id: 'tick-01',
@@ -8,7 +8,7 @@ const AGENT = {
 	currentTask: 'TICK',
 	actionsExecuted: 3,
 	fleet: { pendingProposal: null }
-};
+} satisfies AgentView;
 
 function answering(status: number, body: unknown) {
 	const requests: { url: string; init?: RequestInit }[] = [];

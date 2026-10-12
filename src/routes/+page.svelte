@@ -4,6 +4,7 @@
     ExternalLink, RefreshCw, Zap, AlertTriangle,
     Lock, Unlock, BarChart3, Play
   } from 'lucide-svelte';
+  import { untrack } from 'svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
   import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
@@ -11,8 +12,10 @@
 
   let { data } = $props();
 
-  let agents = $state(data.agents);
-  let selectedAgent = $state(data.agents[0] || null);
+  // The page starts from the server's list and then refreshes it itself (refreshAll).
+  let agents = $state(untrack(() => data.agents));
+  type AgentCard = (typeof agents)[number];
+  let selectedAgent = $state(untrack(() => data.agents[0] || null));
   let copiedId = $state<string | null>(null);
   let isSimulating = $state(false);
   let simulationMessage = $state<string | null>(null);
@@ -25,7 +28,7 @@
   const SHOCK_PCT = -3;
 
   /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
-  const fleetAgents = $derived(agents.filter((a: any) => a.fleet));
+  const fleetAgents = $derived(agents.filter((a) => a.fleet));
 
   /** Mock agents are demo data, not real agents: the page says so on every card. */
   const MOCK_LABEL_STYLE = 'text-slate-300 bg-slate-500/20 border-slate-400/40';
@@ -59,7 +62,7 @@
       if (agentsJson.success) {
         agents = agentsJson.agents;
         if (selectedAgent) {
-          const updated = agentsJson.agents.find((a: any) => a.id === selectedAgent.id);
+          const updated = agentsJson.agents.find((a: AgentCard) => a.id === selectedAgent.id);
           if (updated) selectedAgent = updated;
         }
       }
@@ -151,9 +154,9 @@
       simulationSuccess = res.ok;
       simulationMessage = res.ok ? successMessage : `Refused (${res.status}): ${result.message ?? res.statusText}`;
       await refreshAll();
-    } catch (err: any) {
+    } catch (err) {
       simulationSuccess = false;
-      simulationMessage = `Error: ${err.message}`;
+      simulationMessage = `Error: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
       isSimulating = false;
     }
