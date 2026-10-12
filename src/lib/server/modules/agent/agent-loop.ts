@@ -1,8 +1,13 @@
 import { getBase16Decoder, type Address } from '@solana/kit';
 import { hashDecision, tickDecision, type DecisionRecord } from './decision';
 import { describeTransactionError } from './guard-errors';
-import type { AgentState } from './instructions';
+import type { AgentState, AgentStatus } from './instructions';
 import { stepMessage } from './message';
+
+const PAUSE_REASONS: Record<Exclude<AgentStatus, 'Active'>, string> = {
+	Killed: 'paused: agent is killed',
+	Pending: 'paused: agent awaits the owner activation (bun scripts/agent.ts activate)'
+};
 
 /** What the cycle needs to know about a sent transaction. */
 export interface SentTransaction {
@@ -32,7 +37,7 @@ export interface CyclePorts {
 export type CycleOutcome = 'paused' | 'recorded' | 'failed';
 
 /**
- * One agent cycle: read the on-chain state (the only source of truth), skip while killed, otherwise sign and send the
+ * One agent cycle: read the on-chain state (the only source of truth), skip while killed or not yet activated, otherwise sign and send the
  * next step. Never throws: a failure is logged and the next cycle starts again from the on-chain state.
  */
 export async function runCycle(ports: CyclePorts): Promise<CycleOutcome> {
@@ -46,8 +51,8 @@ export async function runCycle(ports: CyclePorts): Promise<CycleOutcome> {
 
 async function recordNextStep(ports: CyclePorts): Promise<CycleOutcome> {
 	const state = await ports.readAgent();
-	if (state.status === 'Killed') {
-		ports.log('paused: agent is killed');
+	if (state.status !== 'Active') {
+		ports.log(PAUSE_REASONS[state.status]);
 		return 'paused';
 	}
 	const counter = state.counter + 1n;

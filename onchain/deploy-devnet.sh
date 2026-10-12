@@ -6,12 +6,16 @@ source "$(dirname "${BASH_SOURCE[0]}")/toolchain.sh"
 
 PAYER="$REPO_DIR/spikes/falcon-noble-compat/.devnet/payer.json"
 PROGRAM_KEYPAIR="$ONCHAIN_DIR/.devnet/program-keypair.json"
+FIXTURES_DIR="$ONCHAIN_DIR/programs/onchain_agent_guard/tests/fixtures"
+ANCHOR_PROGRAM_ID=$(sed -n 's/^onchain_agent_guard = "\(.*\)"$/\1/p' "$ONCHAIN_DIR/Anchor.toml" | head -1)
 DEPLOY_PRIORITY_MICROLAMPORTS=10000
 DEPLOY_MAX_SIGN_ATTEMPTS=100
 
 solana_devnet() { toolchain solana --url devnet --keypair "$PAYER" "$@"; }
 
 build_images
+# The IDL build compiles the Mollusk tests too, and they include these gitignored fixtures.
+"$BUN" "$REPO_DIR/scripts/gen-guard-fixtures.ts" "$ANCHOR_PROGRAM_ID" "$FIXTURES_DIR"
 cd "$ONCHAIN_DIR"
 toolchain anchor build --ignore-keys
 echo "payer balance: $(solana_devnet balance)"

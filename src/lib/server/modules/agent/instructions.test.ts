@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'bun:test';
 import { AccountRole, generateKeyPairSigner, getAddressDecoder, getU64Encoder } from '@solana/kit';
 import {
+	activateAgentInstruction,
 	anchorDiscriminator,
 	DISCRIMINATORS,
 	decodeAgent,
 	findAgentAddress,
+	findOwnerRecordAddress,
 	killInstruction,
 	recordBatchInstruction,
 	recordStepInstruction,
-	registerAgentInstruction
+	registerAgentInstruction,
+	registerOwnerInstruction,
+	SYSTEM_PROGRAM_ADDRESS
 } from './instructions';
 
 const filled = (length: number, value: number) => new Uint8Array(length).fill(value);
@@ -16,6 +20,8 @@ const addressOf = (value: number) => getAddressDecoder().decode(filled(32, value
 const PROGRAM = addressOf(9);
 const AGENT = addressOf(7);
 const AGENT_KEY = addressOf(3);
+const OWNER_KEY = addressOf(6);
+const OWNER_RECORD = addressOf(8);
 const ML_DSA_44_PUBLIC_KEY_LENGTH = 1312;
 const ML_DSA_44_SIGNATURE_LENGTH = 2420;
 
@@ -26,6 +32,16 @@ describe('discriminators', () => {
 		expect(Array.from(DISCRIMINATORS.kill)).toEqual([46, 229, 132, 89, 87, 194, 20, 217]);
 		expect(Array.from(DISCRIMINATORS.resume)).toEqual([1, 166, 51, 170, 127, 32, 141, 206]);
 		expect(Array.from(DISCRIMINATORS.agent)).toEqual([47, 166, 112, 147, 155, 197, 86, 7]);
+		expect(Array.from(DISCRIMINATORS.registerOwner)).toEqual([207, 189, 74, 108, 245, 244, 166, 237]);
+		expect(Array.from(DISCRIMINATORS.activateAgent)).toEqual([252, 139, 87, 21, 195, 152, 29, 217]);
+	});
+});
+
+describe('findOwnerRecordAddress', () => {
+	it('derives one record per owner', async () => {
+		const first = await findOwnerRecordAddress(PROGRAM, addressOf(2));
+		expect(await findOwnerRecordAddress(PROGRAM, addressOf(2))).toBe(first);
+		expect(await findOwnerRecordAddress(PROGRAM, addressOf(4))).not.toBe(first);
 	});
 });
 
@@ -76,6 +92,19 @@ describe('decodeAgent', () => {
 		});
 	});
 
+	it('decodes a Pending agent', () => {
+		const data = Uint8Array.from([
+			...DISCRIMINATORS.agent,
+			...filled(32, 1),
+			...filled(32, 2),
+			2,
+			...getU64Encoder().encode(0n),
+			...filled(32, 0),
+			255
+		]);
+		expect(decodeAgent(data).status).toBe('Pending');
+	});
+
 	it('rejects an account that is not an Agent', () => {
 		expect(() => decodeAgent(filled(8 + 106, 0))).toThrow('not an onchain_agent_guard Agent');
 	});
@@ -114,6 +143,42 @@ describe('instruction builders', () => {
 		expect(instruction.accounts.map((account) => [account.address, account.role])).toEqual([
 			[AGENT, AccountRole.WRITABLE],
 			[AGENT_KEY, AccountRole.READONLY]
+		]);
+	});
+
+	it('lays out register_owner like register_agent, with the owner record', async () => {
+		const owner = await generateKeyPairSigner();
+		const instruction = registerOwnerInstruction({
+			programAddress: PROGRAM,
+			owner,
+			ownerKey: OWNER_KEY,
+			ownerRecord: OWNER_RECORD,
+			publicKey: filled(ML_DSA_44_PUBLIC_KEY_LENGTH, 5)
+		});
+		expect(Array.from(instruction.data.subarray(0, 8))).toEqual(Array.from(DISCRIMINATORS.registerOwner));
+		expect(instruction.data.length).toBe(8 + 4 + ML_DSA_44_PUBLIC_KEY_LENGTH);
+		expect(instruction.accounts.map((account) => [account.address, account.role])).toEqual([
+			[owner.address, AccountRole.WRITABLE_SIGNER],
+			[OWNER_KEY, AccountRole.WRITABLE],
+			[OWNER_RECORD, AccountRole.WRITABLE],
+			[SYSTEM_PROGRAM_ADDRESS, AccountRole.READONLY]
+		]);
+	});
+
+	it('lays out activate_agent with no wallet signer', () => {
+		const instruction = activateAgentInstruction({
+			programAddress: PROGRAM,
+			agent: AGENT,
+			ownerRecord: OWNER_RECORD,
+			ownerKey: OWNER_KEY,
+			signature: filled(ML_DSA_44_SIGNATURE_LENGTH, 5)
+		});
+		expect(Array.from(instruction.data.subarray(0, 8))).toEqual(Array.from(DISCRIMINATORS.activateAgent));
+		expect(instruction.data.length).toBe(8 + 4 + ML_DSA_44_SIGNATURE_LENGTH);
+		expect(instruction.accounts.map((account) => [account.address, account.role])).toEqual([
+			[AGENT, AccountRole.WRITABLE],
+			[OWNER_RECORD, AccountRole.READONLY],
+			[OWNER_KEY, AccountRole.READONLY]
 		]);
 	});
 

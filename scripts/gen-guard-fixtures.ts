@@ -1,12 +1,12 @@
-// Writes a fresh noble ML-DSA-44 key and signatures for the Mollusk tests in
+// Writes a fresh noble ML-DSA-44 agent key, owner key and signatures for the Mollusk tests in
 // onchain/programs/onchain_agent_guard/tests/guard.rs. Called by onchain/run-tests.sh.
 // Usage: bun scripts/gen-guard-fixtures.ts <program id> <out dir>
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { address, getAddressDecoder } from '@solana/kit';
 import { findAgentAddress } from '../src/lib/server/modules/agent/instructions';
-import { batchMessage, resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
+import { activateMessage, batchMessage, resumeMessage, signGuardMessage, stepMessage } from '../src/lib/server/modules/agent/message';
 
 // Must match OWNER, AGENT_KEY and decision_hash() in guard.rs.
 const OWNER = getAddressDecoder().decode(new Uint8Array(32).fill(2));
@@ -36,4 +36,7 @@ for (const counter of STEP_COUNTERS) {
 }
 write(`resume-${RESUME_COUNTER}.sig`, signGuardMessage(resumeMessage(agent, RESUME_COUNTER), keys.secretKey));
 write(`batch-${BATCH_COUNTER}.sig`, signGuardMessage(batchMessage(agent, BATCH_COUNTER, BATCH_ROOT, BATCH_SIZE), keys.secretKey));
+const ownerKeys = ml_dsa44.keygen();
+write('owner-key.pk', ownerKeys.publicKey);
+write('activate.sig', signGuardMessage(activateMessage(agent), ownerKeys.secretKey));
 console.log(`wrote guard fixtures for agent ${agent} to ${outDir}`);

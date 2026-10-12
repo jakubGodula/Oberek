@@ -42,6 +42,11 @@ describe('parseGuardEvents', () => {
 		expect(parseGuardEvents(logs, PROGRAM)).toEqual([{ name: 'BatchRecorded', agent: AGENT, counter: 5n, root, size: 16 }]);
 	});
 
+	it('decodes AgentActivated', () => {
+		const logs = invoked(PROGRAM, dataLine(DISCRIMINATORS.agentActivated, ...agentAndCounter(0n)));
+		expect(parseGuardEvents(logs, PROGRAM)).toEqual([{ name: 'AgentActivated', agent: AGENT, counter: 0n }]);
+	});
+
 	it('ignores data logged by another program, even with a guard event discriminator', () => {
 		const forged = dataLine(DISCRIMINATORS.stepRecorded, ...agentAndCounter(9n), HASH);
 		const logs = [...invoked(OTHER_PROGRAM, forged), ...invoked(PROGRAM, 'Program log: Instruction: Kill')];

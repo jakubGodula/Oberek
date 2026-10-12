@@ -1,11 +1,12 @@
 //! Mollusk tests for onchain_agent_guard with noble ML-DSA-44 fixtures from scripts/gen-guard-fixtures.ts (run
-//! onchain/run-tests.sh). OWNER, AGENT_KEY and decision_hash() must match the constants in that script.
+//! onchain/run-tests.sh). OWNER, AGENT_KEY and decision_hash() must match the constants in that script; the owner key
+//! fixture signs only the activation.
 use anchor_lang::{error::ErrorCode as AnchorError, prelude::Pubkey, AccountDeserialize, InstructionData};
 use mollusk_svm::{program::keyed_account_for_system_program, Mollusk};
 use onchain_agent_guard::{
     error::GuardError,
     instruction as program_ix,
-    state::{Agent, AgentKey, AgentStatus, AGENT_SEED},
+    state::{Agent, AgentKey, AgentStatus, OwnerKey, OwnerRecord, AGENT_SEED, OWNER_SEED},
 };
 use solana_account::Account;
 use solana_address::Address;
@@ -29,7 +30,13 @@ const BATCH_1_SIGNATURE: &[u8] = include_bytes!("fixtures/batch-1.sig");
 /// Must match BATCH_ROOT and BATCH_SIZE in scripts/gen-guard-fixtures.ts.
 const BATCH_ROOT: [u8; 32] = [0xb7; 32];
 const BATCH_SIZE: u32 = 5;
+const OWNER_PUBLIC_KEY: &[u8] = include_bytes!("fixtures/owner-key.pk");
+const ACTIVATE_SIGNATURE: &[u8] = include_bytes!("fixtures/activate.sig");
+/// OWNER_KEY_ACCOUNT_SIZE in src/lib/server/modules/agent/instructions.ts.
+const OWNER_KEY_ACCOUNT_LEN: usize = 20_552;
 const SIGNED_INSTRUCTION_INDEX: u8 = 0;
+/// SystemError::AccountAlreadyInUse: what `init` hits when the owner record already exists.
+const SYSTEM_ACCOUNT_ALREADY_IN_USE: u32 = 0;
 
 const PROGRAM: Address = Address::new_from_array(onchain_agent_guard::ID.to_bytes());
 const OWNER: Address = Address::new_from_array([2; 32]);
@@ -37,6 +44,11 @@ const AGENT_KEY: Address = Address::new_from_array([3; 32]);
 const STRANGER: Address = Address::new_from_array([4; 32]);
 /// A key account the stranger registers for an agent of their own.
 const ATTACKER_KEY: Address = Address::new_from_array([5; 32]);
+const OWNER_KEY: Address = Address::new_from_array([6; 32]);
+/// The stranger's own owner key account; it holds the same public key as OWNER_KEY.
+const STRANGER_OWNER_KEY: Address = Address::new_from_array([8; 32]);
+/// A second key account the owner tries to register after OWNER_KEY.
+const REPLACEMENT_OWNER_KEY: Address = Address::new_from_array([10; 32]);
 
 fn agent_address() -> Address {
     agent_address_for(OWNER, AGENT_KEY)
@@ -46,6 +58,11 @@ fn agent_address_for(owner: Address, agent_key: Address) -> Address {
     let (agent, _) =
         Pubkey::find_program_address(&[AGENT_SEED, owner.as_ref(), agent_key.as_ref()], &onchain_agent_guard::ID);
     Address::new_from_array(agent.to_bytes())
+}
+
+fn owner_record_address(owner: Address) -> Address {
+    let (record, _) = Pubkey::find_program_address(&[OWNER_SEED, owner.as_ref()], &onchain_agent_guard::ID);
+    Address::new_from_array(record.to_bytes())
 }
 
 fn mollusk() -> Mollusk {
@@ -128,6 +145,22 @@ fn resume_with(owner: Address, owner_signs: bool, agent_key: Address, signature:
     )
 }
 
+fn activate_with(owner_record: Address, owner_key: Address, signature: &[u8]) -> Instruction {
+    Instruction::new_with_bytes(
+        PROGRAM,
+        &program_ix::ActivateAgent { signature: signature.to_vec() }.data(),
+        vec![
+            AccountMeta::new(agent_address(), false),
+            AccountMeta::new_readonly(owner_record, false),
+            AccountMeta::new_readonly(owner_key, false),
+        ],
+    )
+}
+
+fn activate(signature: &[u8]) -> Instruction {
+    activate_with(owner_record_address(OWNER), OWNER_KEY, signature)
+}
+
 /// Accounts carried from one transaction to the next, as a validator would.
 struct Ledger {
     svm: Mollusk,
@@ -146,15 +179,36 @@ impl Ledger {
                 (agent_address(), Account::default()),
                 (ATTACKER_KEY, Account::default()),
                 (agent_address_for(STRANGER, ATTACKER_KEY), Account::default()),
+                (OWNER_KEY, Account::default()),
+                (owner_record_address(OWNER), Account::default()),
+                (STRANGER_OWNER_KEY, Account::default()),
+                (owner_record_address(STRANGER), Account::default()),
+                (REPLACEMENT_OWNER_KEY, Account::default()),
                 keyed_account_for_system_program(),
             ],
         }
     }
 
-    fn registered() -> Self {
+    /// The owner's ML-DSA-44 key is registered; no agent yet.
+    fn with_owner_key() -> Self {
         let mut ledger = Self::new();
+        let register = ledger.register_owner_instructions(OWNER, OWNER_KEY);
+        assert_eq!(ledger.send("register owner", &register), Ok(()));
+        ledger
+    }
+
+    /// The agent is registered and waits for the owner's activation.
+    fn pending() -> Self {
+        let mut ledger = Self::with_owner_key();
         let register = ledger.register_instructions(PUBLIC_KEY);
         assert_eq!(ledger.send("register", &register), Ok(()));
+        ledger
+    }
+
+    /// Registered and activated by the owner's ML-DSA-44 signature.
+    fn registered() -> Self {
+        let mut ledger = Self::pending();
+        assert_eq!(ledger.send("activate", &[activate(ACTIVATE_SIGNATURE)]), Ok(()));
         ledger
     }
 
@@ -181,19 +235,47 @@ impl Ledger {
         result.raw_result
     }
 
+    fn account<T: AccountDeserialize>(&self, address: Address) -> T {
+        let (_, account) = self.accounts.iter().find(|(key, _)| *key == address).unwrap();
+        T::try_deserialize(&mut account.data.as_slice()).unwrap()
+    }
+
     fn agent(&self) -> Agent {
-        let (_, account) = self.accounts.iter().find(|(address, _)| *address == agent_address()).unwrap();
-        Agent::try_deserialize(&mut account.data.as_slice()).unwrap()
+        self.account(agent_address())
+    }
+
+    fn owner_record(&self) -> OwnerRecord {
+        self.account(owner_record_address(OWNER))
     }
 
     fn register_instructions(&self, public_key: &[u8]) -> Vec<Instruction> {
         self.register_instructions_for(OWNER, AGENT_KEY, public_key)
     }
 
-    fn register_instructions_for(&self, owner: Address, agent_key: Address, public_key: &[u8]) -> Vec<Instruction> {
-        let rent = self.svm.sysvars.rent.minimum_balance(AGENT_KEY_ACCOUNT_LEN);
+    fn create_key_account(&self, payer: Address, key_account: Address, size: usize) -> Instruction {
+        let rent = self.svm.sysvars.rent.minimum_balance(size);
+        create_account(&payer, &key_account, rent, size as u64, &PROGRAM)
+    }
+
+    fn register_owner_instructions(&self, owner: Address, owner_key: Address) -> Vec<Instruction> {
         vec![
-            create_account(&owner, &agent_key, rent, AGENT_KEY_ACCOUNT_LEN as u64, &PROGRAM),
+            self.create_key_account(owner, owner_key, OWNER_KEY_ACCOUNT_LEN),
+            Instruction::new_with_bytes(
+                PROGRAM,
+                &program_ix::RegisterOwner { public_key: OWNER_PUBLIC_KEY.to_vec() }.data(),
+                vec![
+                    AccountMeta::new(owner, true),
+                    AccountMeta::new(owner_key, false),
+                    AccountMeta::new(owner_record_address(owner), false),
+                    AccountMeta::new_readonly(SYSTEM_PROGRAM, false),
+                ],
+            ),
+        ]
+    }
+
+    fn register_instructions_for(&self, owner: Address, agent_key: Address, public_key: &[u8]) -> Vec<Instruction> {
+        vec![
+            self.create_key_account(owner, agent_key, AGENT_KEY_ACCOUNT_LEN),
             Instruction::new_with_bytes(
                 PROGRAM,
                 &program_ix::RegisterAgent { public_key: public_key.to_vec() }.data(),
@@ -221,11 +303,112 @@ fn agent_key_account_size_matches_the_client() {
 }
 
 #[test]
-fn register_creates_an_active_agent_bound_to_owner_and_key() {
-    let agent = Ledger::registered().agent();
+fn owner_key_account_size_matches_the_client() {
+    assert_eq!(ANCHOR_DISCRIMINATOR_LEN + std::mem::size_of::<OwnerKey>(), OWNER_KEY_ACCOUNT_LEN);
+}
+
+#[test]
+fn register_owner_binds_the_owner_to_its_key() {
+    let record = Ledger::with_owner_key().owner_record();
+    assert_eq!(record.owner.as_ref(), OWNER.as_ref());
+    assert_eq!(record.owner_key.as_ref(), OWNER_KEY.as_ref());
+}
+
+#[test]
+fn register_owner_again_cannot_replace_the_key() {
+    let mut ledger = Ledger::with_owner_key();
+    let again = ledger.register_owner_instructions(OWNER, REPLACEMENT_OWNER_KEY);
+    assert_eq!(
+        ledger.send("register owner again", &again),
+        Err(TransactionError::InstructionError(REGISTER_INSTRUCTION_INDEX, InstructionError::Custom(SYSTEM_ACCOUNT_ALREADY_IN_USE)))
+    );
+    assert_eq!(ledger.owner_record().owner_key.as_ref(), OWNER_KEY.as_ref());
+}
+
+#[test]
+fn step_on_a_pending_agent_fails() {
+    let mut ledger = Ledger::pending();
+    assert_eq!(
+        ledger.send("step 1 while pending", &[step(1, STEP_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentPending)
+    );
+}
+
+#[test]
+fn kill_on_a_pending_agent_fails() {
+    let mut ledger = Ledger::pending();
+    assert_eq!(
+        ledger.send("kill while pending", &[kill(OWNER)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentNotActive)
+    );
+}
+
+#[test]
+fn activation_makes_the_agent_active_at_counter_0_and_steps_follow() {
+    let mut ledger = Ledger::registered();
+    let agent = ledger.agent();
+    assert_eq!(agent.status, AgentStatus::Active);
+    assert_eq!(agent.counter, 0);
+    assert_eq!(ledger.send("step 1", &[step(1, STEP_1_SIGNATURE)]), Ok(()));
+}
+
+#[test]
+fn activation_needs_no_owner_wallet_signature() {
+    let mut ledger = Ledger::pending();
+    assert_eq!(ledger.send_paid_by(STRANGER, "activate paid by stranger", &[activate(ACTIVATE_SIGNATURE)]), Ok(()));
+    assert_eq!(ledger.agent().status, AgentStatus::Active);
+}
+
+#[test]
+fn activation_with_a_tampered_signature_fails() {
+    let mut ledger = Ledger::pending();
+    let tampered = flipped(ACTIVATE_SIGNATURE, ACTIVATE_SIGNATURE.len() / 2);
+    assert_eq!(
+        ledger.send("activate tampered", &[activate(&tampered)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::VerifyFailed)
+    );
+}
+
+#[test]
+fn activation_with_an_agent_key_as_the_owner_key_fails() {
+    let mut ledger = Ledger::pending();
+    let swapped = activate_with(owner_record_address(OWNER), AGENT_KEY, ACTIVATE_SIGNATURE);
+    assert_eq!(
+        ledger.send("activate with agent key as owner key", &[swapped]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::AccountDiscriminatorMismatch)
+    );
+    assert_eq!(ledger.agent().status, AgentStatus::Pending);
+}
+
+/// The stranger's record holds the same public key, so only the seeds check can stop this.
+#[test]
+fn activation_with_another_owners_record_fails() {
+    let mut ledger = Ledger::pending();
+    let register = ledger.register_owner_instructions(STRANGER, STRANGER_OWNER_KEY);
+    assert_eq!(ledger.send_paid_by(STRANGER, "stranger registers owner", &register), Ok(()));
+    let foreign = activate_with(owner_record_address(STRANGER), STRANGER_OWNER_KEY, ACTIVATE_SIGNATURE);
+    assert_eq!(
+        ledger.send("activate with stranger's record", &[foreign]),
+        anchor_error(SIGNED_INSTRUCTION_INDEX, AnchorError::ConstraintSeeds)
+    );
+    assert_eq!(ledger.agent().status, AgentStatus::Pending);
+}
+
+#[test]
+fn second_activation_fails() {
+    let mut ledger = Ledger::registered();
+    assert_eq!(
+        ledger.send("activate again", &[activate(ACTIVATE_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentNotPending)
+    );
+}
+
+#[test]
+fn register_creates_a_pending_agent_bound_to_owner_and_key() {
+    let agent = Ledger::pending().agent();
     assert_eq!(agent.owner.as_ref(), OWNER.as_ref());
     assert_eq!(agent.agent_key.as_ref(), AGENT_KEY.as_ref());
-    assert_eq!(agent.status, AgentStatus::Active);
+    assert_eq!(agent.status, AgentStatus::Pending);
     assert_eq!(agent.counter, 0);
     assert_eq!(agent.last_decision, [0; 32]);
 }
@@ -450,6 +633,15 @@ fn batch_on_a_killed_agent_fails() {
     assert_eq!(
         ledger.send("batch while killed", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]),
         guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentKilled)
+    );
+}
+
+#[test]
+fn batch_on_a_pending_agent_fails() {
+    let mut ledger = Ledger::pending();
+    assert_eq!(
+        ledger.send("batch while pending", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentPending)
     );
 }
 

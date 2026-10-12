@@ -1,12 +1,13 @@
 # Keys: who holds each one and what it signs
 
-The system uses five secrets. Two are post-quantum and three are classical. The agent's decision history rests only on
-the post-quantum ones.
+The system uses six secrets. Three are post-quantum and three are classical. The agent's decision history and the start
+of every new agent rest only on the post-quantum ones.
 
 | Key | Algorithm | Held by | Signs / opens | Survives Q-day |
 | --- | --- | --- | --- | --- |
 | **Agent key**, one per agent | ML-DSA-44 | secret: the server; public: on-chain `AgentKey` account | `record_step`, `record_batch`, `resume` | yes |
-| **Owner wallet** | Ed25519 | the server (one wallet on devnet) | `register_agent`, `kill`; pays every fee; upgrades the program | no |
+| **Owner activation key** | ML-DSA-44 | secret: the server; public: on-chain `OwnerKey` account | `activate_agent` | yes |
+| **Owner wallet** | Ed25519 | the server (one wallet on devnet) | `register_owner`, `register_agent`, `kill`; pays every fee; upgrades the program | no |
 | **Owner log key** | ML-KEM-768 | the server | its public key seals each agent's log key; its secret key opens them for the audit | yes |
 | **Log data key**, one per agent | AES-256-GCM | the server | encrypts every line of `decisions.jsonl` | yes |
 | **Telegram bot token** | not a key pair | the bot | controls the owner's bot | n/a |
@@ -24,6 +25,7 @@ flowchart LR
 
     subgraph Server["Server machine"]
         MLDSA["Agent key, one per agent<br/>ML-DSA-44 secret"]
+        OWNERPQ["Owner activation key<br/>ML-DSA-44 secret"]
         WALLET["Owner wallet<br/>Ed25519"]
         DATAKEY["Log data key, one per agent<br/>AES-256-GCM"]
         KEM["Owner log key<br/>ML-KEM-768 key pair"]
@@ -34,6 +36,7 @@ flowchart LR
     subgraph Chain["Solana devnet"]
         PROG["onchain_agent_guard<br/>program"]
         AK["AgentKey account<br/>ML-DSA-44 public key"]
+        OK["OwnerKey account<br/>owner's ML-DSA-44 public key"]
         AG["Agent PDA<br/>owner, agent_key, status,<br/>counter, last_decision"]
     end
 
@@ -42,8 +45,10 @@ flowchart LR
 
     AP -->|decision| MLDSA
     MLDSA -->|"signs record_step, record_batch, resume"| PROG
-    WALLET -->|"signs register_agent, kill, resume;<br/>pays fees; upgrade authority"| PROG
+    OWNERPQ -->|"signs activate_agent"| PROG
+    WALLET -->|"signs register_owner, register_agent,<br/>kill, resume; pays fees; upgrade authority"| PROG
     PROG -->|verifies against| AK
+    PROG -->|verifies activation against| OK
     PROG -->|writes| AG
     KEM -.->|"public key wraps (once per agent)"| DATAKEY
     DATAKEY -->|encrypts each line| LOG
@@ -55,7 +60,7 @@ flowchart LR
     classDef pq fill:#d9f2e3,stroke:#2e8b57,color:#000
     classDef classic fill:#fde2cc,stroke:#d2691e,color:#000
     classDef other fill:#eeeeee,stroke:#888888,color:#000
-    class MLDSA,KEM,DATAKEY,AK pq
+    class MLDSA,OWNERPQ,KEM,DATAKEY,AK,OK pq
     class WALLET classic
     class TOKEN,BOT,AP other
 ```
@@ -77,13 +82,26 @@ Green is post-quantum, orange is Ed25519, and grey holds no cryptographic key.
   signature is accepted once.
 - **Signed by** the server (`OnchainGuard`). The agent process never sees the key.
 
+### Owner activation key: ML-DSA-44
+
+- **Created** once per owner wallet by `bun scripts/agent.ts register-owner`, which `scripts/setup.ts` runs. The file is
+  written before the transaction is sent and is never overwritten.
+- **Public key** is on-chain in the owner's `OwnerKey` account (20,552 B, prepared for the verifier), whose address the
+  PDA `OwnerRecord` (`["owner", owner]`) holds. `OwnerRecord` is created with `init`, so a wallet's key cannot be
+  registered twice or swapped (decision 005).
+- **Signs** `activate_agent`: `tag 4 ‖ agent address ‖ counter 0`, with the same FIPS 204 context. `register_agent`
+  leaves a new agent `Pending`, and the program refuses its steps until this signature makes it `Active`.
+- **Signed by** the server, right after `register_agent`, because no wallet signs ML-DSA yet and on devnet the owner is
+  the server's wallet anyway.
+
 ### Owner wallet: Ed25519
 
 - **One wallet, three roles on devnet.** The fee payer and the owner are the same key pair, and the program was
   deployed with it too, so it is also the program's **upgrade authority**.
 - **As fee payer** it signs every transaction so the transaction can pay its fee. The program does not check who paid,
   so this signature authorizes nothing.
-- **As owner** it signs `register_agent`, which pays the rent; the owner's address is also part of the Agent PDA seed.
+- **As owner** it signs `register_owner` once, and `register_agent`, which pays the rent and creates the agent `Pending`;
+  the owner's address is also part of the Agent PDA seed. Activation does not need it.
   It signs `kill` on its own: that is the emergency brake, which has to work from a plain wallet even when the server
   is down. It signs `resume`, but only together with the agent's ML-DSA-44 signature.
 - **Signed by** the server, for kill and resume from the page and the Telegram bot, because neither has a wallet
@@ -124,14 +142,16 @@ owner wallet. That local API has no authentication of its own (decision 008, "Cz
 
 ## Who must sign each instruction
 
-| Instruction | Agent ML-DSA-44 | Owner Ed25519 | Fee payer Ed25519 |
-| --- | --- | --- | --- |
-| `register_agent` | (public key stored) | ✔ (pays rent) | |
-| `record_step` | ✔ | | ✔ |
-| `record_batch` | ✔ | | ✔ |
-| `kill` | | ✔ | (owner pays) |
-| `resume` | ✔ | ✔ | (owner pays) |
-| program upgrade | | ✔ (upgrade authority) | |
+| Instruction | Agent ML-DSA-44 | Owner ML-DSA-44 | Owner Ed25519 | Fee payer Ed25519 |
+| --- | --- | --- | --- | --- |
+| `register_owner` | | (public key stored) | ✔ (pays rent, once per wallet) | |
+| `register_agent` | (public key stored) | | ✔ (pays rent; agent starts `Pending`) | |
+| `activate_agent` | | ✔ | | ✔ |
+| `record_step` | ✔ | | | ✔ |
+| `record_batch` | ✔ | | | ✔ |
+| `kill` | | | ✔ | (owner pays) |
+| `resume` | ✔ | | ✔ | (owner pays) |
+| program upgrade | | | ✔ (upgrade authority) | |
 
 ## If every Ed25519 key were broken
 
@@ -143,9 +163,14 @@ A quantum attacker who can forge any Ed25519 signature:
 - **Cannot** forge, reorder or replay a step, a batch or a resume, because each one needs the agent's ML-DSA-44
   signature, which the program verifies. The recorded decision history stands.
 - **Cannot** read a stolen copy of `decisions.jsonl`, which is AES-256 under a key wrapped with ML-KEM-768.
+- **Cannot** start a fake agent under the owner's address. It can still send `register_agent`, but the agent stays
+  `Pending` and every step is refused until the owner's ML-DSA-44 key signs `activate_agent`. This closes the gap that
+  `register_agent` had while it took only the owner's Ed25519 signature (decision 005).
 - **Can** `kill` an agent. That is deliberate: an attacker can stop an agent but cannot resume it.
-- **Can** `register_agent` new agents under the owner's address. Existing agents are not affected. The fix is an
-  owner ML-DSA-44 key (decision 004, next steps).
+
+Two limits remain. The first `register_owner` for a wallet decides its key, so it has to happen before Q-day; after
+that a forged Ed25519 signature cannot replace it. Agents registered before the program learned activation stay
+`Active` without it, so the demo agents are registered again after the upgrade.
 
 The rationale, and why there is no DMS seed proof, is in [decision 004](decisions/004-bez-dms-ochrona-pq-bez-dowodu-seeda.md).
 
@@ -156,6 +181,7 @@ Paths are relative to the repo root. `.devnet/` and `.env` are gitignored.
 | Key | File | Setting in `.env` |
 | --- | --- | --- |
 | Agent key | `.devnet/fleet/<id>/onchain.json`, read by the server; the register file `.devnet/agents/<id>.json` (setup) or `.devnet/agent.json` (CLI) | |
+| Owner activation key | `.devnet/owner-mldsa.json` | `OWNER_MLDSA_FILE` |
 | Owner wallet | `.devnet/payer.json` by default | `FEE_PAYER_KEYPAIR`, `OWNER_KEYPAIR` |
 | Owner log key | `.devnet/owner-mlkem.json` | `OWNER_MLKEM_FILE` |
 | Log data key | `.devnet/fleet/<id>/seal.json` | |

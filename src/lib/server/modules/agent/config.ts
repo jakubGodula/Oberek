@@ -12,6 +12,8 @@ export interface AgentConfig {
 	ownerPath: string | undefined;
 	/** The owner's ML-KEM-768 key pair: its public key seals new agents' logs, its secret key opens them in the audit. */
 	ownerKemPath: string;
+	/** The owner's ML-DSA-44 key file; register-owner writes it, register and activate read it. */
+	ownerMldsaPath: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -22,7 +24,8 @@ const DEFAULTS = {
 	tickMs: 30_000,
 	agentFilePath: '.devnet/agent.json',
 	decisionLogPath: '.devnet/decisions.jsonl',
-	ownerKemPath: '.devnet/owner-mlkem.json'
+	ownerKemPath: '.devnet/owner-mlkem.json',
+	ownerMldsaPath: '.devnet/owner-mldsa.json'
 };
 
 export function loadConfig(env: Env = process.env): AgentConfig {
@@ -35,7 +38,8 @@ export function loadConfig(env: Env = process.env): AgentConfig {
 		decisionLogPath: env.AGENT_DECISION_LOG ?? DEFAULTS.decisionLogPath,
 		feePayerPath: required(env, 'FEE_PAYER_KEYPAIR'),
 		ownerPath: env.OWNER_KEYPAIR,
-		ownerKemPath: env.OWNER_MLKEM_FILE ?? DEFAULTS.ownerKemPath
+		ownerKemPath: env.OWNER_MLKEM_FILE ?? DEFAULTS.ownerKemPath,
+		ownerMldsaPath: env.OWNER_MLDSA_FILE ?? DEFAULTS.ownerMldsaPath
 	};
 }
 

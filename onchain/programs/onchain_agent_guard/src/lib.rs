@@ -1,5 +1,6 @@
-//! On-chain guard for one server-side agent: holds the agent's ML-DSA-44 public key, accepts a step or a resume only
-//! with a valid ML-DSA-44 signature over a message it builds itself, and lets the owner's wallet kill the agent.
+//! On-chain guard for one server-side agent: holds the agent's ML-DSA-44 public key, starts the agent only after the
+//! owner's ML-DSA-44 key activates it, accepts a step or a resume only with a valid ML-DSA-44 signature over a message
+//! it builds itself, and lets the owner's wallet kill the agent.
 use anchor_lang::prelude::*;
 use solana_ml_dsa::ml_dsa_44::{Signature, VerifyingKey};
 
@@ -8,9 +9,10 @@ pub mod message;
 pub mod state;
 
 use error::GuardError;
-use message::{batch_message, resume_message, step_message, CONTEXT as MLDSA_CONTEXT};
+use message::{activate_message, batch_message, resume_message, step_message, CONTEXT as MLDSA_CONTEXT};
 use state::{
-    Agent, AgentKey, AgentKilled, AgentResumed, AgentStatus, BatchRecorded, MldsaPreparedKey, StepRecorded, AGENT_SEED,
+    Agent, AgentActivated, AgentKey, AgentKilled, AgentResumed, AgentStatus, BatchRecorded, MldsaPreparedKey, OwnerKey,
+    OwnerRecord, StepRecorded, AGENT_SEED, MLDSA_PREPARED_KEY_LEN, OWNER_SEED,
 };
 
 declare_id!("BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs");
@@ -22,19 +24,22 @@ type MldsaVerifyingKey = VerifyingKey<false>;
 pub mod onchain_agent_guard {
     use super::*;
 
+    pub fn register_owner(ctx: Context<RegisterOwner>, public_key: Vec<u8>) -> Result<()> {
+        prepare_key(&public_key, &mut ctx.accounts.owner_key.load_init()?.prepared)?;
+        ctx.accounts.owner_record.set_inner(OwnerRecord {
+            owner: ctx.accounts.owner.key(),
+            owner_key: ctx.accounts.owner_key.key(),
+            bump: ctx.bumps.owner_record,
+        });
+        Ok(())
+    }
+
     pub fn register_agent(ctx: Context<RegisterAgent>, public_key: Vec<u8>) -> Result<()> {
-        let public_key =
-            MldsaVerifyingKey::ref_from_bytes(&public_key).map_err(|_| GuardError::InvalidPublicKey)?;
-        {
-            let mut key = ctx.accounts.agent_key.load_init()?;
-            let prepared =
-                MldsaPreparedKey::mut_from_bytes(&mut key.prepared).map_err(|_| GuardError::InvalidKeyAccount)?;
-            public_key.prepare_into(prepared);
-        }
+        prepare_key(&public_key, &mut ctx.accounts.agent_key.load_init()?.prepared)?;
         ctx.accounts.agent.set_inner(Agent {
             owner: ctx.accounts.owner.key(),
             agent_key: ctx.accounts.agent_key.key(),
-            status: AgentStatus::Active,
+            status: AgentStatus::Pending,
             counter: 0,
             last_decision: [0; 32],
             bump: ctx.bumps.agent,
@@ -42,12 +47,23 @@ pub mod onchain_agent_guard {
         Ok(())
     }
 
+    pub fn activate_agent(ctx: Context<ActivateAgent>, signature: Vec<u8>) -> Result<()> {
+        let agent_address = ctx.accounts.agent.key();
+        let agent = &mut ctx.accounts.agent;
+        require!(agent.status == AgentStatus::Pending, GuardError::AgentNotPending);
+        verify_signature(&ctx.accounts.owner_key.load()?.prepared, &activate_message(&agent_address), &signature)?;
+        agent.status = AgentStatus::Active;
+        emit!(AgentActivated { agent: agent_address, counter: agent.counter });
+        Ok(())
+    }
+
     pub fn record_step(ctx: Context<RecordStep>, decision_hash: [u8; 32], signature: Vec<u8>) -> Result<()> {
         let agent_address = ctx.accounts.agent.key();
         let agent = &mut ctx.accounts.agent;
-        require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+        require_recording(agent)?;
         let counter = agent.counter + 1;
-        verify_signature(&ctx.accounts.agent_key, &step_message(&agent_address, counter, &decision_hash), &signature)?;
+        let signed = step_message(&agent_address, counter, &decision_hash);
+        verify_signature(&ctx.accounts.agent_key.load()?.prepared, &signed, &signature)?;
         agent.counter = counter;
         agent.last_decision = decision_hash;
         emit!(StepRecorded { agent: agent_address, counter, decision_hash });
@@ -59,10 +75,10 @@ pub mod onchain_agent_guard {
     pub fn record_batch(ctx: Context<RecordStep>, root: [u8; 32], size: u32, signature: Vec<u8>) -> Result<()> {
         let agent_address = ctx.accounts.agent.key();
         let agent = &mut ctx.accounts.agent;
-        require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+        require_recording(agent)?;
         require!(size > 0, GuardError::EmptyBatch);
         let counter = agent.counter + 1;
-        verify_signature(&ctx.accounts.agent_key, &batch_message(&agent_address, counter, &root, size), &signature)?;
+        verify_signature(&ctx.accounts.agent_key.load()?.prepared, &batch_message(&agent_address, counter, &root, size), &signature)?;
         agent.counter = counter;
         agent.last_decision = root;
         emit!(BatchRecorded { agent: agent_address, counter, root, size });
@@ -83,7 +99,7 @@ pub mod onchain_agent_guard {
         let agent = &mut ctx.accounts.agent;
         require!(agent.status == AgentStatus::Killed, GuardError::AgentNotKilled);
         let counter = agent.counter + 1;
-        verify_signature(&ctx.accounts.agent_key, &resume_message(&agent_address, counter), &signature)?;
+        verify_signature(&ctx.accounts.agent_key.load()?.prepared, &resume_message(&agent_address, counter), &signature)?;
         agent.counter = counter;
         agent.status = AgentStatus::Active;
         emit!(AgentResumed { agent: agent_address, counter });
@@ -91,13 +107,44 @@ pub mod onchain_agent_guard {
     }
 }
 
-fn verify_signature(agent_key: &AccountLoader<AgentKey>, signed: &[u8], signature: &[u8]) -> Result<()> {
-    let key = agent_key.load()?;
-    let prepared = MldsaPreparedKey::ref_from_bytes(&key.prepared).map_err(|_| GuardError::InvalidKeyAccount)?;
+/// Steps and batches are recorded only for an active agent: not before the owner's activation, not after a kill.
+fn require_recording(agent: &Agent) -> Result<()> {
+    require!(agent.status != AgentStatus::Pending, GuardError::AgentPending);
+    require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+    Ok(())
+}
+
+fn prepare_key(public_key: &[u8], prepared: &mut [u8; MLDSA_PREPARED_KEY_LEN]) -> Result<()> {
+    let public_key = MldsaVerifyingKey::ref_from_bytes(public_key).map_err(|_| GuardError::InvalidPublicKey)?;
+    let prepared = MldsaPreparedKey::mut_from_bytes(prepared).map_err(|_| GuardError::InvalidKeyAccount)?;
+    public_key.prepare_into(prepared);
+    Ok(())
+}
+
+fn verify_signature(prepared: &[u8; MLDSA_PREPARED_KEY_LEN], signed: &[u8], signature: &[u8]) -> Result<()> {
+    let prepared = MldsaPreparedKey::ref_from_bytes(prepared).map_err(|_| GuardError::InvalidKeyAccount)?;
     let signature = Signature::ref_from_bytes(signature).map_err(|_| GuardError::InvalidSignature)?;
     prepared
         .verify_with_context(signed, MLDSA_CONTEXT, signature)
         .map_err(|_| error!(GuardError::VerifyFailed))
+}
+
+#[derive(Accounts)]
+pub struct RegisterOwner<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    /// Allocated by a preceding System Program `create_account`, like `RegisterAgent::agent_key`.
+    #[account(zero)]
+    pub owner_key: AccountLoader<'info, OwnerKey>,
+    #[account(
+        init,
+        payer = owner,
+        space = 8 + OwnerRecord::INIT_SPACE,
+        seeds = [OWNER_SEED, owner.key().as_ref()],
+        bump,
+    )]
+    pub owner_record: Account<'info, OwnerRecord>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -117,6 +164,16 @@ pub struct RegisterAgent<'info> {
     )]
     pub agent: Account<'info, Agent>,
     pub system_program: Program<'info, System>,
+}
+
+/// No wallet signer: the owner's ML-DSA-44 signature is the authorization, so anyone may pay the fee.
+#[derive(Accounts)]
+pub struct ActivateAgent<'info> {
+    #[account(mut)]
+    pub agent: Account<'info, Agent>,
+    #[account(seeds = [OWNER_SEED, agent.owner.as_ref()], bump = owner_record.bump, has_one = owner_key)]
+    pub owner_record: Account<'info, OwnerRecord>,
+    pub owner_key: AccountLoader<'info, OwnerKey>,
 }
 
 /// Accounts of record_step and record_batch.
