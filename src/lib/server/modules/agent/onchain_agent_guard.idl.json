@@ -7,6 +7,59 @@
   },
   "instructions": [
     {
+      "name": "activate_agent",
+      "discriminator": [
+        252,
+        139,
+        87,
+        21,
+        195,
+        152,
+        29,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "agent",
+          "writable": true
+        },
+        {
+          "name": "owner_record",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "agent.owner",
+                "account": "Agent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_key",
+          "relations": [
+            "owner_record"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "signature",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "kill",
       "discriminator": [
         46,
@@ -186,6 +239,65 @@
       ]
     },
     {
+      "name": "register_owner",
+      "discriminator": [
+        207,
+        189,
+        74,
+        108,
+        245,
+        244,
+        166,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owner_key",
+          "docs": [
+            "Allocated by a preceding System Program `create_account`, like `RegisterAgent::agent_key`."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_record",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "public_key",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "resume",
       "discriminator": [
         1,
@@ -250,9 +362,48 @@
         220,
         233
       ]
+    },
+    {
+      "name": "OwnerKey",
+      "discriminator": [
+        11,
+        122,
+        182,
+        4,
+        1,
+        87,
+        40,
+        248
+      ]
+    },
+    {
+      "name": "OwnerRecord",
+      "discriminator": [
+        5,
+        36,
+        17,
+        69,
+        246,
+        236,
+        83,
+        166
+      ]
     }
   ],
   "events": [
+    {
+      "name": "AgentActivated",
+      "discriminator": [
+        24,
+        143,
+        97,
+        203,
+        139,
+        203,
+        132,
+        134
+      ]
+    },
     {
       "name": "AgentKilled",
       "discriminator": [
@@ -346,6 +497,16 @@
       "code": 6007,
       "name": "EmptyBatch",
       "msg": "A batch holds at least one decision"
+    },
+    {
+      "code": 6008,
+      "name": "AgentNotPending",
+      "msg": "Agent is not waiting for activation"
+    },
+    {
+      "code": 6009,
+      "name": "AgentPending",
+      "msg": "Agent is waiting for the owner's activation"
     }
   ],
   "types": [
@@ -395,6 +556,22 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AgentActivated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "agent",
+            "type": "pubkey"
+          },
+          {
+            "name": "counter",
+            "type": "u64"
           }
         ]
       }
@@ -465,6 +642,9 @@
           },
           {
             "name": "Killed"
+          },
+          {
+            "name": "Pending"
           }
         ]
       }
@@ -494,6 +674,54 @@
           {
             "name": "size",
             "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OwnerKey",
+      "docs": [
+        "The owner's prepared ML-DSA-44 public key. Its own type, so an agent's key account cannot stand in for it."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "prepared",
+            "type": {
+              "array": [
+                "u8",
+                20544
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OwnerRecord",
+      "docs": [
+        "PDA with seeds `[OWNER_SEED, owner]`: the one ML-DSA-44 key that activates the owner's agents. Created with `init`,",
+        "so it cannot be replaced."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

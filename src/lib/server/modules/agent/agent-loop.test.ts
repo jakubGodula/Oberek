@@ -52,6 +52,14 @@ describe('runCycle', () => {
 		expect(calls.steps).toHaveLength(0);
 	});
 
+	it('sends nothing while the agent awaits the owner activation, and says how to activate', async () => {
+		const { ports, calls } = fakePorts({ readAgent: async () => agentState('Pending', 0n) });
+		expect(await runCycle(ports)).toBe('paused');
+		expect(calls.signed).toHaveLength(0);
+		expect(calls.steps).toHaveLength(0);
+		expect(calls.lines.join('\n')).toContain('bun scripts/agent.ts activate');
+	});
+
 	it('signs and sends the tick decision for the next counter', async () => {
 		const { ports, calls } = fakePorts();
 		const expectedHash = hashDecision(tickDecision(AGENT, 5n, NOW));

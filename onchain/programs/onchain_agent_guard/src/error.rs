@@ -18,4 +18,8 @@ pub enum GuardError {
     VerifyFailed,
     #[msg("A batch holds at least one decision")]
     EmptyBatch,
+    #[msg("Agent is not waiting for activation")]
+    AgentNotPending,
+    #[msg("Agent is waiting for the owner's activation")]
+    AgentPending,
 }

@@ -59,6 +59,7 @@ async function submitBatched(
 	account: GuardAccount,
 	submission: DecisionSubmission
 ): Promise<SubmitResult> {
+	if (account.status === 'Pending') throw new GuardError('AgentPending', `agent ${agentId} awaits the owner activation`);
 	if (account.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
 	if (batcher.isProposing(agentId)) {
 		throw new AwaitingApprovalError(`agent ${agentId}'s proposal is on its way to the chain`);

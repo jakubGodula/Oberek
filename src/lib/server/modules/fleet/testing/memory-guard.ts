@@ -1,4 +1,4 @@
-import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount } from '../../agent-guard/guard';
+import { GuardError, NO_DECISION, type AgentGuard, type GuardAccount, type GuardStatus } from '../../agent-guard/guard';
 
 const MEMORY_AGENT_KEY = 'memory-agent-key';
 
@@ -8,9 +8,10 @@ export class MemoryGuard implements AgentGuard {
 
 	constructor(
 		private readonly agentId: string,
-		owner: string
+		owner: string,
+		status: GuardStatus = 'Active'
 	) {
-		this.account = { owner, agentKey: MEMORY_AGENT_KEY, status: 'Active', counter: 0, lastDecision: NO_DECISION };
+		this.account = { owner, agentKey: MEMORY_AGENT_KEY, status, counter: 0, lastDecision: NO_DECISION };
 	}
 
 	async readAgent(agentId: string): Promise<GuardAccount> {
@@ -20,6 +21,7 @@ export class MemoryGuard implements AgentGuard {
 
 	async recordStep(agentId: string, counter: number, decisionHash: string): Promise<GuardAccount> {
 		const account = await this.readAgent(agentId);
+		if (account.status === 'Pending') throw new GuardError('AgentPending', 'awaits activation');
 		if (account.status === 'Killed') throw new GuardError('AgentKilled', 'killed');
 		if (counter !== account.counter + 1) throw new GuardError('CounterMismatch', 'stale counter');
 		this.account = { ...account, counter, lastDecision: decisionHash };

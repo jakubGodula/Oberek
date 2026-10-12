@@ -38,6 +38,7 @@ export interface OnchainGuardDeps {
 
 const GUARD_ERROR_BY_PROGRAM_CODE = new Map<number, GuardErrorCode>([
 	[GUARD_ERROR_CODES.AgentKilled, 'AgentKilled'],
+	[GUARD_ERROR_CODES.AgentPending, 'AgentPending'],
 	[GUARD_ERROR_CODES.AgentNotKilled, 'AgentNotKilled'],
 	[GUARD_ERROR_CODES.AgentNotActive, 'AgentNotActive']
 ]);
@@ -89,7 +90,9 @@ export class OnchainGuard implements AgentGuard {
 
 	async kill(agentId: string): Promise<GuardAccount> {
 		const state = await this.readOwnedState(agentId);
-		if (state.status === 'Killed') throw new GuardError('AgentNotActive', `agent ${agentId} is already killed`);
+		if (state.status !== 'Active') {
+			throw new GuardError('AgentNotActive', `agent ${agentId} is ${state.status.toLowerCase()}, not active`);
+		}
 		await this.assertCanPay(this.deps.owner, `kill of agent ${agentId}`);
 		const { agent } = this.deps.identityOf(agentId);
 		const result = await this.chain.killAgent(this.deps.client, this.deps.owner, agent);
@@ -100,7 +103,7 @@ export class OnchainGuard implements AgentGuard {
 
 	async resume(agentId: string): Promise<GuardAccount> {
 		const state = await this.readOwnedState(agentId);
-		if (state.status === 'Active') throw new GuardError('AgentNotKilled', `agent ${agentId} is not killed`);
+		if (state.status !== 'Killed') throw new GuardError('AgentNotKilled', `agent ${agentId} is not killed`);
 		await this.assertCanPay(this.deps.owner, `resume of agent ${agentId}`);
 		const { agent, agentKey, mldsaSecretKey } = this.deps.identityOf(agentId);
 		const signature = signResume(agent, state, mldsaSecretKey);
@@ -115,6 +118,7 @@ export class OnchainGuard implements AgentGuard {
 	/** The agent's state when it may take step `counter`: active, `counter` next, and the fee payer funded. */
 	private async readStateForStep(agentId: string, counter: number): Promise<AgentState> {
 		const state = await this.readState(agentId);
+		if (state.status === 'Pending') throw new GuardError('AgentPending', `agent ${agentId} awaits the owner activation`);
 		if (state.status === 'Killed') throw new GuardError('AgentKilled', `agent ${agentId} is killed`);
 		if (BigInt(counter) !== state.counter + 1n) {
 			throw new GuardError('CounterMismatch', `agent ${agentId} is at step ${state.counter}, not ${counter - 1}`);

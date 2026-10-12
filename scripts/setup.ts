@@ -1,22 +1,26 @@
-// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM key and the agents (registered on
-// chain, imported into the fleet, their logs sealed). Every step is skipped when already done, so it is safe to re-run, e.g. after funding the wallet by hand.
+// First-time devnet setup: .env, the payer wallet, its SOL, the owner's ML-KEM-768 and ML-DSA-44 keys and the agents
+// (registered and activated on chain, imported into the fleet, their logs sealed). Every step is skipped when already
+// done, so it is safe to re-run, e.g. after funding the wallet by hand.
 // Each run leaves a redacted log in .devnet/logs/ (scripts/run-log.ts).
-// Usage (from the repo root, after bun install): bun scripts/setup.ts
-import { spawnSync } from 'child_process';
-import { copyFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import { createSolanaRpc, devnet, lamports, type Address } from '@solana/kit';
+// Usage (from the repo root, after bun install): bun scripts/setup.ts [--reregister]
+// --reregister moves the agents' files aside and registers new, activated ones (stop the demo first).
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createSolanaRpc, devnet, fetchEncodedAccount, lamports, type Address } from '@solana/kit';
 import { loadConfig } from '../src/lib/server/modules/agent/config';
-import { loadKeypairSigner } from '../src/lib/server/modules/agent/files';
-import { loadAgentFile, saveAgentFile } from '../src/lib/server/modules/agent/files';
+import { loadAgentFile, loadKeypairSigner, saveAgentFile } from '../src/lib/server/modules/agent/files';
+import { decodeAgent } from '../src/lib/server/modules/agent/instructions';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR, onchainIdentityPath } from '../src/lib/server/modules/fleet/runtime';
 import { runLogged } from './run-log';
-import { lamportsNeeded, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
+import { lamportsNeeded, predatesActivation, stepsFor, type AgentProgress, type AgentStep } from './setup-plan';
 
 const ENV_FILE = '.env';
 const ENV_EXAMPLE = '.env.example';
 const AGENTS_DIR = '.devnet/agents';
+const RETIRED_DIR = '.devnet/retired';
+const REREGISTER_FLAG = '--reregister';
 const AGENTS = [
 	{ id: 'sentinel-01', name: 'Oberek Sentinel Alpha — Treasury Rebalancer', risk: 'MEDIUM' },
 	{ id: 'tick-01', name: 'Oberek Tick One — on-chain heartbeat', risk: 'LOW' },
@@ -37,10 +41,17 @@ const payer = (await loadKeypairSigner(config.feePayerPath)).address;
 /** A plain RPC, without the server's rate-limit retries: a refused airdrop should go to the faucet hint at once. */
 const rpc = createSolanaRpc(devnet(config.rpcUrl));
 
-await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf)));
+if (process.argv.includes(REREGISTER_FLAG)) retireAgents();
+const progress = await Promise.all(AGENTS.map(progressOf));
+const ownerKeyRegistered = existsSync(config.ownerMldsaPath);
+await ensureFunded(rpc, payer, lamportsNeeded(progress, ownerKeyRegistered));
 // Idempotent; must come before any import or seal.
 runBun(['scripts/fleet.ts', 'owner-key']);
-for (const agent of AGENTS) setUpAgent(agent);
+ensureOwnerKey();
+for (const [index, agent] of AGENTS.entries()) setUpAgent(agent, progress[index]);
+if (predatesActivation(progress, ownerKeyRegistered)) {
+	log(`these agents predate the owner key, so it never activated them; to replace them: bun scripts/setup.ts ${REREGISTER_FLAG}`);
+}
 log('ready: bun scripts/demo.ts');
 log(telegramHint());
 
@@ -105,8 +116,33 @@ async function balanceOf(rpc: Rpc, account: Address): Promise<bigint> {
 	return (await rpc.getBalance(account).send()).value;
 }
 
-function setUpAgent(agent: SetupAgent): void {
-	const progress = progressOf(agent);
+/** Once per owner wallet, before any agent: every agent needs the owner's ML-DSA-44 activation. */
+function ensureOwnerKey(): void {
+	if (existsSync(config.ownerMldsaPath)) {
+		log(`owner key ${config.ownerMldsaPath} exists`);
+		return;
+	}
+	runBun(['scripts/agent.ts', 'register-owner']);
+	log(`back up ${config.ownerMldsaPath}: a wallet registers its owner key once, so without it no new agent can be activated`);
+}
+
+/** The old accounts stay on chain and the server stops running them; their files are kept for the audit. */
+function retireAgents(): void {
+	const dir = join(RETIRED_DIR, `reregister-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+	for (const agent of AGENTS) {
+		moveIfPresent(agentFile(agent), join(dir, 'agents', `${agent.id}.json`));
+		moveIfPresent(join(FLEET_DIR, agent.id), join(dir, 'fleet', agent.id));
+	}
+	log(`old agents moved to ${dir}`);
+}
+
+function moveIfPresent(from: string, to: string): void {
+	if (!existsSync(from)) return;
+	mkdirSync(dirname(to), { recursive: true });
+	renameSync(from, to);
+}
+
+function setUpAgent(agent: SetupAgent, progress: AgentProgress): void {
 	// The page name lives only in the fleet entry. A re-run brings it in line with this script; keys and the account stay.
 	if (progress.imported) alignName(agent);
 	const steps = stepsFor(progress);
@@ -126,10 +162,11 @@ function alignName(agent: SetupAgent): void {
 }
 
 function runStep(agent: SetupAgent, step: AgentStep): void {
-	if (step === 'register') runBun(['scripts/agent.ts', 'register'], { AGENT_FILE: agentFile(agent) });
-	else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
+	if (step === 'import') {
+		runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
+	} else if (step === 'seal') runBun(['scripts/fleet.ts', 'seal', agent.id]);
 	else if (step === 'identify') restoreIdentity(agent);
-	else runBun(['scripts/fleet.ts', 'import', agentFile(agent), '--as', agent.id, '--name', agent.name, '--risk', agent.risk]);
+	else runBun(['scripts/agent.ts', step], { AGENT_FILE: agentFile(agent) });
 }
 
 /** Copies the agent file into the fleet entry. Never overwrites a key file that is already there. */
@@ -150,15 +187,22 @@ function restoreIdentity(agent: SetupAgent): void {
 	log(`${agent.id}: on-chain identity restored from ${source}`);
 }
 
-function progressOf(agent: SetupAgent): AgentProgress {
+async function progressOf(agent: SetupAgent): Promise<AgentProgress> {
+	const registered = existsSync(agentFile(agent));
 	const imported = existsSync(join(FLEET_DIR, agent.id));
-	const fleet = new Fleet(FLEET_DIR);
 	return {
-		registered: existsSync(agentFile(agent)),
+		registered,
+		pending: registered && (await isPending(agentFile(agent))),
 		imported,
-		sealed: imported && fleet.isSealed(agent.id),
+		sealed: imported && new Fleet(FLEET_DIR).isSealed(agent.id),
 		identified: imported && existsSync(onchainIdentityPath(agent.id))
 	};
+}
+
+/** A registration whose outcome is unknown (no account yet) is not pending: `agent.ts status` reports it. */
+async function isPending(path: string): Promise<boolean> {
+	const account = await fetchEncodedAccount(rpc, loadAgentFile(path).agent);
+	return account.exists && decodeAgent(new Uint8Array(account.data)).status === 'Pending';
 }
 
 function agentFile(agent: SetupAgent): string {

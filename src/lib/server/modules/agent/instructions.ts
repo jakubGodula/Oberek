@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import {
 	AccountRole,
 	address,
@@ -21,8 +21,11 @@ import { DECISION_HASH_LENGTH } from './message';
 
 /** 8 B Anchor discriminator + 20,544 B prepared ML-DSA-44 key (AgentKey in state.rs). */
 export const AGENT_KEY_ACCOUNT_SIZE = 20_552n;
+/** 8 B Anchor discriminator + 20,544 B prepared ML-DSA-44 key (OwnerKey in state.rs). */
+export const OWNER_KEY_ACCOUNT_SIZE = 20_552n;
 export const SYSTEM_PROGRAM_ADDRESS = address('11111111111111111111111111111111');
 const AGENT_SEED = new TextEncoder().encode('agent');
+const OWNER_SEED = new TextEncoder().encode('owner');
 const DISCRIMINATOR_LENGTH = 8;
 
 export function anchorDiscriminator(namespace: 'global' | 'account' | 'event', name: string): Uint8Array {
@@ -35,14 +38,17 @@ export const DISCRIMINATORS = {
 	recordBatch: anchorDiscriminator('global', 'record_batch'),
 	kill: anchorDiscriminator('global', 'kill'),
 	resume: anchorDiscriminator('global', 'resume'),
+	registerOwner: anchorDiscriminator('global', 'register_owner'),
+	activateAgent: anchorDiscriminator('global', 'activate_agent'),
 	agent: anchorDiscriminator('account', 'Agent'),
 	stepRecorded: anchorDiscriminator('event', 'StepRecorded'),
 	batchRecorded: anchorDiscriminator('event', 'BatchRecorded'),
 	agentKilled: anchorDiscriminator('event', 'AgentKilled'),
-	agentResumed: anchorDiscriminator('event', 'AgentResumed')
+	agentResumed: anchorDiscriminator('event', 'AgentResumed'),
+	agentActivated: anchorDiscriminator('event', 'AgentActivated')
 };
 
-const AGENT_STATUSES = ['Active', 'Killed'] as const;
+const AGENT_STATUSES = ['Active', 'Killed', 'Pending'] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
 export interface AgentState {
@@ -80,6 +86,49 @@ export async function findAgentAddress(programAddress: Address, owner: Address, 
 		seeds: [AGENT_SEED, encoder.encode(owner), encoder.encode(agentKey)]
 	});
 	return agent;
+}
+
+export async function findOwnerRecordAddress(programAddress: Address, owner: Address): Promise<Address> {
+	const [record] = await getProgramDerivedAddress({ programAddress, seeds: [OWNER_SEED, getAddressEncoder().encode(owner)] });
+	return record;
+}
+
+export function registerOwnerInstruction(input: {
+	programAddress: Address;
+	owner: TransactionSigner;
+	ownerKey: Address;
+	ownerRecord: Address;
+	publicKey: Uint8Array;
+}) {
+	return {
+		programAddress: input.programAddress,
+		accounts: [
+			{ address: input.owner.address, role: AccountRole.WRITABLE_SIGNER, signer: input.owner },
+			{ address: input.ownerKey, role: AccountRole.WRITABLE },
+			{ address: input.ownerRecord, role: AccountRole.WRITABLE },
+			{ address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY }
+		],
+		data: concatBytes(DISCRIMINATORS.registerOwner, borshBytes(input.publicKey))
+	};
+}
+
+/** No wallet signer: the owner's ML-DSA-44 signature authorizes it, the fee payer only pays. */
+export function activateAgentInstruction(input: {
+	programAddress: Address;
+	agent: Address;
+	ownerRecord: Address;
+	ownerKey: Address;
+	signature: Uint8Array;
+}) {
+	return {
+		programAddress: input.programAddress,
+		accounts: [
+			{ address: input.agent, role: AccountRole.WRITABLE },
+			{ address: input.ownerRecord, role: AccountRole.READONLY },
+			{ address: input.ownerKey, role: AccountRole.READONLY }
+		],
+		data: concatBytes(DISCRIMINATORS.activateAgent, borshBytes(input.signature))
+	};
 }
 
 export function registerAgentInstruction(input: {
