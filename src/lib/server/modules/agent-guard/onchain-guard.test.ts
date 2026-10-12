@@ -4,7 +4,7 @@ import { address, getBase16Encoder, type Signature, type TransactionSigner } fro
 import type { AgentFile } from '../agent/files';
 import type { GuardClient } from '../agent/guard-client';
 import type { AgentState } from '../agent/instructions';
-import { GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
+import { batchMessage, GUARD_CONTEXT, resumeMessage, stepMessage } from '../agent/message';
 import type { SendResult } from '../agent/transaction';
 import { GuardError, type LandedTransaction } from './guard';
 import { OnchainGuard, type ChainCalls } from './onchain-guard';
@@ -19,6 +19,8 @@ const ONE_SOL = 1_000_000_000n;
 const KEYS = ml_dsa44.keygen();
 const DECISION_HASH = 'ab'.repeat(32);
 const DECISION_HASH_BYTES = new Uint8Array(getBase16Encoder().encode(DECISION_HASH));
+const ROOT = 'b7'.repeat(32);
+const ROOT_BYTES = new Uint8Array(getBase16Encoder().encode(ROOT));
 const PROGRAM_ERROR = (code: number) => ({ InstructionError: [0, { Custom: code }] });
 
 const IDENTITY: AgentFile = { owner: OWNER, agentKey: AGENT_KEY, agent: AGENT, mldsaSecretKey: KEYS.secretKey };
@@ -47,6 +49,7 @@ function fakeChain(initial: Partial<AgentState> = {}) {
 		fetchAgent: async () => state,
 		fetchBalance: async (_, account) => balances.get(account) ?? ONE_SOL,
 		recordStep: async (_, step) => land('recordStep', step),
+		recordBatch: async (_, batch) => land('recordBatch', batch),
 		killAgent: async (_, owner, agent) => land('kill', { owner, agent }),
 		resumeAgent: async (_, resume) => land('resume', resume)
 	};
@@ -229,6 +232,29 @@ describe('resume', () => {
 	test('refuses without signing or sending while the agent is active', async () => {
 		const chain = fakeChain();
 		expect(await guardErrorCode(guardOver(chain).resume(AGENT_ID, OWNER))).toBe('AgentNotKilled');
+		expect(chain.sent).toEqual([]);
+	});
+});
+
+describe('recordBatch', () => {
+	test("signs the batch message for the counter with the agent's key and reports the landed batch", async () => {
+		const chain = fakeChain();
+		const landed: LandedTransaction[] = [];
+		const account = await guardOver(chain, signer(OWNER), landed).recordBatch(AGENT_ID, 12, ROOT, 5);
+
+		expect(account).toMatchObject({ counter: 12, lastDecision: ROOT });
+		const { action, input } = chain.sent[0];
+		expect(action).toBe('recordBatch');
+		expect(input).toMatchObject({ feePayer: FEE_PAYER, agent: AGENT, agentKey: AGENT_KEY, root: ROOT_BYTES, size: 5 });
+		const signed = batchMessage(AGENT, 12n, ROOT_BYTES, 5);
+		expect(ml_dsa44.verify(input.signature as Uint8Array, signed, KEYS.publicKey, { context: GUARD_CONTEXT })).toBe(true);
+		expect(landed).toEqual([{ agentId: AGENT_ID, event: 'BatchRecorded', counter: 12, signature: 'tx-signature', root: ROOT, size: 5 }]);
+	});
+
+	test('refuses a killed agent and a stale counter without sending', async () => {
+		expect(await guardErrorCode(guardOver(fakeChain({ status: 'Killed' })).recordBatch(AGENT_ID, 12, ROOT, 5))).toBe('AgentKilled');
+		const chain = fakeChain();
+		expect(await guardErrorCode(guardOver(chain).recordBatch(AGENT_ID, 11, ROOT, 5))).toBe('CounterMismatch');
 		expect(chain.sent).toEqual([]);
 	});
 });

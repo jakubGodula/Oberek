@@ -2,6 +2,7 @@ import { getBase16Decoder, type Address } from '@solana/kit';
 import type { GuardEvent } from '../agent/events';
 import type { AgentState } from '../agent/instructions';
 import type { DecisionLogEntry } from './fleet';
+import { merkleRoot, verifyProof } from './merkle';
 import { hashDecisionRecord } from './record-decision';
 
 // Audits an agent's decision log against what the guard program recorded on-chain.
@@ -10,7 +11,8 @@ import { hashDecisionRecord } from './record-decision';
 // transactions, as StepRecorded / AgentKilled / AgentResumed events. The program verified every step's ML-DSA-44
 // signature when it was sent, so signatures are not checked again. The audit checks that:
 //   - the on-chain history is complete: counters 1..N without gaps or repeats, ending with the account's hash;
-//   - the log backs it: every record still hashes to its stored hash, and log and chain agree step by step.
+//   - the log backs it: every record still hashes to its stored hash, and log and chain agree step by step;
+//   - every batch (BatchRecorded) has all its decisions in the log, each with a proof leading to the batch's root.
 
 export interface AuditInput {
 	agent: Address;
@@ -22,6 +24,7 @@ export interface AuditInput {
 
 export interface AuditReport {
 	steps: number;
+	batches: number;
 	resumes: number;
 	kills: number;
 	logEntries: number;
@@ -32,6 +35,9 @@ export interface AuditReport {
 
 type EventNamed<Name extends GuardEvent['name']> = Extract<GuardEvent, { name: Name }>;
 type StepEvent = EventNamed<'StepRecorded'>;
+type BatchEvent = EventNamed<'BatchRecorded'>;
+/** A step or a batch: what the account's last decision holds after it. */
+type Recorded = { counter: bigint; hash: Uint8Array };
 
 const toHex = (bytes: Uint8Array) => getBase16Decoder().decode(bytes);
 
@@ -45,21 +51,24 @@ export function auditHistory(input: AuditInput): AuditReport {
 	const events = agentEvents.filter((event) => isAudited(event.counter));
 	const log = input.log.filter((entry) => isAudited(BigInt(entry.record.counter)));
 	const steps = eventsNamed(events, 'StepRecorded');
+	const batches = eventsNamed(events, 'BatchRecorded');
 	const resumes = eventsNamed(events, 'AgentResumed');
 	const newerEvents = agentEvents.length - events.length;
 	const newerLogEntries = input.log.length - log.length;
 	return {
 		steps: steps.length,
+		batches: batches.length,
 		resumes: resumes.length,
 		kills: eventsNamed(events, 'AgentKilled').length,
 		logEntries: log.length,
 		newer: newerEvents + newerLogEntries,
 		problems: [
-			...counterProblems([...steps, ...resumes], input.state.counter),
-			...lastDecisionProblems(steps, input.state.lastDecision),
+			...counterProblems([...steps, ...batches, ...resumes], input.state.counter),
+			...lastDecisionProblems(recordedHashes(steps, batches), input.state.lastDecision),
 			...logHashProblems(log),
 			...unloggedStepProblems(steps, log),
-			...unrecordedLogProblems(log, steps)
+			...batchProblems(batches, log),
+			...unrecordedLogProblems(log, steps, batches)
 		]
 	};
 }
@@ -82,15 +91,21 @@ function counterProblems(advances: readonly GuardEvent[], accountCounter: bigint
 	return problems;
 }
 
-/** The account keeps the newest step's hash, so it must match the step the history ends with. */
-function lastDecisionProblems(steps: readonly StepEvent[], lastDecision: Uint8Array): string[] {
-	const latest = latestStep(steps);
-	if (!latest || toHex(latest.decisionHash) === toHex(lastDecision)) return [];
-	return [`account: last decision is ${toHex(lastDecision)}, the last step recorded ${toHex(latest.decisionHash)}`];
+function recordedHashes(steps: readonly StepEvent[], batches: readonly BatchEvent[]): Recorded[] {
+	return [
+		...steps.map((step) => ({ counter: step.counter, hash: step.decisionHash })),
+		...batches.map((batch) => ({ counter: batch.counter, hash: batch.root }))
+	];
 }
 
-function latestStep(steps: readonly StepEvent[]): StepEvent | undefined {
-	return steps.reduce<StepEvent | undefined>((latest, step) => (!latest || step.counter > latest.counter ? step : latest), undefined);
+/** The account keeps the newest step's hash or batch's root, so it must match what the history ends with. */
+function lastDecisionProblems(recorded: readonly Recorded[], lastDecision: Uint8Array): string[] {
+	const latest = recorded.reduce<Recorded | undefined>(
+		(newest, item) => (!newest || item.counter > newest.counter ? item : newest),
+		undefined
+	);
+	if (!latest || toHex(latest.hash) === toHex(lastDecision)) return [];
+	return [`account: last decision is ${toHex(lastDecision)}, the last step recorded ${toHex(latest.hash)}`];
 }
 
 /** A record edited after it was logged no longer hashes to the hash stored next to it. */
@@ -109,10 +124,55 @@ function unloggedStepProblems(steps: readonly StepEvent[], log: readonly Decisio
 	});
 }
 
-/** A log entry claims its step was recorded on-chain, unless it is marked unconfirmed (the send may not have landed). */
-function unrecordedLogProblems(log: readonly DecisionLogEntry[], steps: readonly StepEvent[]): string[] {
-	const recorded = new Set(steps.map((step) => stepKey(step.counter, toHex(step.decisionHash))));
+/**
+ * Every batch on-chain needs all its decisions in the log, at its counter and with its root: indexes 0..size-1, each
+ * proof leading to the root, and the tree over them giving the root.
+ */
+function batchProblems(batches: readonly BatchEvent[], log: readonly DecisionLogEntry[]): string[] {
+	return batches.flatMap((batch) => {
+		const root = toHex(batch.root);
+		const entries = log.filter((entry) => BigInt(entry.record.counter) === batch.counter && entry.batch?.root === root);
+		if (entries.length === 0) return [`batch ${batch.counter}: on-chain, but not in the log`];
+		return batchEntryProblems(batch, root, entries);
+	});
+}
+
+function batchEntryProblems(batch: BatchEvent, root: string, entries: readonly DecisionLogEntry[]): string[] {
+	const problems: string[] = [];
+	if (entries.length !== batch.size) {
+		problems.push(`batch ${batch.counter}: ${entries.length} log entries, the batch holds ${batch.size}`);
+	}
+	const ordered = [...entries].sort((a, b) => (a.record.index ?? -1) - (b.record.index ?? -1));
+	if (ordered.some((entry, position) => entry.record.index !== position)) {
+		problems.push(`batch ${batch.counter}: log indexes are not 0..${entries.length - 1}`);
+	}
+	for (const entry of ordered) {
+		if (!verifyProof(entry.decisionHash, entry.batch!.proof, root)) {
+			problems.push(`batch ${batch.counter}, decision ${entry.record.index}: its proof does not lead to the root`);
+		}
+	}
+	if (merkleRoot(ordered.map((entry) => entry.decisionHash)) !== root) {
+		problems.push(`batch ${batch.counter}: the log's decisions do not hash to the root`);
+	}
+	return problems;
+}
+
+/**
+ * A log entry claims its step or batch was recorded on-chain, unless it is marked unconfirmed (the send may not have
+ * landed). A batch entry is matched only against batches, by its root, so it cannot pass for a step with that hash.
+ */
+function unrecordedLogProblems(
+	log: readonly DecisionLogEntry[],
+	steps: readonly StepEvent[],
+	batches: readonly BatchEvent[]
+): string[] {
+	const stepKeys = new Set(steps.map((step) => stepKey(step.counter, toHex(step.decisionHash))));
+	const batchKeys = new Set(batches.map((batch) => stepKey(batch.counter, toHex(batch.root))));
+	const isRecorded = (entry: DecisionLogEntry) =>
+		entry.batch
+			? batchKeys.has(stepKey(entry.record.counter, entry.batch.root))
+			: stepKeys.has(stepKey(entry.record.counter, entry.decisionHash));
 	return log
-		.filter((entry) => !entry.unconfirmed && !recorded.has(stepKey(entry.record.counter, entry.decisionHash)))
+		.filter((entry) => !entry.unconfirmed && !isRecorded(entry))
 		.map((entry) => `log step ${entry.record.counter}: not recorded on-chain with this hash`);
 }

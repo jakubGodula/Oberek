@@ -60,7 +60,7 @@ async function fetchEventsShowingProgress(guard: GuardClient, account: Address):
 
 function printReport(account: Address, agentState: AgentState, audit: AuditReport): void {
 	console.log(`agent ${agentId} (${account}), ${agentState.status}, counter ${agentState.counter}`);
-	console.log(`on-chain: ${audit.steps} steps, ${audit.resumes} resumes, ${audit.kills} kills; log: ${audit.logEntries} entries`);
+	console.log(`on-chain: ${audit.steps} steps, ${audit.batches} batches, ${audit.resumes} resumes, ${audit.kills} kills; log: ${audit.logEntries} entries`);
 	const lines = new Fleet(FLEET_DIR).decisionLineCounts(agentId);
 	console.log(`log file: ${lines.sealed} lines sealed (opened with the owner's ML-KEM key), ${lines.legacy} plaintext from before sealing`);
 	if (audit.newer > 0) console.log(`${audit.newer} events and log entries newer than the account read, not audited`);

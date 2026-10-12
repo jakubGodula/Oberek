@@ -4,6 +4,7 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { createInterface } from 'readline';
+import { batchPolicyFrom } from '../src/lib/server/modules/fleet/decision-batcher';
 import { Fleet } from '../src/lib/server/modules/fleet/fleet';
 import { FLEET_DIR } from '../src/lib/server/modules/fleet/runtime';
 import { stopInOrder, type DemoProcess } from './demo-stop';
@@ -18,6 +19,10 @@ const SERVER_GRACE_MS = 10_000;
 const DEMO_PACE = { SENTINEL_SCHEDULE_MIN: '2', SENTINEL_INTERVAL_MS: '10000' };
 /** The ids the agents run as: their defaults unless .env overrides them. */
 const AGENT_IDS = [process.env.SENTINEL_AGENT_ID ?? 'sentinel-01', process.env.TICK_AGENT_ID ?? 'tick-01'];
+const TICK_ID = AGENT_IDS[1];
+/** Tick at a fast agent's pace when the server batches its decisions (BATCHED_AGENT_IDS in .env, which Bun loads). */
+const BATCHED_TICK_PACE = { TICK_INTERVAL_MS: '1000' };
+const tickBatched = batchPolicyFrom(process.env).agentIds.has(TICK_ID);
 
 if (!existsSync('.env')) {
 	console.error('No .env in the current directory: run from the repo root after the setup in README.md');
@@ -43,9 +48,10 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => vo
 if (await serverReady()) {
 	agents.push(
 		start('sentinel', process.execPath, ['agents/sentinel'], DEMO_PACE),
-		start('tick', process.execPath, ['agents/tick'])
+		start('tick', process.execPath, ['agents/tick'], tickBatched ? BATCHED_TICK_PACE : {})
 	);
 	log(`demo running at ${SERVER_URL}; Ctrl+C stops it`);
+	if (!tickBatched) log(`add BATCHED_AGENT_IDS=${TICK_ID} to .env to see Tick's decisions go on-chain in Merkle batches`);
 } else {
 	log(`the server did not answer within ${SERVER_READY_TIMEOUT_MS} ms`);
 	exitCode = 1;

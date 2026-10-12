@@ -33,6 +33,12 @@ describe('submit', () => {
 		expect(JSON.parse(requests[0].init?.body as string)).toEqual(SUBMISSION);
 	});
 
+	test('reads 202 as queued for the next batch', async () => {
+		const { fetchFn } = answering(202, { queued: true });
+		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).submit(SUBMISSION)).toEqual({ kind: 'queued' });
+		expect(describeSubmitOutcome({ kind: 'queued' })).toBe('queued for the next batch');
+	});
+
 	test('reports the counter of a recorded decision', async () => {
 		const { fetchFn } = answering(200, { counter: 24 });
 		expect(await createRuntimeClient('http://server', 'tick-01', fetchFn).submit(SUBMISSION)).toEqual({

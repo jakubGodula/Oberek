@@ -4,6 +4,7 @@ import {
 	AGENT_KEY_ACCOUNT_SIZE,
 	decodeAgent,
 	killInstruction,
+	recordBatchInstruction,
 	recordStepInstruction,
 	registerAgentInstruction,
 	resumeInstruction,
@@ -105,6 +106,14 @@ export function recordStep(
 ): Promise<SendResult> {
 	const instruction = recordStepInstruction({ programAddress: client.programAddress, ...step });
 	return sendV1(client.connection, step.feePayer, [instruction], SIGNED_COMPUTE_UNIT_LIMIT);
+}
+
+export function recordBatch(
+	client: GuardClient,
+	batch: { feePayer: TransactionSigner; agent: Address; agentKey: Address; root: Uint8Array; size: number; signature: Uint8Array }
+): Promise<SendResult> {
+	const instruction = recordBatchInstruction({ programAddress: client.programAddress, ...batch });
+	return sendV1(client.connection, batch.feePayer, [instruction], SIGNED_COMPUTE_UNIT_LIMIT);
 }
 
 export function killAgent(client: GuardClient, owner: TransactionSigner, agent: Address): Promise<SendResult> {

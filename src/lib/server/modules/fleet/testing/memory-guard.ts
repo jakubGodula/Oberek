@@ -25,6 +25,10 @@ export class MemoryGuard implements AgentGuard {
 		return (this.account = { ...account, counter, lastDecision: decisionHash });
 	}
 
+	async recordBatch(agentId: string, counter: number, root: string): Promise<GuardAccount> {
+		return this.recordStep(agentId, counter, root);
+	}
+
 	async kill(agentId: string): Promise<GuardAccount> {
 		return (this.account = { ...(await this.readAgent(agentId)), status: 'Killed' });
 	}
