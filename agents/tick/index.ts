@@ -16,7 +16,7 @@ const apiUrl = process.env.TICK_API_URL ?? DEFAULT_API_URL;
 const agentId = process.env.TICK_AGENT_ID ?? DEFAULT_AGENT_ID;
 const intervalMs = intervalFromEnv();
 
-const { submit } = createRuntimeClient(apiUrl, agentId);
+const { submit, pace } = createRuntimeClient(apiUrl, agentId);
 
 /** An invalid interval stops the agent instead of spinning. */
 function intervalFromEnv(): number {
@@ -28,13 +28,18 @@ function intervalFromEnv(): number {
 	}
 }
 
-console.log(`Tick (${agentId}) → ${apiUrl}, one TICK every ${intervalMs} ms; Ctrl+C stops`);
+/** The pace the owner picked on the page's speed wheel, else TICK_INTERVAL_MS. */
+async function nextPauseMs(): Promise<number> {
+	return (await pace()) ?? intervalMs;
+}
+
+console.log(`Tick (${agentId}) → ${apiUrl}, one TICK every ${intervalMs} ms unless the page's speed wheel says otherwise; Ctrl+C stops`);
 await runLoop(
 	async () => {
 		const outcome = await submit({ kind: KIND, decision: DECISION, summary: SUMMARY });
 		console.log(`${new Date().toISOString()} TICK → ${describeSubmitOutcome(outcome)}`);
 	},
-	intervalMs,
+	nextPauseMs,
 	stopOnSignals()
 );
 console.log('Tick stopped');

@@ -25,6 +25,7 @@ function clientWith(
 	const calls = { claimShock: 0 };
 	const client: RuntimeClient = {
 		latest: async () => latest,
+		pace: async () => null,
 		submit: async (submission) => {
 			submitted.push(submission);
 			return outcome;

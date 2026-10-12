@@ -164,6 +164,7 @@ describe('batched agents', () => {
 		const timerFlushMs = 10;
 		const fast = batched({ ...runtime, guard: unfunded }, timerFlushMs);
 		await submitDecision(fast, AGENT, SUBMISSION);
+		await submitDecision(fast, AGENT, SUBMISSION);
 		await Bun.sleep(timerFlushMs * 4);
 		const error = await submitDecision(fast, AGENT, SUBMISSION).catch((caught: unknown) => caught);
 		expect((error as GuardError).code).toBe('PayerUnfunded');

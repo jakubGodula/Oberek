@@ -33,3 +33,7 @@ bun test agents/shared
 
 With the server's `BATCHED_AGENT_IDS` naming this agent, the server answers `202` and records TICKs in batches, one
 transaction per batch under a Merkle root; the log line then says `queued for the next batch`.
+
+The page's speed wheel on Tick's card sets its pause between ticks from the next tick on (0.5–30 s when batched, 10 or
+30 s otherwise, as the server allows one step per 10 s); until it is moved, or when the server cannot be reached, Tick
+keeps `TICK_INTERVAL_MS`.
