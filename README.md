@@ -78,12 +78,17 @@ The two Telegram values can't be generated: the token comes from @BotFather and 
 `setup.ts` does the steps below for you, skipping each one already done. A machine that already has Sentinel and Tick
 keeps them: they are not registered again, and their keys stay where they are. The name on the page is updated to the one in this script. Only an agent that is not in the fleet
 yet, such as `jito-01`, is registered, which needs about 0.2 SOL. It creates `.env` from `.env.example` and the
-payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
+payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register, plus ~0.2 SOL for the
+owner's key on the first run: ~0.8 SOL for a fresh setup. It tries a devnet airdrop
 first; that is often rate-limited, so it may print the address and wait until you send SOL from
 https://faucet.solana.com. Ctrl+C at that point is safe, and a re-run carries on. Last, it creates the owner's ML-KEM-768
-key (`OWNER_MLKEM_FILE`), registers the owner's ML-DSA-44 key once per wallet (`OWNER_MLDSA_FILE`, ~0.2 SOL; back it up,
-it can't be registered again), registers and activates `sentinel-01`, `tick-01` and `jito-01` (agent files in
-`.devnet/agents/`), imports them into the fleet and seals their decision logs.
+key (`OWNER_MLKEM_FILE`), registers the owner's ML-DSA-44 key once per wallet (`OWNER_MLDSA_FILE`), registers and
+activates `sentinel-01`, `tick-01` and `jito-01` (agent files in `.devnet/agents/`), imports them into the fleet and
+seals their decision logs.
+
+**Back up `.devnet/owner-mldsa.json`.** The program registers the owner's ML-DSA-44 key only once per wallet. Without
+that file, the wallet can't activate any new agent, and the only way out is a new wallet; agents already active keep
+working ([spec/keys.md](spec/keys.md)).
 
 Agents set up before the owner key existed keep running, but that key never activated them, and setup says so. To
 replace them with activated agents, stop the demo and run `bun scripts/setup.ts --reregister`: it moves their files to
@@ -102,17 +107,22 @@ cp .env.example .env
 bun scripts/new-keypair.ts .devnet/payer.json   # prints the wallet address; or solana-keygen new --outfile …
 ```
 
-Fund that address with ~0.2 SOL per agent on devnet, ~0.35 SOL for Tick and Sentinel (https://faucet.solana.com, a few
-requests per 8 hours; or a transfer from any devnet wallet): each registration locks ~0.15 SOL of rent, each step costs
-15,000 lamports. In `.env` this wallet both pays the steps and is the owner the server signs kill and resume with.
+Fund that address with ~0.2 SOL per agent on devnet, plus ~0.2 SOL once for the owner's key
+(https://faucet.solana.com, a few requests per 8 hours; or a transfer from any devnet wallet): each registration locks
+~0.15 SOL of rent, each step costs 15,000 lamports. In `.env` this wallet both pays the steps and is the owner the
+server signs kill and resume with.
 
 ```sh
-bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json
+bun scripts/agent.ts register-owner   # once per wallet: the owner's ML-DSA-44 key, .devnet/owner-mldsa.json; back it up
+bun scripts/agent.ts register    # new ML-DSA-44 key + Agent account, written to .devnet/agent.json, activated by the owner's key
 bun scripts/fleet.ts owner-key   # once: the owner's ML-KEM-768 key, .devnet/owner-mlkem.json
 bun scripts/fleet.ts import .devnet/agent.json --as tick-01 --name "Oberek Tick One — on-chain heartbeat"
 bun run dev                      # tick-01 appears on the page, read from devnet
 bun agents/tick                  # one step every 30 s; see agents/tick/README.md
 ```
+
+If `register` reports the agent registered but not active, retry only the activation:
+`AGENT_FILE=.devnet/agent.json bun scripts/agent.ts activate`. Until then the program refuses its steps.
 
 An agent imported before logs were sealed: `bun scripts/fleet.ts seal <id>`; its earlier plaintext lines stay readable.
 
@@ -150,7 +160,7 @@ bun agents/jito                 # a quiet check every 30 s; a vote when a propos
 
 Details: [agents/jito/README.md](agents/jito/README.md).
 
-`.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
+`.devnet/` is gitignored and holds the keys: the agents' and the owner's ML-DSA-44 secret keys are only there.
 
 ### The owner on Telegram
 
