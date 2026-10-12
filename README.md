@@ -242,7 +242,7 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ```sh
 bun test                         # server, fleet, agents, scripts, the Telegram bot and the kit, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
-bun scripts/setup.ts --e2e       # once: the e2e tests' own fleet on devnet (E2E Sentinel, E2E Tick), ~0.25 SOL
+bun scripts/setup.ts --e2e       # once: the e2e tests' own fleet on devnet (E2E Sentinel, E2E Tick); payer needs 0.4 SOL, spends ~0.25
 bun run e2e                      # the website in a real browser against that fleet on devnet; --headed to watch
 ```
 
