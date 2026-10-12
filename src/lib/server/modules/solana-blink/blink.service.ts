@@ -1,25 +1,11 @@
-import {
-  type ActionGetResponse,
-  type ActionPostResponse,
-  createPostResponse,
-  createActionHeaders
-} from '@solana/actions';
-import {
-  PublicKey,
-  Transaction,
-  TransactionInstruction,
-  Connection,
-  clusterApiUrl
-} from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
-import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
-import { decisionHashLabel } from '../../../fleet-feed';
-import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
+import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { proposalAwaiting, recordVerdict, type VerdictRequest } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
+import { controlAgent as controlFleetAgent, type ControlAction } from '../fleet/control';
 import { batchSizeOf } from '../fleet/latest-decision';
 import type { FleetRuntime } from '../fleet/submit-decision';
-import { memoText } from './memo';
 
 export interface AgentStatusRecord {
   id: string;
@@ -155,17 +141,6 @@ async function toAgentStatusRecord(runtime: FleetRuntime, entry: FleetEntry): Pr
 }
 
 export class BlinkService {
-  private connection: Connection;
-  private readonly defaultProgramId: PublicKey;
-
-  constructor() {
-    const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('devnet');
-    this.connection = new Connection(rpcUrl, 'confirmed');
-    this.defaultProgramId = new PublicKey(
-      process.env.AEGIS_PROGRAM_ID || 'Aeg1s11111111111111111111111111111111111111'
-    );
-  }
-
   async getAgent(agentId: string): Promise<AgentStatusRecord | undefined> {
     const runtime = await findFleetRuntime();
     const fleetEntry = runtime?.fleet.get(agentId);
@@ -180,124 +155,36 @@ export class BlinkService {
     return [...fleetAgents, ...agentsStore.values()];
   }
 
-  async getActionMetadata(agentId: string, origin: string): Promise<ActionGetResponse> {
-    const agent = (await this.getAgent(agentId)) || {
-      id: agentId,
-      name: `Agent #${agentId}`,
-      status: 'ACTIVE' as const,
-      currentTask: 'Waiting for the operator',
-      pqcKeyAccount: null,
-      lastCommitmentRoot: '00'.repeat(32),
-      lastBatchSize: null,
-      lastUpdated: Date.now(),
-      riskLevel: 'LOW' as const,
-      actionsExecuted: 0
-    };
-
-    return {
-      type: 'action',
-      icon: `${origin}/logo.svg`,
-      title: `🛡️ Oberek: ${agent.name}`,
-      description:
-        `Status: [${agent.status}] | Task: ${agent.currentTask}\n` +
-        `ML-DSA-44 key account: ${agent.pqcKeyAccount ?? 'unknown'}\n` +
-        `${decisionHashLabel(agent.lastBatchSize)}: ${agent.lastCommitmentRoot.slice(0, 16)}...`,
-      label: 'Agent Authorization',
-      links: {
-        actions: [
-          {
-            type: 'transaction',
-            label: '✅ Approve next step',
-            href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=approve`
-          },
-          {
-            type: 'transaction',
-            label: '🛑 Emergency Kill-Switch',
-            href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=pause`
-          }
-        ]
-      }
-    };
-  }
-
-  async createDecisionTransaction(
-    userAccount: string,
-    agentId: string,
-    decision: 'approve' | 'pause'
-  ): Promise<ActionPostResponse> {
-    const userPubkey = new PublicKey(userAccount);
-    const runtime = await findFleetRuntime();
-    const newRoot = runtime?.fleet.get(agentId)
-      ? await this.applyGuardedDecision(runtime, userAccount, agentId, decision)
-      : this.applyMockDecision(userAccount, agentId, decision);
-
-    const memoData = Buffer.from(memoText(agentId, decision, newRoot), 'utf-8');
-
-    const instruction = new TransactionInstruction({
-      keys: [{ pubkey: userPubkey, isSigner: true, isWritable: true }],
-      programId: new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
-      data: memoData
-    });
-
-    const tx = new Transaction().add(instruction);
-    tx.feePayer = userPubkey;
-
-    try {
-      const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
-      tx.recentBlockhash = blockhash;
-    } catch {
-      tx.recentBlockhash = '4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM';
-    }
-
-    return await createPostResponse({
-      fields: {
-        type: 'transaction',
-        transaction: tx,
-        message:
-          decision === 'approve'
-            ? `✅ Decision approved.`
-            : `🛑 EMERGENCY KILL-SWITCH TRIGGERED. Agent ${agentId} is paused.`
-      }
-    });
-  }
-
-  /** The owner's verdict on a fleet agent's proposal: recorded on chain as the agent's next step and in its log. */
-  async decideProposal(agentId: string, verdict: Verdict): Promise<{ counter: number }> {
-    const { record } = await recordVerdict(await getFleetRuntime(), agentId, verdict);
+  /**
+   * The owner's verdict on a fleet agent's proposal: recorded on chain as the agent's next step and in its log. A
+   * verdict naming another proposal than the waiting one is refused.
+   */
+  async decideProposal(agentId: string, { verdict, counter }: VerdictRequest): Promise<{ counter: number }> {
+    const { record } = await recordVerdict(await getFleetRuntime(), agentId, verdict, counter);
     return { counter: record.counter };
   }
 
-  /** Fleet agents: the guard decides; a refusal (not the owner, wrong state) reaches the caller as a GuardError. */
-  private async applyGuardedDecision(
-    runtime: FleetRuntime,
-    userAccount: string,
-    agentId: string,
-    decision: 'approve' | 'pause'
-  ): Promise<string> {
-    const { guard } = runtime;
-    const account =
-      decision === 'pause' ? await guard.kill(agentId, userAccount) : await guard.resume(agentId, userAccount);
-    return account.lastDecision;
+  /** The owner's kill switch. A fleet agent goes through the guard; a mock agent only changes its card. */
+  async controlAgent(agentId: string, action: ControlAction): Promise<{ counter: number }> {
+    const runtime = await findFleetRuntime();
+    if (runtime?.fleet.get(agentId)) return { counter: (await controlFleetAgent(runtime, agentId, action)).counter };
+    return { counter: this.controlMockAgent(agentId, action) };
   }
 
-  /** The three built-in mock agents: the decision only changes their in-memory card. */
-  private applyMockDecision(userAccount: string, agentId: string, decision: 'approve' | 'pause'): string {
+  /** Arbiter and Guardian: kill pauses the card, resume activates it and counts one more step. */
+  private controlMockAgent(agentId: string, action: ControlAction): number {
     const agent = agentsStore.get(agentId);
-    if (!agent) return '00'.repeat(32);
-    if (decision === 'pause') {
-      agent.status = 'PAUSED';
-    } else {
-      agent.status = 'ACTIVE';
-      agent.actionsExecuted += 1;
-    }
+    if (!agent) throw new GuardError('AgentNotFound', `no agent ${agentId}`);
+    agent.status = action === 'kill' ? 'PAUSED' : 'ACTIVE';
+    if (action === 'resume') agent.actionsExecuted += 1;
     agent.lastUpdated = Date.now();
     agent.lastCommitmentRoot = pqcCrypto.computeStateCommitment({
       agentId,
-      decision,
+      action,
       status: agent.status,
       timestamp: agent.lastUpdated
     }).hexRoot;
-    return agent.lastCommitmentRoot;
+    return agent.actionsExecuted;
   }
 }
 

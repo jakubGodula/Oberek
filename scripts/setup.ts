@@ -37,6 +37,18 @@ await ensureFunded(rpc, payer, lamportsNeeded(AGENTS.map(progressOf)));
 runBun(['scripts/fleet.ts', 'owner-key']);
 for (const agent of AGENTS) setUpAgent(agent);
 log('ready: bun scripts/demo.ts');
+log(telegramHint());
+
+/** The owner bot is optional: its token comes from @BotFather, so setup can only point the way. */
+function telegramHint(): string {
+	if (!process.env.TELEGRAM_BOT_TOKEN) {
+		return `optional: the owner's Telegram bot needs TELEGRAM_BOT_TOKEN in ${ENV_FILE} (README: "The owner on Telegram")`;
+	}
+	if (!process.env.TELEGRAM_OWNER_CHAT_ID) {
+		return `Telegram: run bun bot/telegram, send /start to the bot, put the chat id in ${ENV_FILE} as TELEGRAM_OWNER_CHAT_ID`;
+	}
+	return 'Telegram: configured; bun scripts/demo.ts starts the bot too';
+}
 
 function createdEnvFile(): boolean {
 	if (existsSync(ENV_FILE)) {

@@ -61,8 +61,11 @@ bun run dev                      # http://localhost:5173
 ```sh
 bun install
 bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
-bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo in one command"
+bun scripts/demo.ts              # server + Sentinel + Tick, + the Telegram bot once .env has its token
 ```
+
+The two Telegram values can't be generated: the token comes from @BotFather and the chat id from your bot's answer to
+`/start`. See [The owner on Telegram](#the-owner-on-telegram); setup ends with a hint on which one is still missing.
 
 `setup.ts` does the steps below for you, skipping each one already done. It creates `.env` from `.env.example` and the
 payer wallet at `FEE_PAYER_KEYPAIR`, then funds it with ~0.2 SOL per agent still to register. It tries a devnet airdrop
@@ -112,15 +115,49 @@ is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. D
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 
+### The owner on Telegram
+
+The bot sends each proposal to your Telegram chat with **Accept** and **Reject**, and **Kill** or **Resume** when an
+agent's status changes; `/agents` lists the fleet with the buttons each agent's state allows. It runs as its own
+process and talks to the server over HTTP, so it works from localhost.
+
+The bot has no dependencies of its own: the `bun install` from [Run](#run) covers it. A checkout from before the bot
+needs that `bun install` again, because the lockfile changed (the Blinks package `@solana/actions` is gone).
+
+**Create the bot (once).**
+
+1. In Telegram, open **@BotFather** (the verified one) and send `/newbot`.
+2. Give it a display name (e.g. `Oberek Owner`) and a username ending in `bot` (e.g. `oberek_owner_bot`).
+3. BotFather answers with a token like `123456789:AAH…`. It controls the bot, so keep it out of git and chats: put it
+   in `.env` in the repository root as `TELEGRAM_BOT_TOKEN=…` (`.env` is gitignored). If it leaks, send `/revoke` to
+   @BotFather for a new one.
+
+**Connect your chat (once).**
+
+4. Start the server (`bun run dev`) and the bot (`bun bot/telegram`, from the repository root: Bun reads `.env` there).
+5. Open your bot in Telegram and send `/start`. It answers with your chat id; put it in `.env` as
+   `TELEGRAM_OWNER_CHAT_ID=…` and restart the bot. Only that chat can press buttons. Use your private chat with the
+   bot: in a group every member could press them.
+
+**Use it.** Send `/agents` for one message per fleet agent with its buttons. Proposals, kills and resumes arrive on
+their own, every 3 s at most. Accept and Reject act only on the proposal their message shows: if a newer one is waiting,
+the server refuses (409) and the message says so.
+
+```bash
+bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_URL if not on :5173
+```
+
 ### The whole demo in one command
 
 With both agents set up as above:
 
 ```sh
-bun scripts/demo.ts              # server, then Sentinel at demo pace and Tick, in one terminal
+bun scripts/demo.ts              # server, then Sentinel at demo pace, Tick and the Telegram bot, in one terminal
 ```
 
-Each output line is prefixed with `[server]`, `[sentinel]` or `[tick]`. Ctrl+C stops it gracefully: the agents finish
+The Telegram bot starts only when `.env` has `TELEGRAM_BOT_TOKEN` (see [The owner on Telegram](#the-owner-on-telegram));
+without it the demo says so and runs the rest. Each output line is prefixed with `[server]`, `[sentinel]`, `[tick]` or
+`[telegram]`. Ctrl+C stops it gracefully: the agents finish
 the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
 same way. Port 5173 must be free.
 
@@ -148,6 +185,6 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ## Test
 
 ```sh
-bun test                         # server, fleet, agents and scripts, no network
+bun test                         # server, fleet, agents, scripts and the Telegram bot, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
