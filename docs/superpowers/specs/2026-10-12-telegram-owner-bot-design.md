@@ -15,11 +15,12 @@ In:
 
 - `POST /api/agents/<id>/control` with `{ "action": "kill" | "resume" }`: the owner's kill switch as a plain endpoint.
 - The page's Kill and Resume buttons call it.
-- A bot process `bun bot/telegram`: pushes proposals and status changes to the owner's chat, with buttons.
+- A bot process `bun bot/telegram`: pushes proposals and status changes to the owner's chat, with buttons, and answers
+  `/agents` with every fleet agent and the buttons that fit its state.
 - Removal of the Blink path: `/api/actions/agent-action`, the Memo transaction, `solana-blink/memo.ts`, the Solana
   Actions card, the footer credit and the `@solana/actions` dependency.
 
-Out (later, if wanted): bot commands (`/status`, `/kill <id>`), `demo.ts` starting the bot, renaming `BlinkService` and
+Out (later, if wanted): typed commands (`/kill <id>`), `demo.ts` starting the bot, renaming `BlinkService` and
 the `solana-blink` module (a pure move, its own PR).
 
 ## Server
@@ -54,7 +55,7 @@ the Bot API.
 | --- | --- |
 | `index.ts` | Reads env, runs two loops: Telegram updates (long poll) and agent polling. |
 | `telegram-api.ts` | `getUpdates`, `sendMessage`, `editMessageText`, `answerCallbackQuery`. |
-| `notices.ts` | Pure: previous and current agent lists → messages with buttons. |
+| `notices.ts` | Pure: previous and current agent lists → messages with buttons; one agent → its `/agents` message. |
 | `buttons.ts` | Pure: button ↔ callback data (`accept:sentinel-01`), button → server request. |
 
 ### Notices
@@ -63,12 +64,39 @@ Every 3 s the bot reads `GET /api/agents` and keeps fleet agents only (`fleet` p
 
 | Change | Message | Buttons |
 | --- | --- | --- |
-| becomes `AWAITING_APPROVAL` | agent name, proposal counter and summary | Accept · Reject · Kill |
+| becomes `AWAITING_APPROVAL` | the proposal message below | Accept · Reject · Kill |
 | becomes `PAUSED` | "<name> is killed" | Resume |
 | `PAUSED` → `ACTIVE` | "<name> is running again" | Kill |
 
+The proposal message says what the owner accepts, with the same facts as the page's approval panel:
+
+```
+⚠️ Oberek Sentinel Alpha waits for your verdict · step #41
+PROPOSE (drift, needs approval): sell 1.234 SOL @ $152.10 (SOL 62.0% → 50.0%) [simulated shock -3%]
+
+Accept: the verdict goes on-chain and the agent executes the trade in its next cycle.
+Reject: the verdict goes on-chain and the treasury stays unchanged.
+```
+
+The second line is the proposal's `summary`, written by the agent; the bot does not interpret the decision, so any
+agent that proposes gets a readable message.
+
 The first read after start only sets the baseline, except proposals already waiting, which are sent, so a restarted bot
 does not lose one. A failed read is logged and skipped; the next read compares with the last good one.
+
+### `/agents`
+
+The owner sends `/agents`; the bot reads `GET /api/agents` and answers with one message per fleet agent, so each has
+its own buttons:
+
+| State | Message | Buttons |
+| --- | --- | --- |
+| `ACTIVE` | "▶ <name> · running · step N" and its latest summary | Kill |
+| `PAUSED` | "⏸ <name> · killed · step N" | Resume |
+| `AWAITING_APPROVAL` | the proposal message above | Accept · Reject · Kill |
+| `UNAVAILABLE` | "<name> · unavailable: <reason>" | none |
+
+No fleet agents, or the server not answering, gets one message saying so.
 
 ### Buttons
 
@@ -96,7 +124,7 @@ does not lose one. A failed read is logged and skipped; the next read compares w
 ## Testing (TDD)
 
 - `parseControlAction`; the control route against the memory guard (kill, resume, wrong state → 409, unknown agent).
-- `notices.ts`: each row of the table, the baseline rule, mock agents ignored.
+- `notices.ts`: each row of both tables, the proposal message text, the baseline rule, mock agents ignored.
 - `buttons.ts`: round trip of callback data, bad data, request per action.
 - `telegram-api.ts`: requests and error handling with a fetch stub.
 - End to end on devnet with a real bot: a Sentinel proposal arrives in the chat, Accept records the verdict on chain,
