@@ -47,7 +47,7 @@ function telegramHint(): string {
 	if (!process.env.TELEGRAM_OWNER_CHAT_ID) {
 		return `Telegram: run bun bot/telegram, send /start to the bot, put the chat id in ${ENV_FILE} as TELEGRAM_OWNER_CHAT_ID`;
 	}
-	return 'Telegram: bun bot/telegram (with the server running)';
+	return 'Telegram: configured; bun scripts/demo.ts starts the bot too';
 }
 
 function createdEnvFile(): boolean {

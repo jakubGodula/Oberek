@@ -61,8 +61,7 @@ bun run dev                      # http://localhost:5173
 ```sh
 bun install
 bun scripts/setup.ts             # .env, payer wallet, its SOL, both agents; safe to re-run
-bun scripts/demo.ts              # server + Sentinel + Tick; see "The whole demo in one command"
-bun bot/telegram                 # optional, second terminal: needs TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_CHAT_ID in .env
+bun scripts/demo.ts              # server + Sentinel + Tick, + the Telegram bot once .env has its token
 ```
 
 The two Telegram values can't be generated: the token comes from @BotFather and the chat id from your bot's answer to
@@ -153,10 +152,12 @@ bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_
 With both agents set up as above:
 
 ```sh
-bun scripts/demo.ts              # server, then Sentinel at demo pace and Tick, in one terminal
+bun scripts/demo.ts              # server, then Sentinel at demo pace, Tick and the Telegram bot, in one terminal
 ```
 
-Each output line is prefixed with `[server]`, `[sentinel]` or `[tick]`. Ctrl+C stops it gracefully: the agents finish
+The Telegram bot starts only when `.env` has `TELEGRAM_BOT_TOKEN` (see [The owner on Telegram](#the-owner-on-telegram));
+without it the demo says so and runs the rest. Each output line is prefixed with `[server]`, `[sentinel]`, `[tick]` or
+`[telegram]`. Ctrl+C stops it gracefully: the agents finish
 the step in flight and exit, and only then the server stops. If any of them exits on its own, the rest are stopped the
 same way. Port 5173 must be free.
 
