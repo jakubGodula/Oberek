@@ -12,11 +12,12 @@ import {
   clusterApiUrl
 } from '@solana/web3.js';
 import { pqcCrypto } from '../zk-pqc/pqc-crypto.service';
-import { NO_DECISION, type GuardStatus } from '../agent-guard/guard';
+import { GuardError, NO_DECISION, type GuardStatus } from '../agent-guard/guard';
 import { decisionHashLabel } from '../../../fleet-feed';
 import { proposalAwaiting, recordVerdict, type Verdict } from '../fleet/approval';
 import { findFleetRuntime, getFleetRuntime, paceStore, shockStore } from '../fleet/app-runtime';
 import type { FleetEntry } from '../fleet/fleet';
+import { controlAgent as controlFleetAgent, type ControlAction } from '../fleet/control';
 import { batchSizeOf } from '../fleet/latest-decision';
 import type { FleetRuntime } from '../fleet/submit-decision';
 import { memoText } from './memo';
@@ -298,6 +299,29 @@ export class BlinkService {
       timestamp: agent.lastUpdated
     }).hexRoot;
     return agent.lastCommitmentRoot;
+  }
+
+  /** The owner's kill switch. A fleet agent goes through the guard; a mock agent only changes its card. */
+  async controlAgent(agentId: string, action: ControlAction): Promise<{ counter: number }> {
+    const runtime = await findFleetRuntime();
+    if (runtime?.fleet.get(agentId)) return { counter: (await controlFleetAgent(runtime, agentId, action)).counter };
+    return { counter: this.controlMockAgent(agentId, action) };
+  }
+
+  /** Arbiter and Guardian: kill pauses the card, resume activates it and counts one more step. */
+  private controlMockAgent(agentId: string, action: ControlAction): number {
+    const agent = agentsStore.get(agentId);
+    if (!agent) throw new GuardError('AgentNotFound', `no agent ${agentId}`);
+    agent.status = action === 'kill' ? 'PAUSED' : 'ACTIVE';
+    if (action === 'resume') agent.actionsExecuted += 1;
+    agent.lastUpdated = Date.now();
+    agent.lastCommitmentRoot = pqcCrypto.computeStateCommitment({
+      agentId,
+      action,
+      status: agent.status,
+      timestamp: agent.lastUpdated
+    }).hexRoot;
+    return agent.actionsExecuted;
   }
 }
 
