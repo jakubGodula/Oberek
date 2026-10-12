@@ -2,8 +2,10 @@
 
 Puts an existing agent behind the `onchain_agent_guard` program on Solana. Before each action, the agent's decision is
 signed with its ML-DSA-44 key (post-quantum), and the program verifies that signature on chain and records it. Only
-then does the action run. Once the owner kills the agent, every further step is refused, so no further action runs,
-whatever the agent's code.
+then does the action run. Once the owner kills the agent, every further step is refused, so no further action runs
+until a resume. A resume needs the owner's wallet and the agent's ML-DSA-44 key; `openGuardedAgent` holds both in the
+agent's process, so for now the kill stops an agent that misbehaves by mistake, not one whose code resumes itself (see
+[What it protects](#what-it-protects-and-what-it-does-not)).
 
 The kit talks to the program directly; you do not need the Oberek server. Oberek itself
 (`src/lib/server/modules/fleet/`) runs its agents on this package and is the larger worked example.
