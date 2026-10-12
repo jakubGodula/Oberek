@@ -112,6 +112,20 @@ is large enough to need approval, and waits for **Zatwierdź** or **Odrzuć**. D
 
 `.devnet/` is gitignored and holds the keys: the agent's ML-DSA-44 secret key is only there.
 
+### The owner on Telegram
+
+The bot sends each proposal to your Telegram chat with **Accept** and **Reject**, and **Kill** or **Resume** when an
+agent's status changes; `/agents` lists the fleet with the buttons each agent's state allows. It runs as its own
+process and talks to the server over HTTP, so it works from localhost.
+
+1. In Telegram, send `/newbot` to @BotFather; put the token it gives in `.env` as `TELEGRAM_BOT_TOKEN`.
+2. `bun bot/telegram`, then send `/start` to your bot: it answers with your chat id. Put it in `.env` as
+   `TELEGRAM_OWNER_CHAT_ID` and restart the bot. Only that chat can press buttons.
+
+```bash
+bun bot/telegram                 # needs the server (bun run dev); TELEGRAM_API_URL if not on :5173
+```
+
 ### The whole demo in one command
 
 With both agents set up as above:
@@ -148,6 +162,6 @@ fleet are logged in `.devnet/decisions.jsonl`, not in the fleet log, so they sho
 ## Test
 
 ```sh
-bun test                         # server, fleet, agents and scripts, no network
+bun test                         # server, fleet, agents, scripts and the Telegram bot, no network
 onchain/run-tests.sh             # the program (Docker); see onchain/README.md
 ```
