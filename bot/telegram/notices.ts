@@ -3,7 +3,6 @@ import type { AgentView, PendingProposal } from './oberek-api';
 import type { Keyboard } from './telegram-api';
 
 // What the bot tells the owner: notices about changes between two reads of the fleet, and the answer to /agents.
-// Only fleet agents count; mock agents send nothing on chain.
 
 export interface Notice {
 	text: string;
@@ -17,9 +16,8 @@ const PROPOSAL_FOOTER = [
 const NO_BUTTONS_NOTE = 'Its id is too long for Telegram buttons: use the page.';
 const EMPTY_FLEET = 'No fleet agents on the server.';
 
-const isFleetAgent = (agent: AgentView) => agent.fleet !== undefined;
 const proposalOf = (agent: AgentView): PendingProposal | null =>
-	agent.status === 'AWAITING_APPROVAL' ? (agent.fleet?.pendingProposal ?? null) : null;
+	agent.status === 'AWAITING_APPROVAL' ? agent.fleet.pendingProposal : null;
 
 function notice(text: string, agentId: string, actions: ButtonAction[], proposalCounter?: number): Notice {
 	if (actions.length === 0) return { text };
@@ -50,15 +48,14 @@ function changeNotice(before: AgentView | undefined, now: AgentView): Notice | n
 }
 
 export function changeNotices(previous: AgentView[] | null, current: AgentView[]): Notice[] {
-	const fleet = current.filter(isFleetAgent);
 	if (previous === null) {
-		return fleet.flatMap((agent) => {
+		return current.flatMap((agent) => {
 			const proposal = proposalOf(agent);
 			return proposal ? [proposalNotice(agent, proposal)] : [];
 		});
 	}
 	const before = new Map(previous.map((agent) => [agent.id, agent]));
-	return fleet.flatMap((agent) => changeNotice(before.get(agent.id), agent) ?? []);
+	return current.flatMap((agent) => changeNotice(before.get(agent.id), agent) ?? []);
 }
 
 /**
@@ -82,6 +79,5 @@ function agentNotice(agent: AgentView): Notice {
 }
 
 export function agentsAnswer(agents: AgentView[]): Notice[] {
-	const fleet = agents.filter(isFleetAgent);
-	return fleet.length > 0 ? fleet.map(agentNotice) : [{ text: EMPTY_FLEET }];
+	return agents.length > 0 ? agents.map(agentNotice) : [{ text: EMPTY_FLEET }];
 }
