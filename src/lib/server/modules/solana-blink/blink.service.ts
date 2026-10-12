@@ -200,10 +200,12 @@ export class BlinkService {
       links: {
         actions: [
           {
+            type: 'transaction',
             label: '✅ Approve next step',
             href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=approve`
           },
           {
+            type: 'transaction',
             label: '🛑 Emergency Kill-Switch',
             href: `${origin}/api/actions/agent-action?agentId=${agentId}&decision=pause`
           }
@@ -243,6 +245,7 @@ export class BlinkService {
 
     return await createPostResponse({
       fields: {
+        type: 'transaction',
         transaction: tx,
         message:
           decision === 'approve'

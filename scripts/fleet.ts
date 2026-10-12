@@ -46,7 +46,10 @@ else if (command === 'seal') sealAgent(argument ?? fail('the agent id is require
 else fail(`unknown command ${command ?? ''}`);
 
 function createOwnerKey(): void {
-	if (existsSync(config.ownerKemPath)) return console.log(`owner ML-KEM key ${config.ownerKemPath} exists`);
+	if (existsSync(config.ownerKemPath)) {
+		console.log(`owner ML-KEM key ${config.ownerKemPath} exists`);
+		return;
+	}
 	saveOwnerKemKey(config.ownerKemPath, createOwnerKemKey());
 	console.log(`owner ML-KEM-768 key written to ${config.ownerKemPath}; its secret key is the only way to read the logs`);
 }
@@ -74,7 +77,10 @@ async function importAgent(agentFilePath: string): Promise<void> {
 
 function sealAgent(id: string): void {
 	if (!fleet.get(id)) fail(`agent ${id} is not in the fleet`);
-	if (fleet.isSealed(id)) return console.log(`${id} is already sealed`);
+	if (fleet.isSealed(id)) {
+		console.log(`${id} is already sealed`);
+		return;
+	}
 	fleet.addSeal(id, newSeal());
 	console.log(`${id}: decision log sealed to the owner's ML-KEM-768 key; earlier plaintext lines stay readable`);
 }
