@@ -60,8 +60,7 @@ pub mod onchain_agent_guard {
     pub fn record_step(ctx: Context<RecordStep>, decision_hash: [u8; 32], signature: Vec<u8>) -> Result<()> {
         let agent_address = ctx.accounts.agent.key();
         let agent = &mut ctx.accounts.agent;
-        require!(agent.status != AgentStatus::Pending, GuardError::AgentPending);
-        require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+        require_recording(agent)?;
         let counter = agent.counter + 1;
         let signed = step_message(&agent_address, counter, &decision_hash);
         verify_signature(&ctx.accounts.agent_key.load()?.prepared, &signed, &signature)?;
@@ -76,7 +75,7 @@ pub mod onchain_agent_guard {
     pub fn record_batch(ctx: Context<RecordStep>, root: [u8; 32], size: u32, signature: Vec<u8>) -> Result<()> {
         let agent_address = ctx.accounts.agent.key();
         let agent = &mut ctx.accounts.agent;
-        require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+        require_recording(agent)?;
         require!(size > 0, GuardError::EmptyBatch);
         let counter = agent.counter + 1;
         verify_signature(&ctx.accounts.agent_key.load()?.prepared, &batch_message(&agent_address, counter, &root, size), &signature)?;
@@ -106,6 +105,13 @@ pub mod onchain_agent_guard {
         emit!(AgentResumed { agent: agent_address, counter });
         Ok(())
     }
+}
+
+/// Steps and batches are recorded only for an active agent: not before the owner's activation, not after a kill.
+fn require_recording(agent: &Agent) -> Result<()> {
+    require!(agent.status != AgentStatus::Pending, GuardError::AgentPending);
+    require!(agent.status == AgentStatus::Active, GuardError::AgentKilled);
+    Ok(())
 }
 
 fn prepare_key(public_key: &[u8], prepared: &mut [u8; MLDSA_PREPARED_KEY_LEN]) -> Result<()> {

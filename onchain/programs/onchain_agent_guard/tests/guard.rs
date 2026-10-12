@@ -637,6 +637,15 @@ fn batch_on_a_killed_agent_fails() {
 }
 
 #[test]
+fn batch_on_a_pending_agent_fails() {
+    let mut ledger = Ledger::pending();
+    assert_eq!(
+        ledger.send("batch while pending", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]),
+        guard_error(SIGNED_INSTRUCTION_INDEX, GuardError::AgentPending)
+    );
+}
+
+#[test]
 fn step_after_a_batch_uses_the_next_counter() {
     let mut ledger = Ledger::registered();
     assert_eq!(ledger.send("batch 1", &[batch(BATCH_ROOT, BATCH_SIZE, BATCH_1_SIGNATURE)]), Ok(()));
