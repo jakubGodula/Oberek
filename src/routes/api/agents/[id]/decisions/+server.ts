@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { getFleetRuntime } from '#lib/server/modules/fleet/app-runtime';
+import { getFleetRuntime, quietStore } from '#lib/server/modules/fleet/app-runtime';
 import { fleetErrorResponse } from '#lib/server/modules/fleet/http-errors';
 import { withTransactions } from '#lib/server/modules/fleet/onchain-feed';
 import { assertInFleet } from '#lib/server/modules/fleet/record-decision';
@@ -25,6 +25,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	}
 	try {
 		const result = await submitDecision(await getFleetRuntime(), params.id!, submission);
+		quietStore.clear(params.id!);
 		return json(result, { status: 'queued' in result ? ACCEPTED : OK });
 	} catch (error) {
 		if (error instanceof RateLimitedError) {

@@ -50,6 +50,15 @@ describe('toFeedRow', () => {
 		expect(row).toMatchObject({ chip: 'DECISION', summary: 'summary #2', details: null });
 	});
 
+	test.each([
+		['FOR', 'FOR'],
+		['AGAINST', 'AGAINST']
+	] as const)('a Jito %s vote shows that chip', (action, chip) => {
+		const row = toFeedRow(entry(6, 'jito', { action, answer: action === 'FOR' ? 'positive' : 'negative' }), null);
+		expect(row.chip).toBe(chip);
+		expect(row.details).toBeNull();
+	});
+
 	test('keys each row by its record hash, so two entries with one counter (an unlanded step and its retry) differ', () => {
 		const unlanded = { ...entry(4, 'sentinel', { action: 'HOLD' }), decisionHash: 'aa'.repeat(32), unconfirmed: true as const };
 		const retry = { ...entry(4, 'sentinel', { action: 'HOLD' }), decisionHash: 'bb'.repeat(32) };
@@ -71,6 +80,7 @@ describe('acceptsShock', () => {
 		['sentinel', true],
 		['approval', true],
 		['tick', false],
+		['jito', false],
 		[null, false]
 	])('%p → %p', (kind, expected) => {
 		expect(acceptsShock(kind)).toBe(expected);

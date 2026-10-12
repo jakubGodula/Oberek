@@ -33,7 +33,9 @@ function clientWith(
 		claimShock: async () => {
 			calls.claimShock += 1;
 			return shock;
-		}
+		},
+		claimProposal: async () => ({ kind: 'none' }),
+		reportQuiet: async () => ({ kind: 'noted', count: 1 })
 	};
 	return { client, submitted, calls };
 }
