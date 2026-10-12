@@ -1,11 +1,19 @@
 import * as env from '$app/env/private';
 import { createFleetRuntime, FleetNotConfiguredError } from './runtime';
 import { PaceStore } from './pace-store';
+import { ProposalStore } from './proposal-store';
+import { QuietStore } from './quiet-store';
 import { ShockStore } from './shock-store';
 import type { FleetRuntime } from './submit-decision';
 
 /** The server's one store of armed demo shocks. */
 export const shockStore = new ShockStore();
+
+/** The server's one store of armed simulated Jito proposals. */
+export const proposalStore = new ProposalStore();
+
+/** Quiet cycles that the page shows as one line and that never become a transaction. */
+export const quietStore = new QuietStore();
 
 /** The server's one store of the paces picked on the speed wheel. */
 export const paceStore = new PaceStore();

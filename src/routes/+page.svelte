@@ -2,11 +2,12 @@
   import {
     Shield, ShieldAlert, ShieldCheck, Cpu, Send, Key, Copy, Check,
     ExternalLink, RefreshCw, Zap, AlertTriangle,
-    Lock, Unlock, BarChart3, Play
+    Lock, Unlock, BarChart3
   } from 'lucide-svelte';
   import { untrack } from 'svelte';
   import ApprovalPanel from '#lib/components/ApprovalPanel.svelte';
   import DecisionFeed from '#lib/components/DecisionFeed.svelte';
+  import ProposalSim from '#lib/components/ProposalSim.svelte';
   import { acceptsPace, describePace, paceLabel, paceStepsFor } from '#lib/tick-pace';
   import { acceptsShock, decisionHashLabel, explorerAddressUrl, type FeedEntry, type OperatorAction } from '#lib/fleet-feed';
 
@@ -24,8 +25,6 @@
   let feedActions = $state<OperatorAction[]>([]);
   /** Room for a full batch (BATCH_MAX_DECISIONS, 16 by default) and the rows around it. */
   const FEED_LIMIT = 40;
-  /** The demo shock the card's button arms, in percent of the price. */
-  const SHOCK_PCT = -3;
 
   /** Real agents only: mock agents send nothing on-chain, so they stay out of the stats. */
   const fleetAgents = $derived(agents.filter((a) => a.fleet));
@@ -111,13 +110,9 @@
     await postAndReport(`/api/agents/${selectedAgent.id}/approval`, { verdict, counter }, done);
   }
 
-  async function armShock() {
-    if (!selectedAgent) return;
-    await postAndReport(
-      `/api/agents/${selectedAgent.id}/shock`,
-      { pct: SHOCK_PCT },
-      'Price shock armed: the agent applies it in its next cycle.'
-    );
+  /** Approve and Reject belong to Sentinel: it is the only agent that stops for a verdict. */
+  function awaitsVerdict(agent: AgentCard): boolean {
+    return Boolean(agent.fleet?.pendingProposal) || acceptsShock(agent.fleet?.lastDecisionKind ?? null);
   }
 
   const CONTROL_DONE = {
@@ -403,16 +398,6 @@
                 </a>
               {/if}
             </div>
-            {#if selectedAgent.fleet && acceptsShock(selectedAgent.fleet.lastDecisionKind)}
-              <button
-                onclick={armShock}
-                disabled={isSimulating || selectedAgent.fleet.shockArmed}
-                class="mt-3 w-full px-4 py-2.5 rounded-xl border border-fuchsia-500/40 bg-fuchsia-950/30 hover:bg-fuchsia-900/40 text-fuchsia-200 text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                <Play class="w-4 h-4" />
-                {selectedAgent.fleet.shockArmed ? 'Shock armed, applied in the next cycle' : 'Simulate a price shock (−3%)'}
-              </button>
-            {/if}
             {#if selectedAgent.fleet && acceptsPace(selectedAgent.fleet.lastDecisionKind)}
               {@const steps = paceStepsFor(selectedAgent.fleet.batched)}
               {@const paceMs = selectedAgent.fleet.paceMs}
@@ -466,7 +451,27 @@
             Human-in-the-Loop · Decision Console
           </h3>
 
-          {#if selectedAgent.fleet}
+          {#snippet fleetStop(wide: boolean)}
+            {#if selectedAgent.status === 'PAUSED'}
+              <button
+                onclick={() => control('resume')}
+                disabled={isSimulating}
+                class="{wide ? 'col-span-2' : ''} px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <Unlock class="w-4 h-4" /> Resume agent
+              </button>
+            {:else}
+              <button
+                onclick={() => control('kill')}
+                disabled={isSimulating}
+                class="{wide ? 'col-span-2' : ''} px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ShieldAlert class="w-4 h-4" /> Kill-Switch 🛑
+              </button>
+            {/if}
+          {/snippet}
+
+          {#if awaitsVerdict(selectedAgent)}
             <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
               On a large trade the agent stops on its own and waits for your verdict: approve or reject the step.
               The Kill-Switch stops it at any moment. Every decision lands on Solana devnet.
@@ -486,53 +491,17 @@
               >
                 Reject
               </button>
-              {#if selectedAgent.status === 'PAUSED'}
-                <button
-                  onclick={() => control('resume')}
-                  disabled={isSimulating}
-                  class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  <Unlock class="w-4 h-4" /> Resume agent
-                </button>
-              {:else}
-                <button
-                  onclick={() => control('kill')}
-                  disabled={isSimulating}
-                  class="col-span-2 px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  <ShieldAlert class="w-4 h-4" /> Kill-Switch 🛑
-                </button>
-              {/if}
+              {@render fleetStop(true)}
             </div>
           {:else}
             <p class="text-[12px] text-slate-400 mb-4 leading-relaxed">
-              Mock agent: approve its next step or trigger the Kill-Switch.
-              Nothing goes on-chain; the decision only changes this card.
+              This agent does not stop for a human verdict. Nothing in its decision process needs an operator.
             </p>
-            <div class="grid grid-cols-2 gap-3 mb-4">
-              <button
-                onclick={() => control('resume')}
-                disabled={isSimulating}
-                class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-[12px] font-semibold shadow-lg shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-              >
-                <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
-                {#if isSimulating}
-                  <RefreshCw class="w-4 h-4 animate-spin" />
-                {:else}
-                  <ShieldCheck class="w-4 h-4" />
-                {/if}
-                Approve Step
-              </button>
-              <button
-                onclick={() => control('kill')}
-                disabled={isSimulating}
-                class="relative overflow-hidden px-4 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-[12px] font-semibold shadow-lg shadow-rose-600/20 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
-              >
-                <span class="absolute inset-0 bg-white/[0.06] opacity-0 group-hover:opacity-100 transition"></span>
-                <ShieldAlert class="w-4 h-4" />
-                Kill-Switch 🛑
-              </button>
-            </div>
+            {#if selectedAgent.fleet}
+              <div class="mb-4">
+                {@render fleetStop(false)}
+              </div>
+            {/if}
           {/if}
 
           {#if simulationMessage}
@@ -571,6 +540,7 @@
             operatorActions={feedActions}
             pendingCounter={selectedAgent.fleet?.pendingProposal?.counter ?? null}
             mock={!selectedAgent.fleet}
+            quiet={selectedAgent.fleet?.quiet ?? null}
           />
         </div>
       {/if}
@@ -606,4 +576,6 @@
     <span>Oberek · Colosseum Crypto World's Fair 2026</span>
     <span class="font-mono">Powered by <span class="text-violet-400">@noble/post-quantum</span> · <span class="text-sky-400">Telegram Bot API</span></span>
   </footer>
+
+  <ProposalSim {agents} onChange={refreshAll} />
 </div>

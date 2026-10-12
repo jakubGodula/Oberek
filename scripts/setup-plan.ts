@@ -5,19 +5,25 @@
 export const LAMPORTS_PER_AGENT = 200_000_000n;
 
 export interface AgentProgress {
-	/** Its agent file exists: the on-chain account was created. */
+	/** Its agent file exists: the on-chain account was created, or a registration is still in doubt. */
 	readonly registered: boolean;
 	/** Its fleet directory exists: the server runs it. */
 	readonly imported: boolean;
 	/** Its decision log has a seal (import seals; agents imported before that need `seal`). */
 	readonly sealed: boolean;
+	/** `onchain.json` is in the fleet entry, so the server can sign for this agent. */
+	readonly identified: boolean;
 }
 
-export type AgentStep = 'register' | 'import' | 'seal';
+export type AgentStep = 'register' | 'import' | 'seal' | 'identify';
 
-export function stepsFor({ registered, imported, sealed }: AgentProgress): AgentStep[] {
-	if (imported) return sealed ? [] : ['seal'];
-	return registered ? ['import'] : ['register', 'import'];
+export function stepsFor({ registered, imported, sealed, identified }: AgentProgress): AgentStep[] {
+	if (!imported) return registered ? ['import'] : ['register', 'import'];
+	const steps: AgentStep[] = [];
+	if (!sealed) steps.push('seal');
+	// An import that stopped after the fleet entry, or a fleet copied without the key file.
+	if (!identified) steps.push('identify');
+	return steps;
 }
 
 /** Only registration costs SOL; importing and sealing are local. */

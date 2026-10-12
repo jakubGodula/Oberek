@@ -19,6 +19,16 @@ export type SubmitOutcome =
 /** A one-off simulated price shock the demo armed for this agent. */
 export type ShockOutcome = { kind: 'none' } | { kind: 'armed'; pct: number } | { kind: 'failed'; reason: string };
 
+/** A one-off simulated Jito proposal the demo armed: read as positive or negative for JitoSOL holders. */
+export type ProposalDirection = 'positive' | 'negative';
+export type ProposalOutcome =
+	| { kind: 'none' }
+	| { kind: 'armed'; direction: ProposalDirection }
+	| { kind: 'failed'; reason: string };
+
+/** A quiet cycle the page counts. Nothing was sent on-chain. */
+export type QuietOutcome = { kind: 'noted'; count: number } | { kind: 'failed'; reason: string };
+
 /** A decision as the server recorded it: the submission plus the step counter and the server's time. */
 export interface RecordedDecision extends Submission {
 	agent: string;
@@ -37,6 +47,10 @@ export interface RuntimeClient {
 	latest(): Promise<LatestOutcome>;
 	/** Claims the shock armed for this agent's next cycle, which disarms it. */
 	claimShock(): Promise<ShockOutcome>;
+	/** Claims the simulated proposal armed for this agent's next cycle, which disarms it. */
+	claimProposal(): Promise<ProposalOutcome>;
+	/** Counts one quiet cycle on the page. Sends no decision. */
+	reportQuiet(): Promise<QuietOutcome>;
 	/** The pause between steps the owner picked on the page's speed wheel; null when none is picked or unreadable. */
 	pace(): Promise<number | null>;
 }
@@ -109,6 +123,27 @@ export function createRuntimeClient(apiUrl: string, agentId: string, fetchFn: ty
 			if (shock === null) return { kind: 'none' };
 			if (typeof shock?.pct !== 'number') return { kind: 'failed', reason: 'unexpected answer: no shock in it' };
 			return { kind: 'armed', pct: shock.pct };
+		},
+
+		async claimProposal() {
+			const answer = await request(`${agentUrl}/proposal/claim`, { method: 'POST' });
+			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
+			if (!answer.response.ok) return { kind: 'failed', reason: httpFailure(answer) };
+			const { proposal } = answer.body;
+			if (proposal === null) return { kind: 'none' };
+			if (proposal?.direction !== 'positive' && proposal?.direction !== 'negative') {
+				return { kind: 'failed', reason: 'unexpected answer: no proposal in it' };
+			}
+			return { kind: 'armed', direction: proposal.direction };
+		},
+
+		async reportQuiet() {
+			const answer = await request(`${agentUrl}/quiet`, { method: 'POST' });
+			if (answer.kind === 'unreachable') return { kind: 'failed', reason: answer.reason };
+			if (!answer.response.ok) return { kind: 'failed', reason: httpFailure(answer) };
+			const { count } = answer.body;
+			if (typeof count !== 'number' || count < 1) return { kind: 'failed', reason: 'unexpected answer: no count in it' };
+			return { kind: 'noted', count };
 		}
 	};
 }
