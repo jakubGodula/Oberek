@@ -61,6 +61,15 @@ export function changeNotices(previous: AgentView[] | null, current: AgentView[]
 	return fleet.flatMap((agent) => changeNotice(before.get(agent.id), agent) ?? []);
 }
 
+/**
+ * What the next read is compared with: the current read, where an unavailable agent keeps its last known card, so a
+ * blip in reading it does not resend what the owner already got.
+ */
+export function lastKnown(previous: AgentView[] | null, current: AgentView[]): AgentView[] {
+	const before = new Map((previous ?? []).map((agent) => [agent.id, agent]));
+	return current.map((agent) => (agent.status === 'UNAVAILABLE' ? (before.get(agent.id) ?? agent) : agent));
+}
+
 function agentNotice(agent: AgentView): Notice {
 	const proposal = proposalOf(agent);
 	if (proposal) return proposalNotice(agent, proposal);

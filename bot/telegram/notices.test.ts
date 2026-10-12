@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { agentsAnswer, changeNotices } from './notices';
+import { agentsAnswer, changeNotices, lastKnown, type Notice } from './notices';
 import type { AgentView } from './oberek-api';
 
 const SUMMARY = 'PROPOSE (drift, needs approval): sell 1.234 SOL @ $152.10 (SOL 62.0% → 50.0%) [simulated shock -3%]';
@@ -20,6 +20,7 @@ const awaiting = (counter = 41, summary = SUMMARY) =>
 	agent({ status: 'AWAITING_APPROVAL', actionsExecuted: counter, fleet: { pendingProposal: { counter, summary } } });
 const paused = () => agent({ status: 'PAUSED' });
 const mock = () => agent({ id: 'arbiter-02', name: 'Arbiter Beta', status: 'PAUSED', fleet: undefined });
+const unavailable = () => agent({ status: 'UNAVAILABLE', currentTask: 'Unavailable: RPC down' });
 const buttons = (notice: { keyboard?: { text: string }[][] }) => notice.keyboard?.[0].map((button) => button.text);
 
 const PROPOSAL_TEXT = [
@@ -29,6 +30,16 @@ const PROPOSAL_TEXT = [
 	'Accept: the verdict goes on-chain and the agent executes the trade in its next cycle.',
 	'Reject: the verdict goes on-chain and the treasury stays unchanged.'
 ].join('\n');
+
+/** The bot's polls after `first`: each read is compared with what was last known. */
+function polls(first: AgentView[], ...reads: AgentView[][]): Notice[][] {
+	let known = first;
+	return reads.map((read) => {
+		const notices = changeNotices(known, read);
+		known = lastKnown(known, read);
+		return notices;
+	});
+}
 
 describe('changeNotices', () => {
 	test('a new proposal: what to accept, with Accept, Reject and Kill', () => {
@@ -81,6 +92,22 @@ describe('changeNotices', () => {
 
 	test('mock agents are ignored', () => {
 		expect(changeNotices([], [mock()])).toEqual([]);
+	});
+
+	test('an agent turning unavailable sends nothing', () => {
+		expect(changeNotices([awaiting()], [unavailable()])).toEqual([]);
+	});
+
+	test.each([
+		['a waiting proposal', awaiting],
+		['a killed agent', paused]
+	])('%s back from an unavailable read sends nothing new', (_, state) => {
+		expect(polls([state()], [unavailable()], [state()])).toEqual([[], []]);
+	});
+
+	test('an agent with a new proposal after an unavailable read is still reported', () => {
+		const [, [notice]] = polls([awaiting(41)], [unavailable()], [awaiting(43)]);
+		expect(notice.text).toContain('step #43');
 	});
 
 	test('an agent whose buttons cannot fit gets a pointer to the page', () => {

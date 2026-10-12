@@ -15,6 +15,7 @@ const ACTIVE: AgentView = {
 	fleet: { pendingProposal: null }
 };
 const KILLED: AgentView = { ...ACTIVE, status: 'PAUSED' };
+const UNAVAILABLE: AgentView = { ...ACTIVE, status: 'UNAVAILABLE', currentTask: 'Unavailable: RPC down' };
 
 function fakeTelegram() {
 	const sent: { chatId: number; text: string; keyboard?: Keyboard }[] = [];
@@ -139,6 +140,34 @@ describe('checkAgents', () => {
 		for (let read = 0; read < reads; read++) await bot.checkAgents();
 		expect(sent).toHaveLength(1);
 		expect(lines).toEqual(['agent poll failed: connection refused']);
+	});
+
+	test('an agent unavailable for one read is not reported again when it is back', async () => {
+		const { telegram, sent } = fakeTelegram();
+		const lists = [[ACTIVE], [KILLED], [UNAVAILABLE], [KILLED]];
+		const reads = lists.length;
+		const bot = createBot({ telegram, oberek: fakeOberek(lists).oberek, ownerChatId: OWNER });
+		for (let read = 0; read < reads; read++) await bot.checkAgents();
+		expect(sent.map((message) => message.text)).toEqual(['⏸ Oberek Sentinel Alpha is killed · step 40']);
+	});
+
+	test('one failed send is logged and the other notices still go out', async () => {
+		const { telegram, sent } = fakeTelegram();
+		const lines: string[] = [];
+		const deliver = telegram.sendMessage;
+		let sends = 0;
+		telegram.sendMessage = async (chatId, text, keyboard) => {
+			if (sends++ === 0) throw new Error('Telegram sendMessage: HTTP 429');
+			return deliver(chatId, text, keyboard);
+		};
+		const other: AgentView = { ...ACTIVE, id: 'tick-01', name: 'Oberek Tick One' };
+		const otherKilled: AgentView = { ...other, status: 'PAUSED' };
+		const lists = [[ACTIVE, other], [KILLED, otherKilled]];
+		const bot = createBot({ telegram, oberek: fakeOberek(lists).oberek, ownerChatId: OWNER, log: (line) => lines.push(line) });
+		await bot.checkAgents();
+		await bot.checkAgents();
+		expect(sent.map((message) => message.text)).toEqual(['⏸ Oberek Tick One is killed · step 40']);
+		expect(lines).toEqual(['notice not sent: Telegram sendMessage: HTTP 429']);
 	});
 
 	test('without an owner chat it reads nothing', async () => {

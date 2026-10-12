@@ -1,5 +1,5 @@
 import { parseCallbackData, requestFor, resultLine } from './buttons';
-import { agentsAnswer, changeNotices, type Notice } from './notices';
+import { agentsAnswer, changeNotices, lastKnown, type Notice } from './notices';
 import type { AgentView, OberekApi } from './oberek-api';
 import type { CallbackQuery, TelegramApi, Update } from './telegram-api';
 
@@ -30,11 +30,19 @@ export function reasonOf(error: unknown): string {
 const commandOf = (text: string) => text.trim().split(/[\s@]/)[0];
 
 export function createBot({ telegram, oberek, ownerChatId, log = console.error }: BotDeps): Bot {
-	let previous: AgentView[] | null = null;
+	/** The fleet as last known, null before the first good read. */
+	let known: AgentView[] | null = null;
 	const isOwner = (chatId: number) => chatId === ownerChatId;
 
+	/** Each notice on its own: one that fails is logged and the rest still go out. */
 	async function send(chatId: number, notices: Notice[]): Promise<void> {
-		for (const { text, keyboard } of notices) await telegram.sendMessage(chatId, text, keyboard);
+		for (const { text, keyboard } of notices) {
+			try {
+				await telegram.sendMessage(chatId, text, keyboard);
+			} catch (error) {
+				log(`notice not sent: ${reasonOf(error)}`);
+			}
+		}
 	}
 
 	function startReply(chatId: number): string {
@@ -81,8 +89,8 @@ export function createBot({ telegram, oberek, ownerChatId, log = console.error }
 				log(`agent poll failed: ${reasonOf(error)}`);
 				return;
 			}
-			const notices = changeNotices(previous, current);
-			previous = current;
+			const notices = changeNotices(known, current);
+			known = lastKnown(known, current);
 			await send(ownerChatId, notices);
 		}
 	};

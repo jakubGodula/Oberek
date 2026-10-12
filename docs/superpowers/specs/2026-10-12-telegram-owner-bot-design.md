@@ -86,6 +86,8 @@ agent that proposes gets a readable message.
 
 The first read after start only sets the baseline, except proposals already waiting, which are sent, so a restarted bot
 does not lose one. A failed read is logged and skipped; the next read compares with the last good one.
+An agent read as `UNAVAILABLE` sends nothing and keeps its last known card for the next comparison, so a blip does not
+resend its proposal or kill. A message that fails to send is logged; the rest of the poll's messages still go out.
 
 ### `/agents`
 
