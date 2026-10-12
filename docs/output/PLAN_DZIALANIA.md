@@ -1,3 +1,5 @@
+> **Nieaktualne** — opisuje dawny projekt Aegis Mercato.
+
 # Plan Działania: Aegis Mercato 🛡️⚡
 > **PQC-Secured Private Agent Observability & Action Engine on Solana**  
 > Operacyjny, sekwencyjny plan realizacji projektu krok po kroku w formie dokumentacji markdown (.md) bez generowania kodu aplikacji.  
