@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
-import { restoreRequests, unavailable, type FleetCard } from './restore';
+import { queuedAgents, restoreRequests, unavailable, type FleetCard } from './restore';
 
-function card(id: string, status: FleetCard['status'], pendingCounter: number | null = null): FleetCard {
+function card(id: string, status: FleetCard['status'], pendingCounter: number | null = null, queued = 0): FleetCard {
 	return {
 		id,
 		status,
 		currentTask: 'TICK',
-		fleet: { pendingProposal: pendingCounter === null ? null : { counter: pendingCounter } }
+		fleet: { pendingProposal: pendingCounter === null ? null : { counter: pendingCounter, decision: {} }, queued }
 	};
 }
 
@@ -36,4 +36,8 @@ test('resumes a killed agent before rejecting its waiting proposal', () => {
 test('names the agents the server could not read, with the reason', () => {
 	const unreadable = { ...card('tick-01', 'UNAVAILABLE'), currentTask: 'Unavailable: fetch failed' };
 	expect(unavailable([unreadable, card('sentinel-01', 'ACTIVE')])).toEqual(['tick-01 (Unavailable: fetch failed)']);
+});
+
+test('names the agents whose decisions still wait in the server for their batch', () => {
+	expect(queuedAgents([card('tick-01', 'ACTIVE', null, 3), card('sentinel-01', 'ACTIVE')])).toEqual(['tick-01']);
 });
