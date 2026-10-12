@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { createGuardedAgent } from './guarded-agent';
+import { createGuardedAgent, subscriptionsUrlFor } from './guarded-agent';
 import { GuardError, type GuardAccount, type GuardStatus } from './guard';
 import { MemoryGuard } from './testing/memory-guard';
 
@@ -120,5 +120,14 @@ describe('createGuardedAgent kill and resume', () => {
 
 		expect(account.status).toBe('Active');
 		expect(account.counter).toBe(0);
+	});
+});
+
+describe('subscriptionsUrlFor', () => {
+	it.each([
+		['https://api.devnet.solana.com', 'wss://api.devnet.solana.com'],
+		['http://my-rpc.example:8899', 'ws://my-rpc.example:8899']
+	])('derives the WebSocket URL of %s', (rpcUrl, wsUrl) => {
+		expect(subscriptionsUrlFor(rpcUrl)).toBe(wsUrl);
 	});
 });
