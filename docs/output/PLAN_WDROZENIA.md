@@ -1,3 +1,5 @@
+> **Nieaktualne** — opisuje dawny projekt Aegis Mercato.
+
 # Plan Wdrożenia: Aegis Mercato 🛡️⚡
 > **PQC-Secured Private Agent Observability & Action Engine on Solana**  
 > Kompleksowy harmonogram, architektura techniczna, etapy implementacji, testów i wdrożenia na hackathon Solana / AI.  
