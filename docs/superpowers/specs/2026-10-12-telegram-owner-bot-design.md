@@ -43,8 +43,9 @@ answers `{ counter }`.
 
 - `simulateAction` goes away; Kill and Resume call `postAndReport('/api/agents/<id>/control', { action })` like the
   verdict buttons.
-- The Solana Actions card becomes a **Telegram** card: "Owner bot: configured" or "not configured — set
-  `TELEGRAM_BOT_TOKEN`", from a boolean the page load passes. No secrets reach the page.
+- The Solana Actions card becomes a static **Telegram** card: what the bot does and how to start it
+  (`bun bot/telegram`). The server cannot tell whether the bot runs, so the card claims nothing about it, and the server
+  never reads the bot's variables.
 
 ## Bot
 
@@ -57,6 +58,8 @@ the Bot API.
 | `telegram-api.ts` | `getUpdates`, `sendMessage`, `editMessageText`, `answerCallbackQuery`. |
 | `notices.ts` | Pure: previous and current agent lists → messages with buttons; one agent → its `/agents` message. |
 | `buttons.ts` | Pure: button ↔ callback data (`accept:sentinel-01`), button → server request. |
+| `oberek-api.ts` | The server over HTTP: `GET /api/agents`, `POST` of a button's request. |
+| `bot.ts` | Handles one Telegram update and one agent poll, given the two APIs; tested with fakes. |
 
 ### Notices
 
