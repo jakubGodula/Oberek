@@ -31,8 +31,7 @@ decision: [spec/decisions/006-zapieczetowany-log-decyzji-ml-kem.md](spec/decisio
   agent from an ordinary wallet even when its server is down. A quantum attacker could only stop an agent, not resume
   it.
 - **Not quantum-resistant yet (WIP):** the devnet program is still upgradeable by an Ed25519 key (fixable by deploying
-  it immutable). Two agents registered before owner activation existed stay `Active` on chain without it; the server
-  no longer runs them (decision 005 lists their addresses).
+  it immutable). Agents registered before owner activation existed stay `Active` on chain without it (decision 005).
 - **No DMS:** the Dual-Mode Signature scheme from `spec/ARCHITECTURE.md` §4.3 is not implemented. No verifier for its
   proof exists on Solana, the 5.4 MB proof does not fit a Solana program, and it is only needed after Q-day. The page shows only what exists: the agent's key account
   and the SHA-256 of its last decision, with no SHA3 commitments; a Merkle root appears only for batched agents (below).

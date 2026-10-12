@@ -18,7 +18,7 @@ historię decyzji „agenta właściciela”, której właściciel nie zatwierdz
   (20 552 B) i zapisuje jego adres w PDA `OwnerRecord` o seedach `["owner", owner]`. `OwnerRecord` powstaje przez
   `init`, więc drugiego klucza dla tego samego portfela nie da się zarejestrować ani podmienić.
 - `register_agent` tworzy agenta w stanie `Pending`. W tym stanie program odrzuca każdy krok (`AgentPending`).
-- `activate_agent` przyjmuje podpis ML-DSA-44 właściciela nad adresem agenta (wiadomość z tagiem 3 i licznikiem 0,
+- `activate_agent` przyjmuje podpis ML-DSA-44 właściciela nad adresem agenta (wiadomość z tagiem 4 i licznikiem 0,
   kontekst `onchain-agent-guard:v1`), sprawdza go kluczem z `OwnerRecord` właściciela agenta i ustawia `Active`.
   Nie wymaga podpisu portfela: autoryzacją jest podpis ML-DSA-44, opłatę może zapłacić ktokolwiek.
 - Sekretny klucz ML-DSA-44 właściciela leży na serwerze obok portfela właściciela (`OWNER_MLDSA_FILE`), bo żaden
@@ -52,13 +52,8 @@ dyskryminator niż `AgentKey`) sprawia, że konta klucza agenta nie da się poda
 
 ### Agenci sprzed tej zmiany
 
-Program zaktualizowano w miejscu (`BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`), a `sentinel-01` i `tick-01`
-zarejestrowano ponownie z aktywacją. Ich poprzednie konta zostają na łańcuchu jako `Active` bez zatwierdzenia
-kluczem właściciela:
-
-- `sentinel-01`: agent `7iin1WNsaquzuVDz9gC24fcsQLfaaxvhnTUu9okot7YL`, klucz `76qLccCyWwwAsGD52G1LLT8fN6doXGQvXFyU44gKv3jy`
-- `tick-01`: agent `BF8MdAhmX8f8myq1p84sN2RZHsRZsfK9LAw6ihYMkPgN`, klucz `CA61y1mTZQ6CSgv4iNAPYHHV16BoYAcdcb2xRBK72nqs`
-
-Ich pliki leżą lokalnie w `.devnet/legacy-2026-10-11/`; serwer ich nie uruchamia.
+Program aktualizuje się w miejscu (`BL6Fjh4pADgjvZwaueeAcc7rYddFrdMNWnqK73x78ZSs`). Program nie cofa do `Pending`
+agentów zarejestrowanych wcześniej: zostają `Active` bez zatwierdzenia kluczem właściciela. Agentów demo rejestruje
+się po aktualizacji ponownie, z aktywacją; ich stare konta zostają na łańcuchu, a serwer ich nie uruchamia.
 
 Projekt: `docs/superpowers/specs/2026-10-11-owner-pq-key-design.md`.

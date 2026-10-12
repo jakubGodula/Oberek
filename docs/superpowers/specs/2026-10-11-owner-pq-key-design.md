@@ -54,7 +54,7 @@ owner key. `OwnerRecord` is not named `Owner` (that name is an Anchor trait).
 | `record_step` | unchanged | unchanged | on `Pending` fails with the new `AgentPending` (today it would say `AgentKilled`) |
 | `kill`, `resume` | unchanged | unchanged | on `Pending` they fail with the existing `AgentNotActive` / `AgentNotKilled` |
 
-`activate_message(agent)` = header with tag 3, the agent address, counter 0 (same layout as step/resume, same FIPS 204
+`activate_message(agent)` = header with tag 4 (tag 3 went to `record_batch` on `main`), the agent address, counter 0 (same layout as step/resume, same FIPS 204
 context `onchain-agent-guard:v1`). The agent address binds both owner and agent key; activation cannot repeat because
 nothing returns an agent to `Pending`. The counter stays 0, so step 1 still moves it to 1.
 
