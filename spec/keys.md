@@ -20,7 +20,7 @@ each key is kept in are listed at the end, in [Files](#files).
 ```mermaid
 flowchart LR
     subgraph Agents["Agent processes: no keys"]
-        AP["sentinel, tick<br/>POST decision over HTTP"]
+        AP["sentinel, tick, jito steward<br/>POST decision over HTTP"]
     end
 
     subgraph Server["Server machine"]
@@ -46,7 +46,7 @@ flowchart LR
     AP -->|decision| MLDSA
     MLDSA -->|"signs record_step, record_batch, resume"| PROG
     OWNERPQ -->|"signs activate_agent"| PROG
-    WALLET -->|"signs register_owner, register_agent,<br/>kill, resume; pays fees; upgrade authority"| PROG
+    WALLET -->|"signs register_owner, kill;<br/>co-signs register_agent, resume;<br/>pays fees; upgrade authority"| PROG
     PROG -->|verifies against| AK
     PROG -->|verifies activation against| OK
     PROG -->|writes| AG
