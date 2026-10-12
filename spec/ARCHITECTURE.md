@@ -87,6 +87,7 @@ shocks and proposals, quiet-cycle counts, picked pace) live in server memory.
 │   └── jito/                        JitoSOL steward, simulated governance votes
 ├── bot/telegram/                    owner bot
 ├── scripts/                         setup, demo, agent and fleet CLIs, audit, devnet e2e
+├── e2e/                             Playwright tests of the operator page on devnet, with their own fleet
 ├── spikes/                          compatibility spikes (ML-DSA, Falcon, Anchor verify, wallet V1)
 ├── spec/                            this file, keys, history audit, decisions
 └── docs/                            plans, research, prompts, archived work
@@ -145,9 +146,9 @@ Usage: [kit/README.md](../kit/README.md).
 
 `fleet/app-runtime.ts` creates one runtime on first use from `.env` (`GUARD_PROGRAM_ID`, `SOLANA_RPC_URL`,
 `SOLANA_WS_URL`, `FEE_PAYER_KEYPAIR`, `OWNER_KEYPAIR`, `OWNER_MLKEM_FILE`, `BATCHED_AGENT_IDS`). Without that
-configuration the page shows no agents. The runtime is made of the kit's `OnchainGuard`, the `Fleet` (files on disk),
-a `StepThrottle` (at most one step per agent per 10 s, because the server pays for each) and, for batched agents, a
-`DecisionBatcher`.
+configuration the page shows no agents. The runtime is made of the kit's `OnchainGuard`, the `Fleet` (files on disk,
+in `.devnet/fleet` or the directory named by `FLEET_DIR`, see `fleet/fleet-dir.ts`), a `StepThrottle` (at most one step
+per agent per 10 s, because the server pays for each) and, for batched agents, a `DecisionBatcher`.
 
 ### Decision path
 
@@ -211,6 +212,7 @@ wheel.
 │   ├── seal.json           ML-KEM-768 capsule to the owner and the log's AES-256 data key
 │   ├── decisions.jsonl     one AES-256-GCM line per decision (counter in clear, as AAD)
 │   └── transactions.jsonl  landed guard transactions
+├── e2e-fleet/, e2e-agents/ the e2e tests' own fleet, laid out like fleet/ and agents/ (setup --e2e)
 ├── retired/                agents replaced by setup --reregister
 └── logs/                   redacted setup and demo logs
 ```
@@ -233,13 +235,17 @@ Each agent is a loop in its own process (`agents/shared/loop.ts`) that talks to 
 ## 8. Scripts
 
 - `setup.ts`: creates `.env`, the wallet and its SOL, and the owner keys; registers, activates, imports and seals the
-  demo agents. It is safe to re-run.
+  demo agents. It is safe to re-run. `--e2e` does the same for the test fleet (E2E Tick, E2E Sentinel).
 - `demo.ts`: starts the server, the agents and the bot in one terminal and stops them in order (`demo-stop.ts`). Both
   scripts log through `run-log.ts` and `redact.ts`.
 - `agent.ts`: the owner and agent CLI (`register-owner`, `register`, `activate`, `run`, `kill`, `resume`, `status`).
 - `fleet.ts`: `owner-key`, `import`, `seal`.
 - `audit.ts`: the history audit.
 - `devnet-e2e.ts`: register, activate, steps, kill, resume and a step again, on devnet.
+
+`bun run e2e` drives the operator page in Chrome (Playwright) against the test fleet on devnet: reading the fleet,
+the kill switch, live steps and proposal verdicts. It checks the wallet and the test fleet first (`e2e/preflight.ts`),
+starts the server with `FLEET_DIR=.devnet/e2e-fleet`, and restores the fleet after each test.
 
 ## 9. What is not here
 
