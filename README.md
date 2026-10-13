@@ -249,3 +249,7 @@ bun run e2e                      # the website in a real browser against that fl
 The e2e tests start their own server on port 5174 and their own agent processes, check the chain as well as the page,
 and leave the demo fleet alone. They drive the installed Google Chrome. A failed run's trace and screenshots are in
 `playwright-report/`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
