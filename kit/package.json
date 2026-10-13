@@ -1,6 +1,7 @@
 {
 	"name": "pq-agent-guard",
 	"version": "0.1.0",
+	"license": "MIT",
 	"private": true,
 	"type": "module",
 	"description": "Post-quantum guard for any agent: ML-DSA-44 signed steps and an owner kill switch, enforced by the onchain_agent_guard program on Solana.",

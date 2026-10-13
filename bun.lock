@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "solanahackaton01",
+      "name": "oberek",
       "dependencies": {
         "@noble/post-quantum": "^0.7.1",
         "@solana-program/system": "0.15.0",
